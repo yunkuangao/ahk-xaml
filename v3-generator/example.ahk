@@ -34,7 +34,7 @@ Toggle(this, name, label, isChecked := false, tooltip := "") {
 
 XAMLElement.Prototype.DefineProp("SegmentGroup", { Call: SegmentGroup })
 SegmentGroup(this, groupName, options, selectedIndex := 1) {
-    border := this.Add("Border").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).HorizontalAlignment("Left").Margin("0,0,0,25")
+    border := this.Add("Border").Use("CardPanel").HorizontalAlignment("Left").Margin("0,0,0,25")
     sp := border.Add("StackPanel").Orientation("Horizontal")
     for index, opt in options {
         rb := sp.Add("RadioButton").Style("{StaticResource SegmentedBtn}").Content(opt).GroupName(groupName)
@@ -54,6 +54,22 @@ SegmentGroup(this, groupName, options, selectedIndex := 1) {
 
 X := XAML_Generator("Grid").Name("AppGrid").Background("{DynamicResource BgColor}")
 X.Cols("240", "*")
+
+; Define a template using a callback function for complex logic
+PrimaryButtonTemplate(el) {
+    el.Background("{DynamicResource Accent}").Foreground("White").FontWeight("Bold").BorderThickness(0).FontSize(13).Cursor("Hand")
+    el.InjectResources('<Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>')
+}
+X.DefineTemplate("PrimaryBtn", PrimaryButtonTemplate)
+
+; Define templates using simple properties objects
+X.DefineTemplate("SubtitleText", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,12" })
+X.DefineTemplate("PageTitle", { FontSize: 28, FontWeight: "SemiBold", Foreground: "{DynamicResource TextMain}", Margin: "0" })
+X.DefineTemplate("BodyText", { FontSize: 13, FontWeight: "Normal", TextWrapping: "Wrap" })
+X.DefineTemplate("CardPanel", { BorderBrush: "{DynamicResource ControlBorder}", BorderThickness: 1, CornerRadius: 6, Background: "{DynamicResource ControlBg}" })
+
+; Define Global Component Defaults
+X.SetDefaults("ListBox", { Background: "Transparent", BorderThickness: 0, ScrollViewer_HorizontalScrollBarVisibility: "Disabled" })
 
 ; SIDEBAR (Col 0)
 sidebar := X.Add("Border").Name("SidebarBorder").Grid_Column(0).Background("{DynamicResource SidebarColor}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,1,0")
@@ -95,11 +111,11 @@ panel1 := sv1.Add("StackPanel").Margin("0,10,15,20")
 panel1.SetDefaults("TextBlock", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,8" })
 
 head := panel1.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,5")
-head.Add("TextBlock").Text("Interactive Components").FontSize(28).FontWeight("SemiBold").Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").Margin("0")
+head.Add("TextBlock").Text("Interactive Components").Use("PageTitle").VerticalAlignment("Center")
 head.Add("Border").Background("#200A84FF").CornerRadius(10).Padding("10,4").Margin("15,0,0,0").VerticalAlignment("Center")
     .Add("TextBlock").Text("v2.0 ACTIVE").Foreground("{DynamicResource Accent}").FontSize(10).FontWeight("Bold").Margin("0")
 
-panel1.Add("TextBlock").Text("XAML natively binds elements. DynamicResources theme everything instantly.").FontSize(13).FontWeight("Normal").Margin("0,0,0,25").TextWrapping("Wrap")
+panel1.Add("TextBlock").Text("XAML natively binds elements. DynamicResources theme everything instantly.").Use("BodyText").Margin("0,0,0,25")
 
 credGrid := panel1.Add("Grid").Margin("0,0,0,25")
 credGrid.Cols("*", "20", "*")
@@ -143,10 +159,10 @@ tab2 := tabs.Add("TabItem").Header("DATA GRID")
 panel2 := tab2.Add("StackPanel").Margin("0,20,0,0")
 panel2.SetDefaults("TextBlock", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,8" })
 
-panel2.Add("TextBlock").Text("Live Telemetry Grid").FontSize(28).FontWeight("SemiBold").Foreground("{DynamicResource TextMain}").Margin("0,0,0,5")
-panel2.Add("TextBlock").Text("A fully styled Grid layout showcasing server nodes.").FontSize(13).FontWeight("Normal").Margin("0,0,0,20").TextWrapping("Wrap")
+panel2.Add("TextBlock").Text("Live Telemetry Grid").Use("PageTitle").Margin("0,0,0,5")
+panel2.Add("TextBlock").Text("A fully styled Grid layout showcasing server nodes.").Use("BodyText").Margin("0,0,0,20")
 
-gridBorder := panel2.Add("Border").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(8).Background("{DynamicResource ControlBg}").Margin("0,0,0,15")
+gridBorder := panel2.Add("Border").Use("CardPanel").CornerRadius(8).Margin("0,0,0,15")
 telGrid := gridBorder.Add("Grid")
 telGrid.Rows("35", "*")
 
@@ -158,14 +174,14 @@ headerGrid.Add("TextBlock").Grid_Column(1).Text("LOCATION")
 headerGrid.Add("TextBlock").Grid_Column(2).Text("LATENCY")
 headerGrid.Add("TextBlock").Grid_Column(3).Text("STATUS")
 
-lb := telGrid.Add("ListBox").Grid_Row(1).Background("Transparent").BorderThickness(0).ScrollViewer_HorizontalScrollBarVisibility("Disabled").Padding("0,5")
+lb := telGrid.Add("ListBox").Grid_Row(1).Padding("0,5")
 lb.TelemetryRow("SRV-US-01", "N. Virginia, USA", "14ms", "ONLINE", "#32D74B")
 lb.TelemetryRow("SRV-EU-04", "London, UK", "89ms", "SYNCING", "#FF9F0A")
 lb.TelemetryRow("SRV-AP-09", "Tokyo, Japan", "ERR", "OFFLINE", "#FF453A")
 
 panel2.Add("TextBlock").Text("SYSTEM TERMINAL")
-termBorder := panel2.Add("Border").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Background("{DynamicResource ControlBg}")
-termLog := termBorder.Add("ListBox").Name("LogList").Height(130).Background("Transparent").Foreground("#32D74B").FontFamily("Consolas, Courier New").BorderThickness(0).Padding(8).ItemContainerStyle("{StaticResource TerminalItem}").ScrollViewer_HorizontalScrollBarVisibility("Disabled").ScrollViewer_VerticalScrollBarVisibility("Auto")
+termBorder := panel2.Add("Border").Use("CardPanel")
+termLog := termBorder.Add("ListBox").Name("LogList").Height(130).Foreground("#32D74B").FontFamily("Consolas, Courier New").Padding(8).ItemContainerStyle("{StaticResource TerminalItem}").ScrollViewer_VerticalScrollBarVisibility("Auto")
 termLog.Add("ListBoxItem").Content("System ready. Awaiting instructions...")
 
 ; Bottom Actions (Row 2)
@@ -183,8 +199,7 @@ trigger.Add("DoubleAnimation").Storyboard_TargetProperty("(UIElement.RenderTrans
 
 statusSp.Add("TextBlock").Name("TxtStatus").Text("Awaiting your command...").Foreground("{DynamicResource TextSub}").FontSize(14).FontWeight("SemiBold").VerticalAlignment("Center")
 
-btnExec := actions.Add("Button").Name("BtnExecute").Content("INITIALIZE SEQUENCE").ToolTip("Commences the payload deployment via secure tunnel.").HorizontalAlignment("Right").VerticalAlignment("Center").Margin("0,0,40,0").Width(190).Height(45).Background("{DynamicResource Accent}").Foreground("White").FontWeight("Bold").BorderThickness(0).FontSize(13).Cursor("Hand")
-btnExec.InjectResources('<Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>')
+btnExec := actions.Add("Button").Name("BtnExecute").Content("INITIALIZE SEQUENCE").ToolTip("Commences the payload deployment via secure tunnel.").HorizontalAlignment("Right").VerticalAlignment("Center").Margin("0,0,40,0").Width(190).Height(45).Use("PrimaryBtn")
 
 ; Generate the clean, compiled XAML string
 CompiledMarkup := X.Compile()

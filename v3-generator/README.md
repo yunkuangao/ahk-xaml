@@ -51,7 +51,29 @@ panel1.Add("TextBlock").Text("HEADER").FontSize(22) ; Overrides the 11pt font si
 
 > **Note:** Defaults are strictly scoped! When you stop adding children to `panel1` and move to `panel2`, the defaults reset automatically.
 
-### 5. Custom Power-Tools (Component Injection)
+### 5. Reusable Templates (Theming Components)
+If you want to apply a specific style *anywhere* without relying on scoped defaults, you can define **Global Templates**. These let you store object maps or complex callbacks and chain them onto any element using `.Use()`.
+
+```ahk
+X := XAML_Generator("Grid")
+
+; Define a template using a simple properties object
+X.DefineTemplate("SubtitleText", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold" })
+
+; Define a template using a callback function for complex logic
+PrimaryButtonTemplate(el) {
+    el.Background("{DynamicResource Accent}").Foreground("White").FontWeight("Bold").BorderThickness(0)
+    ; You can even inject XAML resources or append child elements inside a template!
+    el.InjectResources('<Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>')
+}
+X.DefineTemplate("PrimaryBtn", PrimaryButtonTemplate)
+
+; --- Using them anywhere ---
+sp.Add("TextBlock").Text("A styled label!").Use("SubtitleText")
+btn := X.Add("Button").Content("Submit").Use("PrimaryBtn")
+```
+
+### 6. Custom Power-Tools (Component Injection)
 You can build highly complex, reusable components and inject them globally into the `XAMLElement` prototype. This lets you call your custom shorthand methods natively anywhere in your UI tree!
 
 ```ahk

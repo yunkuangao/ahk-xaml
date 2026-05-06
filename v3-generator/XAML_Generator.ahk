@@ -17,8 +17,45 @@ class XAMLElement {
 
     ; Instantly apply a map or object of properties to this specific element
     Apply(propsObj) {
-        for k, v in (Type(propsObj) == "Map" ? propsObj : propsObj.OwnProps())
-            this._Props[k] := v
+        for k, v in (Type(propsObj) == "Map" ? propsObj : propsObj.OwnProps()) {
+            propName := StrReplace(k, "_", ".")
+            this._Props[propName] := v
+        }
+        return this
+    }
+
+    ; Define a named template at the root level so it can be reused anywhere
+    DefineTemplate(name, templateObjOrFunc) {
+        root := this
+        while root._Parent
+            root := root._Parent
+        
+        if !root.HasProp("_Templates")
+            root._Templates := Map()
+            
+        root._Templates[name] := templateObjOrFunc
+        return this
+    }
+
+    ; Apply a template. Can be a string (named template), an object of properties, or a callback function.
+    Use(template) {
+        if (Type(template) == "String") {
+            root := this
+            while root._Parent
+                root := root._Parent
+                
+            if (root.HasProp("_Templates") && root._Templates.Has(template)) {
+                template := root._Templates[template]
+            } else {
+                throw Error("Template not found: " template)
+            }
+        }
+        
+        if HasMethod(template) {
+            template(this)
+        } else {
+            this.Apply(template)
+        }
         return this
     }
 
@@ -42,8 +79,10 @@ class XAMLElement {
                 if (defObj == "" || defObj == false) {
                     child._Props.Clear() ; Firewall: reset accumulated defaults
                 } else {
-                    for k, v in (Type(defObj) == "Map" ? defObj : defObj.OwnProps())
-                        child._Props[k] := v
+                    for k, v in (Type(defObj) == "Map" ? defObj : defObj.OwnProps()) {
+                        propName := StrReplace(k, "_", ".")
+                        child._Props[propName] := v
+                    }
                 }
             }
         }
