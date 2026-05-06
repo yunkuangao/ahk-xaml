@@ -59,9 +59,63 @@ class XAMLGUI {
             SetTimer(ObjBindMethod(this, "CheckForCrashes"), 0)
             err := FileRead(this.errLog)
             FileDelete(this.errLog)
-            MsgBox("The Background Engine crashed!`n`nDETAILS:`n" err, "Engine Crash", 0x10)
+            
+            ahkLine := "Unknown"
+            snippet := ""
+            if RegExMatch(err, "s)AHK_LINE:(.*?)\nXAML_SNIPPET:(.*?)\n\n(.*)", &m) {
+                ahkLine := m[1]
+                snippet := m[2]
+                err := m[3]
+            }
+            
+            header := "The Background Engine crashed! Details below:"
+            if (ahkLine != "Unknown") {
+                header := "Engine crashed while rendering AHK Line " ahkLine "!"
+            }
+            
+            XAMLGUI.ShowErrorDialog("Engine Crash", header, snippet, err)
             ExitApp()
         }
+    }
+
+    static ShowErrorDialog(title, header, snippet, details) {
+        ; Pre-format the error text for better readability
+        details := StrReplace(details, " ---> ", "`r`n`r`n---> ")
+        details := StrReplace(details, "`r`n", "`n")
+        details := StrReplace(details, "`n", "`r`n")
+        
+        ; Add an extra break before the first stack trace line to separate the error message
+        details := StrReplace(details, "`r`n   at ", "`r`n`r`n   at ", , &_, 1)
+
+        errGui := Gui("", title)
+        errGui.MarginX := 20
+        errGui.MarginY := 20
+        
+        errGui.SetFont("s12 bold cMaroon", "Segoe UI")
+        errGui.Add("Text", "w720", header)
+        
+        if (snippet != "") {
+            errGui.SetFont("s10 bold cBlack", "Segoe UI")
+            errGui.Add("Text", "y+10", "Generated XAML Snippet:")
+            errGui.SetFont("s10 norm cBlack", "Consolas")
+            errGui.Add("Edit", "y+5 w720 h60 ReadOnly +VScroll", snippet)
+            
+            errGui.SetFont("s10 bold cBlack", "Segoe UI")
+            errGui.Add("Text", "y+15", "Full Exception Trace:")
+            errGui.SetFont("s10 norm cBlack", "Consolas")
+            errGui.Add("Edit", "y+5 w720 h260 ReadOnly +VScroll", details)
+        } else {
+            errGui.SetFont("s10 norm cBlack", "Consolas")
+            ; Word wrap is enabled by default. +VScroll ensures vertical scrolling.
+            errGui.Add("Edit", "y+15 w720 h380 ReadOnly +VScroll", details)
+        }
+        
+        errGui.SetFont("s10 norm cBlack", "Segoe UI")
+        btn := errGui.Add("Button", "w120 x320 y+20 Default", "Close")
+        btn.OnEvent("Click", (*) => errGui.Destroy())
+        
+        errGui.Show()
+        WinWaitClose(errGui)
     }
 
     Show() {
@@ -137,7 +191,24 @@ class XAMLGUI {
                         
                         string b64Xaml = "{B64_XAML}";
                         byte[] xamlBytes = Convert.FromBase64String(b64Xaml);
-                        win = (Window)XamlReader.Load(new XmlNodeReader(new XmlDocument { InnerXml = Encoding.UTF8.GetString(xamlBytes) }));
+                        try {
+                            using (var stream = new System.IO.MemoryStream(xamlBytes)) {
+                                win = (Window)XamlReader.Load(stream);
+                            }
+                        } catch (XamlParseException ex) {
+                            string[] xamlLines = Encoding.UTF8.GetString(xamlBytes).Replace("\r\n", "\n").Split('\n');
+                            string snippet = "Unknown";
+                            string ahkLine = "Unknown";
+                            if (ex.LineNumber > 0 && ex.LineNumber <= xamlLines.Length) {
+                                snippet = xamlLines[ex.LineNumber - 1].Trim();
+                                int idx1 = snippet.IndexOf("<!-- [ahk:");
+                                if (idx1 != -1) {
+                                    int idx2 = snippet.IndexOf("] -->", idx1);
+                                    if (idx2 != -1) ahkLine = snippet.Substring(idx1 + 10, idx2 - (idx1 + 10));
+                                }
+                            }
+                            throw new Exception("AHK_LINE:" + ahkLine + "\nXAML_SNIPPET:" + snippet + "\n\n" + ex.ToString());
+                        }
                 
                         var dragArea = win.FindName("DragArea") as UIElement;
                         if (dragArea != null) dragArea.MouseLeftButtonDown += (s, e) => { try { win.DragMove(); } catch { } };
@@ -299,7 +370,7 @@ class XAMLGUI {
 
             if !FileExist(targetExe) {
                 errOut := FileExist(this.errLog) ? FileRead(this.errLog) : "Unknown compilation error."
-                MsgBox("Failed to compile background engine.`n`nCompiler Output:`n" errOut, "Engine Error", 0x10)
+                XAMLGUI.ShowErrorDialog("Engine Compile Error", "Failed to compile background engine.", "", errOut)
                 return
             }
         } else {

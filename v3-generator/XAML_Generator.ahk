@@ -6,6 +6,7 @@ class XAMLElement {
         this._TextContent := textContent
         this._Parent := ""
         this._Defaults := Map()
+        try this._AhkLine := Error("", -1).Line
     }
 
     ; Sets default properties for a specific tag within this element's scope.
@@ -17,6 +18,7 @@ class XAMLElement {
 
     ; Instantly apply a map or object of properties to this specific element
     Apply(propsObj) {
+        try this._AhkLine := Error("", -1).Line
         for k, v in (Type(propsObj) == "Map" ? propsObj : propsObj.OwnProps()) {
             propName := StrReplace(k, "_", ".")
             this._Props[propName] := v
@@ -39,6 +41,7 @@ class XAMLElement {
 
     ; Apply a template. Can be a string (named template), an object of properties, or a callback function.
     Use(template) {
+        try this._AhkLine := Error("", -1).Line
         if (Type(template) == "String") {
             root := this
             while root._Parent
@@ -62,6 +65,7 @@ class XAMLElement {
     ; Add a child element and return the child for chaining
     Add(tag, textContent := "") {
         child := XAMLElement(tag, textContent)
+        try child._AhkLine := Error("", -1).Line
         child._Parent := this
         
         ; Collect inheritance path (from Root down to this node)
@@ -98,6 +102,7 @@ class XAMLElement {
 
     ; Intercept unknown methods to dynamically set properties
     __Call(name, params) {
+        try this._AhkLine := Error("", -1).Line
         ; Convert underscores in method names to dots (e.g. Grid_Column -> Grid.Column)
         propName := StrReplace(name, "_", ".")
         
@@ -114,6 +119,7 @@ class XAMLElement {
 
     ; Explicitly set a property if method interception isn't ideal
     SetProp(name, value) {
+        try this._AhkLine := Error("", -1).Line
         this._Props[name] := value
         return this
     }
@@ -152,10 +158,12 @@ class XAMLElement {
         for k, v in this._Props
             attrStr .= ' ' k '="' v '"'
         
-        if (this._Children.Length == 0 && this._TextContent == "")
-            return indent "<" this._Tag attrStr " />`n"
+        tracker := (this.HasProp("_AhkLine") && this._AhkLine != "") ? "<!-- [ahk:" this._AhkLine "] -->" : ""
         
-        out := indent "<" this._Tag attrStr ">"
+        if (this._Children.Length == 0 && this._TextContent == "")
+            return indent tracker "<" this._Tag attrStr " />`n"
+        
+        out := indent tracker "<" this._Tag attrStr ">"
         
         if (this._TextContent != "") {
             out .= this._TextContent
@@ -173,6 +181,7 @@ class XAMLElement {
 class XAML_Generator extends XAMLElement {
     __New(tag := "Grid") {
         super.__New(tag)
+        try this._AhkLine := Error("", -1).Line
     }
 
     Compile() {
