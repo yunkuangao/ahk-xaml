@@ -1,121 +1,142 @@
-class XAML_Generator {
-    ; Initialize the builder with an optional root node (default is Window)
-    __New(rootNode := "Window", rootAttrs := "") {
-        this.Root := rootNode
-        this.RootAttrs := rootAttrs
-        this.Resources := ""
-        this.Body := ""
+class XAMLElement {
+    __New(tag, textContent := "") {
+        this._Tag := tag
+        this._Props := Map()
+        this._Children := []
+        this._TextContent := textContent
+        this._Parent := ""
+        this._Defaults := Map()
     }
 
-    ; ==========================================
-    ; POWER TOOLS & SHORTHANDS
-    ; ==========================================
-
-    ; Injects the massive boilerplate styling so your main script stays clean
-    LoadDefaultTheme() {
-        this.Resources .= '
-        (
-            <Window.Resources>
-                <SolidColorBrush x:Key="BgColor" Color="#90111114"/>
-                <SolidColorBrush x:Key="SidebarColor" Color="#30000000"/>
-                <SolidColorBrush x:Key="TextMain" Color="#FFFFFF"/>
-                <SolidColorBrush x:Key="TextSub" Color="#AAAAAA"/>
-                <SolidColorBrush x:Key="ControlBg" Color="#15FFFFFF"/>
-                <SolidColorBrush x:Key="ControlBorder" Color="#20FFFFFF"/>
-                <SolidColorBrush x:Key="DropdownBg" Color="#1E1E1E"/>
-                <SolidColorBrush x:Key="Accent" Color="#0A84FF"/>
-                <!-- Styles abstractly bundled. Include your raw styles here. -->
-            </Window.Resources>
-        )'
+    ; Sets default properties for a specific tag within this element's scope.
+    ; Children added to this element (or its descendants) will inherit these cascading properties.
+    SetDefaults(tag, propsObj) {
+        this._Defaults[tag] := propsObj
         return this
     }
 
-    ; Shorthand for Grid Column Definitions
+    ; Instantly apply a map or object of properties to this specific element
+    Apply(propsObj) {
+        for k, v in (Type(propsObj) == "Map" ? propsObj : propsObj.OwnProps())
+            this._Props[k] := v
+        return this
+    }
+
+    ; Add a child element and return the child for chaining
+    Add(tag, textContent := "") {
+        child := XAMLElement(tag, textContent)
+        child._Parent := this
+        
+        ; Collect inheritance path (from Root down to this node)
+        parents := []
+        curr := this
+        while curr {
+            parents.InsertAt(1, curr)
+            curr := curr._Parent
+        }
+        
+        ; Apply defaults top-down (CSS-style cascading)
+        for p in parents {
+            if p._Defaults.Has(tag) {
+                defObj := p._Defaults[tag]
+                if (defObj == "" || defObj == false) {
+                    child._Props.Clear() ; Firewall: reset accumulated defaults
+                } else {
+                    for k, v in (Type(defObj) == "Map" ? defObj : defObj.OwnProps())
+                        child._Props[k] := v
+                }
+            }
+        }
+        
+        this._Children.Push(child)
+        return child
+    }
+
+    ; Navigate back to the parent element
+    Parent() {
+        return this._Parent
+    }
+
+    ; Intercept unknown methods to dynamically set properties
+    __Call(name, params) {
+        ; Convert underscores in method names to dots (e.g. Grid_Column -> Grid.Column)
+        propName := StrReplace(name, "_", ".")
+        
+        if (params.Length == 1) {
+            this._Props[propName] := params[1]
+            return this
+        } else if (params.Length == 0) {
+            ; For booleans without parameters, default to "True"
+            this._Props[propName] := "True"
+            return this
+        }
+        throw Error("Method " name " requires 0 or 1 parameters.")
+    }
+
+    ; Explicitly set a property if method interception isn't ideal
+    SetProp(name, value) {
+        this._Props[name] := value
+        return this
+    }
+
+    ; ==========================================
+    ; SHORTHAND BUILDERS
+    ; ==========================================
+
     Cols(widths*) {
-        def := "<Grid.ColumnDefinitions>`n"
+        cols := XAMLElement("Grid.ColumnDefinitions")
         for w in widths
-            def .= '    <ColumnDefinition Width="' w '"/>`n'
-        def .= "</Grid.ColumnDefinitions>`n"
-        return def
+            cols.Add("ColumnDefinition").Width(w)
+        this._Children.InsertAt(1, cols) ; Insert layout definitions at the top
+        return this
     }
 
-    ; Shorthand for Grid Row Definitions
     Rows(heights*) {
-        def := "<Grid.RowDefinitions>`n"
+        rows := XAMLElement("Grid.RowDefinitions")
         for h in heights
-            def .= '    <RowDefinition Height="' h '"/>`n'
-        def .= "</Grid.RowDefinitions>`n"
-        return def
+            rows.Add("RowDefinition").Height(h)
+        this._Children.InsertAt(1, rows)
+        return this
     }
 
-    ; Shorthand to build a ToggleSwitch with layout
-    Toggle(name, label, isChecked := false, tooltip := "") {
-        chk := isChecked ? 'IsChecked="True"' : ''
-        tt := tooltip ? 'ToolTip="' tooltip '"' : ''
-        return this.Tag("Grid", 'Margin="0,0,0,15"', [
-            this.Tag("TextBlock", 'Text="' label '" Foreground="{DynamicResource TextMain}" VerticalAlignment="Center"'),
-            this.Tag("CheckBox", 'Name="' name '" Style="{StaticResource ToggleSwitch}" HorizontalAlignment="Right" ' chk ' ' tt)
-        ])
+    ; Inject raw XAML resources into this element
+    InjectResources(rawXamlString) {
+        res := XAMLElement(this._Tag ".Resources")
+        res._TextContent := rawXamlString
+        this._Children.InsertAt(1, res)
+        return this
     }
 
-    ; Shorthand to build a segmented radio button group
-    SegmentGroup(groupName, options, selectedIndex := 1) {
-        items := []
-        for index, opt in options {
-            chk := (index == selectedIndex) ? 'IsChecked="True"' : ''
-            brd := (index == options.Length) ? 'BorderThickness="0"' : 'BorderThickness="0,0,1,0"'
-            items.Push(this.Tag("RadioButton", 'Style="{StaticResource SegmentedBtn}" Content="' opt '" GroupName="' groupName '" ' chk ' ' brd))
-        }
-        return this.Tag("Border", 'BorderBrush="{DynamicResource ControlBorder}" BorderThickness="1" CornerRadius="6" HorizontalAlignment="Left" Margin="0,0,0,25"', [
-            this.Tag("StackPanel", 'Orientation="Horizontal"', items)
-        ])
-    }
-
-    ; ==========================================
-    ; CORE XAML BUILDER ENGINE
-    ; ==========================================
-
-    ; Core method to generate a self-closing or wrapping XAML tag
-    Tag(nodeName, attrs := "", children := "") {
+    ; Generate XAML string recursively
+    ToString(indent := "") {
         attrStr := ""
-        if (Type(attrs) == "Object" || Type(attrs) == "Map") {
-            for k, v in (Type(attrs) == "Map" ? attrs : attrs.OwnProps())
-                attrStr .= ' ' k '="' v '"'
-        } else if (attrs != "") {
-            attrStr := " " attrs
-        }
-
-        if (children == "")
-            return "<" nodeName attrStr " />`n"
-
-        childStr := ""
-        if (Type(children) == "Array") {
-            for child in children
-                childStr .= child
+        for k, v in this._Props
+            attrStr .= ' ' k '="' v '"'
+        
+        if (this._Children.Length == 0 && this._TextContent == "")
+            return indent "<" this._Tag attrStr " />`n"
+        
+        out := indent "<" this._Tag attrStr ">"
+        
+        if (this._TextContent != "") {
+            out .= this._TextContent
         } else {
-            childStr := children
+            out .= "`n"
+            for child in this._Children
+                out .= child.ToString(indent "    ")
+            out .= indent
         }
+        out .= "</" this._Tag ">`n"
+        return out
+    }
+}
 
-        return "<" nodeName attrStr ">`n" childStr "</" nodeName ">`n"
+class XAML_Generator extends XAMLElement {
+    __New(tag := "Grid") {
+        super.__New(tag)
     }
 
-    ; Compile everything into a final XAML string
-    Compile(bodyNodes) {
-        if (Type(bodyNodes) == "Array") {
-            for node in bodyNodes
-                this.Body .= node
-        } else {
-            this.Body := bodyNodes
-        }
-
-        finalXAML := "<" this.Root
-        if (this.RootAttrs)
-            finalXAML .= " " this.RootAttrs
-        finalXAML .= ">`n"
-        finalXAML .= this.Resources
-        finalXAML .= this.Body
-        finalXAML .= "</" this.Root ">"
-
-        return this.Body ;finalXAML
+    Compile() {
+        return this.ToString("")
     }
 }
