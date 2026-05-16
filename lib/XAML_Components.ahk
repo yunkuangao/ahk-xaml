@@ -1388,8 +1388,7 @@ class DataGridEx {
         
         ; Header sort buttons & splitters
         for i, col in this.columns {
-            colName := col
-            uiHost.OnEvent(this.id "_Table_Header_" StrReplace(col, " ", ""), "Click", (state, ctrl, ev) => this.Sort(state, colName))
+            uiHost.OnEvent(this.id "_Table_Header_" StrReplace(col, " ", ""), "Click", ((c) => (state, ctrl, ev) => this.Sort(state, c))(col))
             if (i < this.columns.Length) {
                 uiHost.Track(this.id "_Table_Splitter_" i)
                 uiHost.OnEvent(this.id "_Table_Splitter_" i, "MouseDoubleClick", (state, ctrl, ev) => this.OnSplitterDoubleClick(state, ctrl))

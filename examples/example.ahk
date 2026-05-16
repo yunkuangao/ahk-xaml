@@ -102,7 +102,7 @@ app.AddTab("DATA GRID", BuildDataGridTab)
 global myGrid := ""
 BuildDataGridExTab(tab) {
     global myGrid
-    
+
     ; Generate test data
     testData := []
     roles := ["Administrator", "Developer", "Guest", "Manager", "Analyst"]
@@ -115,7 +115,7 @@ BuildDataGridExTab(tab) {
         s := statuses[Random(1, statuses.Length)]
         testData.Push({ Id: A_Index, Name: n, Role: r, Status: s })
     }
-    
+
     ; Scramble the data to prove "random order"
     scrambled := []
     while (testData.Length > 0) {
@@ -123,7 +123,7 @@ BuildDataGridExTab(tab) {
         scrambled.Push(testData[idx])
         testData.RemoveAt(idx)
     }
-    
+
     ; Create DataGridEx with all features enabled
     myGrid := DataGridEx("DGX", scrambled, {
         PageSize: 50,
@@ -138,7 +138,7 @@ BuildDataGridExTab(tab) {
         HiddenColumns: ["Id"],
         ColumnWidths: { Id: "50", Name: "250", Role: "180", Status: "180" }
     })
-    
+
     panel := tab.Add("Grid").Margin("0,20,0,20")
     panel.Rows("Auto", "*")
     panel.Add("TextBlock").Text("Data View Engine").Use("PageTitle").Margin("0,0,0,10").Grid_Row(0)
@@ -435,7 +435,7 @@ RatingBind(ui, "Rating5", 5, false, Chr(0xE735), Chr(0xE734), "#FFD700", "{Dynam
 RatingBind(ui, "Rating10", 10, false, Chr(0xEB52), Chr(0xEB51), "#FF453A", "{DynamicResource TextSub}")
 
 ; Emoji Picker — bind all emoji button events
-emojiList := ["😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎","😍","🥰","😘","😗","😙","🤗","🤩","🤔","🤨","😐","😑","😶","🙄","😏","😣","😥","😮","🤐","😯","😪","😫","🥱","😴","😌","👍","👎","👏","🙌","🤝","👋","✌️","🤞","🤟","🤘","👌","🤌","👈","👉","👆","👇","☝️","✋","❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","❣️","💕","💞","💓","💗","💖","💘","💝","💟","🔥","⭐","🌟","✨","💫","🎉","🎊","🏆","🥇","🎯","💡","📌","📎","🔑","🔒","💬","💭","🗨️"]
+emojiList := ["😀", "😁", "😂", "🤣", "😃", "😄", "😅", "😆", "😉", "😊", "😋", "😎", "😍", "🥰", "😘", "😗", "😙", "🤗", "🤩", "🤔", "🤨", "😐", "😑", "😶", "🙄", "😏", "😣", "😥", "😮", "🤐", "😯", "😪", "😫", "🥱", "😴", "😌", "👍", "👎", "👏", "🙌", "🤝", "👋", "✌️", "🤞", "🤟", "🤘", "👌", "🤌", "👈", "👉", "👆", "👇", "☝️", "✋", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "🔥", "⭐", "🌟", "✨", "💫", "🎉", "🎊", "🏆", "🥇", "🎯", "💡", "📌", "📎", "🔑", "🔒", "💬", "💭", "🗨️"]
 EmojiPickerBind(ui, "MyEmoji", emojiList)
 
 ; Bind DateRangePickerEx events
@@ -456,6 +456,10 @@ ui.Track("TxtSearch")
 ui.Track("ComboTheme")
 
 app.Show()
+
+; --- FOR PRODUCTION - UNCOMMENT BELOW AND COMMENT app.Show() ---
+; app.Export("gui.bin")
+; app.Show("gui.bin")
 
 ; Prevent scroll leak on emoji picker's inner ScrollViewer
 ui.Update("MyEmoji_EmojiScroll", "TrapScroll", "")
@@ -689,7 +693,7 @@ BuildAdvancedUITab(tab) {
     grid := panel.Add("Grid").Margin("0,0,0,20")
     grid.Cols("*", "20", "*")
     grid.Add("Border").Grid_Column(0).Use("CardPanel").Padding("15").SliderRange("Price Filter", 0, 100, 20, 80)
-    
+
     dpBdr := grid.Add("Border").Grid_Column(2).Use("CardPanel").Padding("15")
     dpSp := dpBdr.Add("StackPanel")
     dpSp.Add("TextBlock").Text("EVENT DATES").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10").FontWeight("Bold")
@@ -700,7 +704,6 @@ BuildAdvancedUITab(tab) {
 
     panel.Add("TextBlock").Text("STEPPER (WIZARD)")
     panel.Stepper(["Configuration", "Authentication", "Deployment", "Verification"], 3)
-
 
 
     panel.Add("TextBlock").Text("STAT CARDS & TIMELINE")
@@ -733,19 +736,19 @@ BuildAdvancedUITab(tab) {
     pop.Add("TextBlock").Text("Filter Settings").FontWeight("Bold").Margin("0,0,0,10")
     pop.Add("CheckBox").Content("Show Hidden Files").Margin("0,0,0,5")
     pop.Add("CheckBox").Content("Match Case")
-    
+
     ; --- Rating Selectors ---
     panel.Add("TextBlock").Text("RATING SELECTORS").Margin("0,20,0,10")
-    
+
     ratingCard := panel.Add("Border").Use("CardPanel").Padding("20").Margin("0,0,0,15")
     ratingSp := ratingCard.Add("StackPanel")
-    
+
     ratingSp.Add("TextBlock").Text("5-Star Rating").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,0,0,8")
     ratingSp.Rating("Rating5", { Max: 5, Default: 3 })
-    
+
     ratingSp.Add("TextBlock").Text("10-Heart Rating").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
     ratingSp.Rating("Rating10", { Max: 10, Default: 7, Icon: Chr(0xEB52), IconEmpty: Chr(0xEB51), Color: "#FF453A", Size: 18 })
-    
+
     ; --- Emoji Picker ---
     panel.Add("TextBlock").Text("EMOJI PICKER").Margin("0,10,0,10")
     emojiCard := panel.Add("Border").Use("CardPanel").Padding("20").Margin("0,0,0,20")

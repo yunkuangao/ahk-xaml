@@ -10,6 +10,14 @@ using System.Text;
 using System.Xml;
 using System.Reflection;
 
+[assembly: AssemblyTitle("ahk-xaml Engine")]
+[assembly: AssemblyDescription("WPF Rendering Engine for AutoHotkey")]
+[assembly: AssemblyCompany("owhs")]
+[assembly: AssemblyProduct("ahk-xaml Shared Engine")]
+[assembly: AssemblyCopyright("Copyright © 2026")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+
 public class AhkWpfEngine : Application {
     [StructLayout(LayoutKind.Sequential)]
     public struct COPYDATASTRUCT {
@@ -80,6 +88,16 @@ public class AhkWpfEngine : Application {
     [STAThread]
     public static void Main(string[] args) {
         try {
+            if (args.Length >= 3 && args[0] == "--compress") {
+                try {
+                    byte[] data = System.IO.File.ReadAllBytes(args[1]);
+                    using (var fs = new System.IO.FileStream(args[2], System.IO.FileMode.Create))
+                    using (var gz = new System.IO.Compression.GZipStream(fs, System.IO.Compression.CompressionMode.Compress)) {
+                        gz.Write(data, 0, data.Length);
+                    }
+                } catch (Exception ex) { Console.WriteLine(ex); }
+                return;
+            }
             if (args.Length < 3) return;
             AhkWpfEngine engine = new AhkWpfEngine();
             if (args.Length >= 5) {
@@ -118,8 +136,31 @@ public class AhkWpfEngine : Application {
         tracked = trackedCsv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
         
         string xamlContent = "";
+        string eventsContent = "";
+        bool isBin = !string.IsNullOrEmpty(xamlFilePath) && xamlFilePath.EndsWith(".bin", StringComparison.OrdinalIgnoreCase);
+
         if (!string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
-            xamlContent = System.IO.File.ReadAllText(xamlFilePath, Encoding.UTF8);
+            if (isBin) {
+                byte[] compressed = System.IO.File.ReadAllBytes(xamlFilePath);
+                string payload = "";
+                try {
+                    using (var ms = new System.IO.MemoryStream(compressed))
+                    using (var gz = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionMode.Decompress))
+                    using (var reader = new System.IO.StreamReader(gz, Encoding.UTF8)) {
+                        payload = reader.ReadToEnd();
+                    }
+                } catch (Exception dx) {
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf", "decomp_err.log"), dx.ToString());
+                    payload = Encoding.UTF8.GetString(compressed);
+                }
+                string[] parts = payload.Split(new[] { "\n---AHK-XAML-EVENTS---\n" }, 2, StringSplitOptions.None);
+                xamlContent = parts[0];
+                if (parts.Length > 1) {
+                    eventsContent = parts[1];
+                }
+            } else {
+                xamlContent = System.IO.File.ReadAllText(xamlFilePath, Encoding.UTF8);
+            }
         } else {
             try {
                 using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("AppXaml")) {
@@ -132,7 +173,7 @@ public class AhkWpfEngine : Application {
             } catch { }
         }
         
-        if (!string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
+        if (!isBin && !string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
             try { System.IO.File.Delete(xamlFilePath); } catch { }
         }
         
@@ -256,7 +297,15 @@ public class AhkWpfEngine : Application {
         };
         win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
 
-        if (!string.IsNullOrEmpty(eventsFilePath) && System.IO.File.Exists(eventsFilePath)) {
+        if (isBin) {
+            if (!string.IsNullOrEmpty(eventsContent)) {
+                string[] pairs = eventsContent.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string p in pairs) {
+                    string[] kv = p.Split(':');
+                    if (kv.Length == 2) BindEvent(kv[0], kv[1]);
+                }
+            }
+        } else if (!string.IsNullOrEmpty(eventsFilePath) && System.IO.File.Exists(eventsFilePath)) {
             string bindingsStr = System.IO.File.ReadAllText(eventsFilePath);
             try { System.IO.File.Delete(eventsFilePath); } catch { }
             string[] pairs = bindingsStr.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);

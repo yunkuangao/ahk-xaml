@@ -189,10 +189,16 @@ class XAML_GUI {
         this.InitKeyboardHooks()
     }
 
-    Show() {
+    Export(filePath) {
         if (!this.HasProp("host"))
             this.Compile()
-        this.host.Show()
+        this.host.Export(filePath)
+    }
+
+    Show(assetPath := "") {
+        if (!this.HasProp("host"))
+            this.Compile()
+        this.host.Show(assetPath)
     }
 
     ; ==============================================================================
