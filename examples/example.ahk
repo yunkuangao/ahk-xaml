@@ -425,6 +425,7 @@ ui.OnEvent("BtnShowSnackbar", "Click", (*) => app.ShowSnackbar("Action completed
 ui.OnEvent("BtnShowTestModal", "Click", ShowTestModal)
 ui.OnEvent("ComboStrictSearch", "LostFocus", OnStrictSearchLostFocus)
 ui.OnEvent("BtnOpenColorPicker", "Click", ShowColorPickerModal)
+ui.OnEvent("BtnTestGauge", "Click", OnTestGaugeClick)
 
 ; Advanced UI Tab Events
 ui.OnEvent("MyDropZone", "PreviewMouseLeftButtonDown", OnFileDropClick)
@@ -465,6 +466,53 @@ app.Show()
 ui.Update("MyEmoji_EmojiScroll", "TrapScroll", "")
 
 ; --- Custom Event Implementations ---
+
+global gaugeValue := 45
+global gaugeTarget := 45
+global gaugeTimerActive := false
+
+OnTestGaugeClick(state, ctrl, ev) {
+    global gaugeTimerActive, gaugeTarget, gaugeValue
+    if (!gaugeTimerActive) {
+        gaugeTimerActive := true
+        ui.Update("BtnTestGauge", "Content", "Stop Monitor")
+        SetTimer(GaugeSetNewTarget, 1000) ; Pick a new target every 1s
+        SetTimer(GaugeAnimateTick, 16)    ; 60 FPS animation loop
+    } else {
+        gaugeTimerActive := false
+        ui.Update("BtnTestGauge", "Content", "Start Monitor")
+        SetTimer(GaugeSetNewTarget, 0)
+        SetTimer(GaugeAnimateTick, 0)
+    }
+}
+
+GaugeSetNewTarget() {
+    global gaugeTarget
+    gaugeTarget += Random(-30, 40)
+    if (gaugeTarget < 0)
+        gaugeTarget := 0
+    if (gaugeTarget > 100)
+        gaugeTarget := 100
+    
+    ui.Update("MyGauge_Text", "Text", Integer(gaugeTarget))
+}
+
+GaugeAnimateTick() {
+    global gaugeValue, gaugeTarget
+    diff := gaugeTarget - gaugeValue
+    if (Abs(diff) < 0.1) {
+        gaugeValue := gaugeTarget
+        return
+    }
+    
+    ; Smooth easing
+    gaugeValue += diff * 0.15
+    
+    pct := gaugeValue / 100
+    offset := 18.06 * (1 - pct)
+    
+    ui.Update("MyGauge_Arc", "StrokeDashOffset", offset)
+}
 
 ShowColorPickerModal(state, ctrl, event) {
     theme := state.Has("ComboTheme") ? state["ComboTheme"] : "Dark Mica (Win 11)"
@@ -692,7 +740,7 @@ BuildAdvancedUITab(tab) {
     panel.Add("TextBlock").Text("SLIDER RANGE & DATE PICKER")
     grid := panel.Add("Grid").Margin("0,0,0,20")
     grid.Cols("*", "20", "*")
-    grid.Add("Border").Grid_Column(0).Use("CardPanel").Padding("15").SliderRange("Price Filter", 0, 100, 20, 80)
+    slider := grid.Add("Border").Grid_Column(0).Use("CardPanel").Padding("15").SliderRange("Price Filter", 0, 100, 20, 80)
 
     dpBdr := grid.Add("Border").Grid_Column(2).Use("CardPanel").Padding("15")
     dpSp := dpBdr.Add("StackPanel")
@@ -776,8 +824,17 @@ BuildAdvancedUITab(tab) {
     newSp.Add("TextBlock").Text("Avatar").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
     newSp.Avatar("", "JD", "#34C759") ; JD with green status
     
-    newSp.Add("TextBlock").Text("Gauge").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
-    newSp.Gauge("CPU Usage", 45, 100, "%")
+    newSp.Add("TextBlock").Text("Radial Gauge").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
+    gaugeSp := newSp.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,20")
+    gaugeSp.Gauge("MyGauge", "CPU Usage", 45, 100, "%")
+    
+    gaugeControls := gaugeSp.Add("StackPanel").VerticalAlignment("Center").Margin("20,0,0,0")
+    gaugeControls.Add("Button").Name("BtnTestGauge").Content("Start Monitor").Use("PrimaryBtn").Width(120).Height(30)
+    newSp.Add("TextBlock").Text("BREADCRUMB BAR").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
+    newSp.BreadcrumbBar(["Home", "Projects", "AHK", "XAML_Components.ahk"])
+    
+    newSp.Add("TextBlock").Text("STEPPER (WIZARD)").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
+    newSp.Stepper(["Configuration", "Authentication", "Deployment", "Verification"], 3)
 }
 
 app.AddTab("ADVANCED UI", BuildAdvancedUITab)

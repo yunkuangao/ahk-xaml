@@ -687,13 +687,11 @@ _SliderRange(this, title, minVal, maxVal, defaultStart, defaultEnd) {
     ; Bottom Slider (Max Value + Selection Track)
     ; Minimum is clamped to minVal (static), clamping against min-thumb is done via events
     sMax := sliderGrid.Add("Slider").Minimum(minVal).Maximum(maxVal).Value(defaultEnd).Name(maxName)
-    sMax.IsSelectionRangeEnabled("True").SelectionStart("{Binding Value, ElementName=" minName "}")
-    sMax.SelectionEnd("{Binding Value, ElementName=" maxName "}")
-    sMax.InjectResources('<Style TargetType="Slider"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid VerticalAlignment="Center"><Border Background="{DynamicResource ControlBorder}" Height="4" CornerRadius="2" Margin="8,0" /><Canvas Margin="8,0" Height="4" VerticalAlignment="Center"><Rectangle x:Name="PART_SelectionRange" Fill="{DynamicResource Accent}" Height="4" /></Canvas><Track x:Name="PART_Track"><Track.Thumb><Thumb Width="16" Height="16"><Thumb.Template><ControlTemplate TargetType="Thumb"><Ellipse Fill="{DynamicResource Accent}" /></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>')
+    sMax.IsSelectionRangeEnabled("True").SelectionStart("{Binding Value, ElementName=" minName "}").SelectionEnd("{Binding Value, ElementName=" maxName "}")
+    sMax.InjectResources('<Style TargetType="Slider"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid VerticalAlignment="Center"><Border Background="{DynamicResource ControlBorder}" Height="4" CornerRadius="2" Margin="8,0" /><Canvas Margin="8,0" Height="4" VerticalAlignment="Center"><Rectangle x:Name="PART_SelectionRange" Fill="{DynamicResource Accent}" Height="4" /></Canvas><Track x:Name="PART_Track"><Track.DecreaseRepeatButton><RepeatButton Background="Transparent" BorderThickness="0" IsHitTestVisible="False"/></Track.DecreaseRepeatButton><Track.IncreaseRepeatButton><RepeatButton Background="Transparent" BorderThickness="0" IsHitTestVisible="False"/></Track.IncreaseRepeatButton><Track.Thumb><Thumb Width="16" Height="16"><Thumb.Template><ControlTemplate TargetType="Thumb"><Ellipse Fill="{DynamicResource Accent}" /></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>')
     
-    ; Top Slider (Min Value) - Rendered with invisible track to just show thumb!
     sMin := sliderGrid.Add("Slider").Minimum(minVal).Maximum(maxVal).Value(defaultStart).Name(minName)
-    sMin.InjectResources('<Style TargetType="Slider"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid VerticalAlignment="Center"><Track x:Name="PART_Track"><Track.Thumb><Thumb Width="16" Height="16"><Thumb.Template><ControlTemplate TargetType="Thumb"><Ellipse Fill="{DynamicResource Accent}" /></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>')
+    sMin.InjectResources('<Style TargetType="Slider"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid VerticalAlignment="Center"><Track x:Name="PART_Track"><Track.DecreaseRepeatButton><RepeatButton Background="Transparent" BorderThickness="0" IsHitTestVisible="False"/></Track.DecreaseRepeatButton><Track.IncreaseRepeatButton><RepeatButton Background="Transparent" BorderThickness="0" IsHitTestVisible="False"/></Track.IncreaseRepeatButton><Track.Thumb><Thumb Width="16" Height="16"><Thumb.Template><ControlTemplate TargetType="Thumb"><Ellipse Fill="{DynamicResource Accent}" /></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>')
     
     tbGrid := grid.Add("Grid").Grid_Row(2).Margin("0,10,0,0")
     tbGrid.Cols("*", "Auto", "*")
@@ -705,12 +703,6 @@ _SliderRange(this, title, minVal, maxVal, defaultStart, defaultEnd) {
     
     bdrMax := tbGrid.Add("Border").Use("CardPanel").Padding("10,5").Grid_Column(2)
     bdrMax.Add("TextBlock").Text("{Binding Value, ElementName=" maxName ", StringFormat={}{0:0}}").Background("Transparent").Foreground("{DynamicResource TextSub}").HorizontalAlignment("Center")
-    
-    ; Store slider names on the grid so the caller can register clamp events
-    grid.DefineProp("MinSliderName", { Get: (*) => minName })
-    grid.DefineProp("MaxSliderName", { Get: (*) => maxName })
-    
-    return grid
 }
 
 ; ==============================================================================
@@ -944,9 +936,9 @@ _BreadcrumbBar(this, paths) {
             
             pop := chevron.AddRichPopover()
             pop.Add("TextBlock").Text("Sibling Folders").FontWeight("Bold").Margin("0,0,0,5").Foreground("{DynamicResource TextSub}")
-            pop.Add("Button").Content("Folder A").Background("Transparent").BorderThickness(0).HorizontalAlignment("Left")
-            pop.Add("Button").Content("Folder B").Background("Transparent").BorderThickness(0).HorizontalAlignment("Left")
-            pop.Add("Button").Content("Folder C").Background("Transparent").BorderThickness(0).HorizontalAlignment("Left")
+            pop.Add("Button").Content(p " Resources").Background("Transparent").BorderThickness(0).HorizontalAlignment("Left")
+            pop.Add("Button").Content(p " Configs").Background("Transparent").BorderThickness(0).HorizontalAlignment("Left")
+            pop.Add("Button").Content(p " Utils").Background("Transparent").BorderThickness(0).HorizontalAlignment("Left")
         }
     }
     return sp
@@ -967,7 +959,14 @@ _Stepper(this, steps, currentIndex) {
         if (i < steps.Length) {
             isCompleted := i < currentIndex
             lineColor := isCompleted ? "{DynamicResource Accent}" : "{DynamicResource ControlBorder}"
-            grid.Add("Rectangle").Height(2).Fill(lineColor).Grid_Column(i - 1).Grid_ColumnSpan(2).Margin("50,0,50,0").VerticalAlignment("Center").Grid_Row(0)
+            
+            rightGrid := grid.Add("Grid").Grid_Column(i - 1).Grid_Row(0)
+            rightGrid.Cols("*", "*")
+            rightGrid.Add("Rectangle").Height(2).Fill(lineColor).Grid_Column(1).VerticalAlignment("Center")
+            
+            leftGrid := grid.Add("Grid").Grid_Column(i).Grid_Row(0)
+            leftGrid.Cols("*", "*")
+            leftGrid.Add("Rectangle").Height(2).Fill(lineColor).Grid_Column(0).VerticalAlignment("Center")
         }
     }
     
@@ -982,9 +981,9 @@ _Stepper(this, steps, currentIndex) {
         circle := grid.Add("Border").Width(24).Height(24).CornerRadius(12).Background(circleBg).BorderBrush(circleBorder).BorderThickness(isCurrent ? 2 : 1).HorizontalAlignment("Center").Grid_Row(0).Grid_Column(i - 1)
         
         if (isCompleted) {
-            circle.Add("TextBlock").Text(Chr(0xE73E)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).Foreground("White").HorizontalAlignment("Center").VerticalAlignment("Center")
+            circle.Add("TextBlock").Text(Chr(0xE73E)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).Foreground("White").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0,1,0,0")
         } else {
-            circle.Add("TextBlock").Text(i).Foreground(circleFg).FontSize(11).FontWeight("Bold").HorizontalAlignment("Center").VerticalAlignment("Center")
+            circle.Add("TextBlock").Text(i).Foreground(circleFg).FontSize(11).FontWeight("Bold").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0,2,0,0")
         }
         
         textFg := isCurrent ? "{DynamicResource TextMain}" : "{DynamicResource TextSub}"
@@ -1232,7 +1231,8 @@ class XSegmentedNetworkInput {
 }
 
 XAMLElement.Prototype.DefineProp("RadialGauge", { Call: _RadialGauge })
-_RadialGauge(this, title, value, maxVal, units := "%") {
+XAMLElement.Prototype.DefineProp("Gauge", { Call: _RadialGauge })
+_RadialGauge(this, id, title, value, maxVal, units := "%") {
     card := this.Add("Border").Use("CardPanel").Padding("15")
     sp := card.Add("StackPanel")
     sp.Add("TextBlock").Text(title).Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold").HorizontalAlignment("Center").Margin("0,0,0,10")
@@ -1241,23 +1241,24 @@ _RadialGauge(this, title, value, maxVal, units := "%") {
     
     bgArc := gaugeGrid.Add("Path").Data("M 4,50 A 46,46 0 0,1 96,50").Stroke("{DynamicResource ControlBorder}").StrokeThickness(8).HorizontalAlignment("Center")
     
-    fillArc := gaugeGrid.Add("Path").Data("M 4,50 A 46,46 0 0,1 96,50").Stroke("{DynamicResource Accent}").StrokeThickness(8).HorizontalAlignment("Center")
+    ; We draw the fill arc from Left (4) to Right (96)
+    ; StrokeDashOffset shifts the dash pattern, revealing the solid part from the start (Left)
+    fillArc := gaugeGrid.Add("Path").Name(id "_Arc").Data("M 4,50 A 46,46 0 0,1 96,50").Stroke("{DynamicResource Accent}").StrokeThickness(8).HorizontalAlignment("Center")
+    
+    ; Total length is 144.51 pixels. At thickness 8, dash length is 18.06 units.
+    fillArc.StrokeDashArray("18.06 18.06")
+    
     pct := value / maxVal
-    dashLen := pct * 144.5
-    spaceLen := 144.5 - dashLen
-    fillArc.StrokeDashArray(dashLen " " spaceLen)
+    offset := 18.06 * (1 - pct)
+    fillArc.StrokeDashOffset(offset)
     
     valSp := gaugeGrid.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Center").VerticalAlignment("Bottom").Margin("0,0,0,-10")
-    valSp.Add("TextBlock").Text(value).Foreground("{DynamicResource TextMain}").FontSize(20).FontWeight("Bold").VerticalAlignment("Bottom")
+    valSp.Add("TextBlock").Name(id "_Text").Text(value).Foreground("{DynamicResource TextMain}").FontSize(20).FontWeight("Bold").VerticalAlignment("Bottom")
     valSp.Add("TextBlock").Text(units).Foreground("{DynamicResource TextSub}").FontSize(12).VerticalAlignment("Bottom").Margin("2,0,0,3")
     
     return card
 }
 
-XAMLElement.Prototype.DefineProp("Gauge", { Call: _Gauge })
-_Gauge(this, title, value, maxVal, units := "%") {
-    return this.RadialGauge(title, value, maxVal, units)
-}
 
 XAMLElement.Prototype.DefineProp("SkeletonBlock", { Call: _SkeletonBlock })
 _SkeletonBlock(this, w, h, radius := 4) {

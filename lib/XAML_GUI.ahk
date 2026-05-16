@@ -175,6 +175,11 @@ class XAML_GUI {
         for k, v in this.segmentedInputs {
             v.Bind(this.host)
         }
+        if (this.HasProp("sliderRanges")) {
+            for _, sr in this.sliderRanges {
+                sr.Bind(this.host)
+            }
+        }
 
         return this.host
     }
@@ -314,6 +319,12 @@ class XAML_GUI {
 
     RegisterSegmentedInput(seg) {
         this.segmentedInputs[seg.id] := seg
+    }
+
+    RegisterSliderRange(sr) {
+        if (!this.HasProp("sliderRanges"))
+            this.sliderRanges := []
+        this.sliderRanges.Push(sr)
     }
 
     HandleSpinnerButton(num, isUp) {
