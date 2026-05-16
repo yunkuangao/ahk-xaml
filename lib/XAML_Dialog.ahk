@@ -24,6 +24,9 @@ class XDialog {
         iniPath := options.HasProp("IniPath") ? options.IniPath : "themes.ini"
         soundFx := options.HasProp("Sound") ? options.Sound : ""
         disableAltF4 := options.HasProp("DisableAltF4") ? options.DisableAltF4 : false
+        movable := options.HasProp("Movable") ? options.Movable : true
+        showCloseBtn := options.HasProp("ShowCloseBtn") ? options.ShowCloseBtn : true
+        darkenOwner := options.HasProp("DarkenOwner") ? options.DarkenOwner : false
 
         bgRes := "DropdownBg"
         if FileExist(iniPath) {
@@ -45,13 +48,18 @@ class XDialog {
         main.Rows("40", "*", "Auto")
 
         ; Titlebar (draggable)
-        tb := main.Add("Grid").Grid_Row(0).Background("Transparent").Name("DragArea")
+        tb := main.Add("Grid").Grid_Row(0).Background("Transparent")
+        if (movable) {
+            tb.Name("DragArea")
+        }
         tb.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").FontSize(12).VerticalAlignment("Center").Margin("15,0,0,0")
 
-        CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
-        closeBtn := tb.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).HorizontalAlignment("Right").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0)
-        closeBtn.InjectResources(CloseBtnTemplate)
-        closeBtn.Add("TextBlock").Text(Chr(0xE8BB)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
+        if (showCloseBtn) {
+            CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
+            closeBtn := tb.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).HorizontalAlignment("Right").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0)
+            closeBtn.InjectResources(CloseBtnTemplate)
+            closeBtn.Add("TextBlock").Text(Chr(0xE8BB)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
+        }
 
         ; Content Body
         body := main.Add("StackPanel").Grid_Row(1).Margin("20,10,20,20")
@@ -112,7 +120,35 @@ class XDialog {
         }
 
         ; --- INIT LOGIC ---
-        ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", owner)
+        exePath := ""
+        if (IsSet(XAML_DEBUG) && !XAML_DEBUG && options.HasProp("Id")) {
+            exePath := options.Id "_dialog.dll"
+        }
+
+        ui := ""
+        ; Modal logic
+        overlayGui := ""
+        if (modal && owner) {
+            WinSetEnabled(0, "ahk_id " owner)
+            
+            if (darkenOwner) {
+                try {
+                    WinGetPos(&ox, &oy, &ow, &oh, "ahk_id " owner)
+                    overlayGui := Gui("-Caption +ToolWindow +Owner" owner)
+                    overlayGui.BackColor := "Black"
+                    WinSetTransparent(150, overlayGui.Hwnd)
+                    overlayGui.Show("x" ox " y" oy " w" ow " h" oh " NoActivate")
+                }
+            }
+        }
+
+        actualOwner := overlayGui != "" ? overlayGui.Hwnd : owner
+
+        if (exePath != "" && FileExist(exePath)) {
+            ui := XAMLHost("", exePath, actualOwner)
+        } else {
+            ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), exePath, actualOwner)
+        }
 
         ; Replace some default xaml.ahk window stuff to match the dialog needs
         heightAttr := (height == "Auto") ? 'SizeToContent="Height"' : 'Height="' height '"'
@@ -130,14 +166,9 @@ class XDialog {
             SoundPlay(soundFx)
         }
 
-        ; Modal logic
-        if (modal && owner) {
-            WinSetEnabled(0, "ahk_id " owner)
-        }
-
         ; Callbacks
-        ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => XDialog.OnDialogLoad(ui, owner, modal, themeName, iniPath, buttons, resultObj), 255)
-        ui.OnEvent("Window", "Closing", (state, ctrl, event) => XDialog.OnDialogClose(ui, resultObj, owner, modal), 255)
+        ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => XDialog.OnDialogLoad(ui, actualOwner, modal, themeName, iniPath, buttons, resultObj), 255)
+        ui.OnEvent("Window", "Closing", (state, ctrl, event) => XDialog.OnDialogClose(ui, resultObj, owner, modal, overlayGui), 255)
 
         for index, btnText in buttons {
             ui.OnEvent("Btn" index, "Click", ObjBindMethod(XDialog, "OnButtonClick", ui, resultObj, btnText, owner, modal), 255)
@@ -191,9 +222,13 @@ class XDialog {
         XDialog.ApplyTheme(ui, themeName, iniPath)
     }
 
-    static OnDialogClose(ui, resultObj, owner, modal, state := "", ctrl := "", event := "") {
+    static OnDialogClose(ui, resultObj, owner, modal, overlayGui, state := "", ctrl := "", event := "") {
         if (resultObj.Button == "") {
             resultObj.Button := "Closed"
+        }
+
+        if (overlayGui != "") {
+            try overlayGui.Destroy()
         }
 
         if (owner) {

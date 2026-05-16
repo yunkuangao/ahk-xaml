@@ -19,6 +19,8 @@ class XAMLHost {
             DirCreate(A_Temp "\AhkWpf")
         this.errLog := A_Temp "\AhkWpf\AhkWpfError.log"
 
+
+
         this.receiver := Gui()
         DllCall("user32\ChangeWindowMessageFilterEx", "Ptr", this.receiver.Hwnd, "UInt", 0x004A, "UInt", 1, "Ptr", 0)
 
@@ -127,7 +129,7 @@ class XAMLHost {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\AhkWpf_SharedEngine_v4.exe"
+        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\AhkWpf_SharedEngine_v6.exe"
         trackedCsv := ""
 
         uniqueCsv := Map()
@@ -148,8 +150,7 @@ class XAMLHost {
         }
         eventBindings := RTrim(eventBindings, ",")
 
-        b64Xaml := XAMLHost.Base64Encode(this.xaml)
-
+        eventBindings := RTrim(eventBindings, ",")
         if !FileExist(targetExe) {
             csCode := '
             (
@@ -234,14 +235,31 @@ class XAMLHost {
                         winId = id; ahkHwnd = (IntPtr)long.Parse(hwndStr);
                         tracked = trackedCsv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                         
-                        string b64Xaml = "";
+                        string xamlContent = "";
                         if (!string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
-                            b64Xaml = System.IO.File.ReadAllText(xamlFilePath);
-                            try { System.IO.File.Delete(xamlFilePath); } catch { }
+                            xamlContent = System.IO.File.ReadAllText(xamlFilePath, Encoding.UTF8);
                         } else {
-                            b64Xaml = "{B64_XAML}"; // Fallback
+                            try {
+                                using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("AppXaml")) {
+                                    if (stream != null) {
+                                        using (var reader = new System.IO.StreamReader(stream, Encoding.UTF8)) {
+                                            xamlContent = reader.ReadToEnd();
+                                        }
+                                    }
+                                }
+                            } catch { }
                         }
-                        byte[] xamlBytes = Convert.FromBase64String(b64Xaml);
+                        
+                        if (!string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
+                            try { System.IO.File.Delete(xamlFilePath); } catch { }
+                        }
+                        
+                        byte[] xamlBytes;
+                        if (string.IsNullOrWhiteSpace(xamlContent)) {
+                            xamlBytes = Encoding.UTF8.GetBytes("<Window xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" />");
+                        } else {
+                            xamlBytes = Encoding.UTF8.GetBytes(xamlContent);
+                        }
                         if (Application.Current == null) new Application();
                         try {
                             using (var stream = new System.IO.MemoryStream(xamlBytes)) {
@@ -655,10 +673,13 @@ class XAMLHost {
             )'
         }
 
-        xamlFile := A_Temp "\AhkWpf\AhkWpf_" this.id ".xaml.b64"
-        if FileExist(xamlFile)
-            FileDelete(xamlFile)
-        FileAppend(b64Xaml, xamlFile, "UTF-8")
+        xamlFile := ""
+        if (this.xaml != "") {
+            xamlFile := A_Temp "\AhkWpf\AhkWpf_" this.id ".xaml"
+            if FileExist(xamlFile)
+                FileDelete(xamlFile)
+            FileAppend(this.xaml, xamlFile, "UTF-8")
+        }
 
         eventsFile := A_Temp "\AhkWpf\AhkWpf_" this.id ".events.txt"
         if FileExist(eventsFile)
@@ -678,7 +699,9 @@ class XAMLHost {
             SplitPath(cscPath, , &cscDir)
             wpfDir := cscDir "\WPF"
 
-            cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' targetExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll "' csPath '" > "' this.errLog '" 2>&1"'
+            resArg := (xamlFile != "") ? ' /resource:"' xamlFile '",AppXaml' : ""
+
+            cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' targetExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll' resArg ' "' csPath '" > "' this.errLog '" 2>&1"'
             RunWait(cmd, "", "Hide")
             FileDelete(csPath)
 
