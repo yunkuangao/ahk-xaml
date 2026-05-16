@@ -59,7 +59,7 @@ class XAMLGUI {
             SetTimer(ObjBindMethod(this, "CheckForCrashes"), 0)
             err := FileRead(this.errLog)
             FileDelete(this.errLog)
-            
+
             ahkLine := "Unknown"
             snippet := ""
             if RegExMatch(err, "s)AHK_LINE:(.*?)\nXAML_SNIPPET:(.*?)\n\n(.*)", &m) {
@@ -67,12 +67,12 @@ class XAMLGUI {
                 snippet := m[2]
                 err := m[3]
             }
-            
+
             header := "The Background Engine crashed! Details below:"
             if (ahkLine != "Unknown") {
                 header := "Engine crashed while rendering AHK Line " ahkLine "!"
             }
-            
+
             XAMLGUI.ShowErrorDialog("Engine Crash", header, snippet, err)
             ExitApp()
         }
@@ -83,23 +83,23 @@ class XAMLGUI {
         details := StrReplace(details, " ---> ", "`r`n`r`n---> ")
         details := StrReplace(details, "`r`n", "`n")
         details := StrReplace(details, "`n", "`r`n")
-        
+
         ; Add an extra break before the first stack trace line to separate the error message
         details := StrReplace(details, "`r`n   at ", "`r`n`r`n   at ", , &_, 1)
 
         errGui := Gui("", title)
         errGui.MarginX := 20
         errGui.MarginY := 20
-        
+
         errGui.SetFont("s12 bold cMaroon", "Segoe UI")
         errGui.Add("Text", "w720", header)
-        
+
         if (snippet != "") {
             errGui.SetFont("s10 bold cBlack", "Segoe UI")
             errGui.Add("Text", "y+10", "Generated XAML Snippet:")
             errGui.SetFont("s10 norm cBlack", "Consolas")
             errGui.Add("Edit", "y+5 w720 h60 ReadOnly +VScroll", snippet)
-            
+
             errGui.SetFont("s10 bold cBlack", "Segoe UI")
             errGui.Add("Text", "y+15", "Full Exception Trace:")
             errGui.SetFont("s10 norm cBlack", "Consolas")
@@ -109,11 +109,11 @@ class XAMLGUI {
             ; Word wrap is enabled by default. +VScroll ensures vertical scrolling.
             errGui.Add("Edit", "y+15 w720 h380 ReadOnly +VScroll", details)
         }
-        
+
         errGui.SetFont("s10 norm cBlack", "Segoe UI")
         btn := errGui.Add("Button", "w120 x320 y+20 Default", "Close")
         btn.OnEvent("Click", (*) => errGui.Destroy())
-        
+
         errGui.Show()
         WinWaitClose(errGui)
     }
@@ -125,20 +125,17 @@ class XAMLGUI {
         targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf_" this.id ".exe"
         trackedCsv := ""
 
-        if !FileExist(targetExe) {
-            names := [], unique := Map(), pos := 1
-            if (this.xaml != "") {
-                while (pos := RegExMatch(this.xaml, "i)(?:x:)?Name=['`"]([^'`"]+)['`"]", &match, pos)) {
-                    if !unique.Has(match[1]) {
-                        unique[match[1]] := true
-                        names.Push(match[1])
-                    }
-                    pos += match.Len[0]
-                }
-            }
+        uniqueCsv := Map()
+        for ctrlName in this.events
+            uniqueCsv[ctrlName] := true
+        for ctrlName in this.tracked
+            uniqueCsv[ctrlName] := true
 
-            for index, name in names
-                trackedCsv .= name (index < names.Length ? "," : "")
+        for name in uniqueCsv
+            trackedCsv .= name ","
+        trackedCsv := RTrim(trackedCsv, ",")
+
+        if !FileExist(targetExe) {
 
             eventBindings := ""
             for ctrlName, events in this.events {
@@ -172,6 +169,19 @@ class XAMLGUI {
                     public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, ref COPYDATASTRUCT lParam);
                     [DllImport("dwmapi.dll")]
                     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+                    
+                    [StructLayout(LayoutKind.Sequential)]
+                    public struct MINMAXINFO { public POINT ptReserved; public POINT ptMaxSize; public POINT ptMaxPosition; public POINT ptMinTrackSize; public POINT ptMaxTrackSize; }
+                    [StructLayout(LayoutKind.Sequential)]
+                    public struct POINT { public int x; public int y; }
+                    [StructLayout(LayoutKind.Sequential)]
+                    public struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+                    [StructLayout(LayoutKind.Sequential)]
+                    public struct RECT { public int left, top, right, bottom; }
+                    [DllImport("user32.dll")]
+                    public static extern IntPtr MonitorFromWindow(IntPtr handle, int flags);
+                    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+                    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
                 
                     string winId; IntPtr ahkHwnd; string[] tracked; Window win;
                 
@@ -191,9 +201,13 @@ class XAMLGUI {
                         
                         string b64Xaml = "{B64_XAML}";
                         byte[] xamlBytes = Convert.FromBase64String(b64Xaml);
+                        if (Application.Current == null) new Application();
                         try {
                             using (var stream = new System.IO.MemoryStream(xamlBytes)) {
                                 win = (Window)XamlReader.Load(stream);
+                            }
+                            foreach (System.Collections.DictionaryEntry entry in win.Resources) {
+                                Application.Current.Resources[entry.Key] = entry.Value;
                             }
                         } catch (XamlParseException ex) {
                             string[] xamlLines = Encoding.UTF8.GetString(xamlBytes).Replace("\r\n", "\n").Split('\n');
@@ -218,17 +232,78 @@ class XAMLGUI {
                         
                         var btnClose = win.FindName("BtnClose") as ButtonBase;
                         if (btnClose != null) btnClose.Click += (s, e) => { try { win.Close(); } catch { } };
+                        
+                        var btnMaximize = win.FindName("BtnMaximize") as ButtonBase;
+                        if (btnMaximize != null) btnMaximize.Click += (s, e) => { win.WindowState = win.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; };
+                        
+                        var btnMinimize = win.FindName("BtnMinimize") as ButtonBase;
+                        if (btnMinimize != null) btnMinimize.Click += (s, e) => { win.WindowState = WindowState.Minimized; };
                 
+                        win.Resources["BaseWindowRadius"] = new CornerRadius(12);
+                        if (Application.Current != null) Application.Current.Resources["BaseWindowRadius"] = win.Resources["BaseWindowRadius"];
+                        
+                        win.StateChanged += (s, e) => UpdateSnapState(win);
+                        win.LocationChanged += (s, e) => UpdateSnapState(win);
+                        win.SizeChanged += (s, e) => UpdateSnapState(win);
+                        
                         win.Loaded += (s, e) => {
                             IntPtr hwnd = new WindowInteropHelper(win).Handle;
                             HwndSource.FromHwnd(hwnd).AddHook(WndProc);
-                            SendToAhk("EVENT|" + winId + "|Window|Loaded|" + hwnd.ToString() + "\n");
+                            SendToAhk("EVENT|" + winId + "|Window|LoadedHwnd|" + hwnd.ToString() + "\n");
+                            UpdateSnapState(win);
+                            DumpState("Window", "Loaded");
                         };
                         win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
                 
                         {EVENT_BINDINGS}
                 
                         win.ShowDialog();
+                    }
+                
+                    private void UpdateSnapState(Window win) {
+                        CornerRadius baseRad = new CornerRadius(0);
+                        if (win.Resources.Contains("BaseWindowRadius")) {
+                            baseRad = (CornerRadius)win.Resources["BaseWindowRadius"];
+                        }
+                        bool wantsRound = baseRad.TopLeft > 0;
+                        
+                        bool isSnappedOrMax = win.WindowState == WindowState.Maximized;
+                        if (!isSnappedOrMax) {
+                            var workArea = System.Windows.SystemParameters.WorkArea;
+                            isSnappedOrMax = (win.Top <= workArea.Top && win.Height >= workArea.Height) || 
+                                             (win.Left <= workArea.Left && win.Width >= workArea.Width);
+                        }
+
+                        int cornerPref = wantsRound ? 2 : 1; // 1 = DoNotRound, 2 = Round
+                        int hr = -1;
+                        try {
+                            IntPtr hwnd = new WindowInteropHelper(win).Handle;
+                            if (hwnd != IntPtr.Zero) {
+                                hr = DwmSetWindowAttribute(hwnd, 33, ref cornerPref, 4);
+                            }
+                        } catch { }
+
+                        // On Windows 11, if DwmSetWindowAttribute(33) succeeds, DWM rounds the physical window to exactly 8px.
+                        // On Windows 10, it fails, and the physical window remains square (0px).
+                        double actualRadius = (!isSnappedOrMax && wantsRound && hr == 0) ? 8 : 0;
+
+                        win.Resources["WindowRadius"] = new CornerRadius(actualRadius);
+                        win.Resources["CloseBtnRadius"] = new CornerRadius(0, actualRadius, 0, 0);
+                        
+                        var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(win);
+                        if (chrome != null) {
+                            chrome.CornerRadius = (CornerRadius)win.Resources["WindowRadius"];
+                        }
+                        
+                        if (Application.Current != null) {
+                            Application.Current.Resources["WindowRadius"] = win.Resources["WindowRadius"];
+                            Application.Current.Resources["CloseBtnRadius"] = win.Resources["CloseBtnRadius"];
+                        }
+                        
+                        var btnMaximizeTxt = win.FindName("BtnMaximizeTxt") as TextBlock;
+                        if (btnMaximizeTxt != null) {
+                            btnMaximizeTxt.Text = win.WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+                        }
                     }
                 
                     private void BindEvent(string ctrlName, string eventName) {
@@ -239,6 +314,19 @@ class XAMLGUI {
                             if (evt == null) return;
                 
                             var parameters = evt.EventHandlerType.GetMethod("Invoke").GetParameters();
+                            
+                            if (eventName == "Drop") {
+                                win.AllowDrop = true;
+                                win.Drop += (s, e) => {
+                                    if (e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                                        string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                                        string fileList = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join("|", files)));
+                                        SendToAhk("EVENT|" + winId + "|" + ctrlName + "|Drop|" + fileList + "\n");
+                                    }
+                                };
+                                return;
+                            }
+                            
                             var pExprs = parameters.Select(p => System.Linq.Expressions.Expression.Parameter(p.ParameterType, p.Name)).ToArray();
                             var dumpStateMethod = this.GetType().GetMethod("DumpState", BindingFlags.NonPublic | BindingFlags.Instance);
                             var call = System.Linq.Expressions.Expression.Call(System.Linq.Expressions.Expression.Constant(this), dumpStateMethod, System.Linq.Expressions.Expression.Constant(ctrlName), System.Linq.Expressions.Expression.Constant(eventName));
@@ -276,6 +364,13 @@ class XAMLGUI {
                                         val = cb.Text;
                                     }
                                 }
+                                else if (c is TreeView) {
+                                    TreeView tv = (TreeView)c;
+                                    if (tv.SelectedItem is TreeViewItem) {
+                                        object tag = ((TreeViewItem)tv.SelectedItem).Tag;
+                                        val = tag != null ? tag.ToString() : "";
+                                    }
+                                }
                                 if (val == null) val = "";
                                 sb.Append(t + "=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(val)) + "\n");
                             }
@@ -301,6 +396,23 @@ class XAMLGUI {
                                 ProcessMessage(hwnd, Encoding.UTF8.GetString(bytes).TrimEnd('\0'));
                             } catch { }
                             handled = true;
+                        } else if (msg == 0x0024) { // WM_GETMINMAXINFO
+                            try {
+                                MINMAXINFO mmi = (MINMAXINFO)Marshal.PtrToStructure(lParam, typeof(MINMAXINFO));
+                                IntPtr monitor = MonitorFromWindow(hwnd, 2); // MONITOR_DEFAULTTONEAREST
+                                if (monitor != IntPtr.Zero) {
+                                    MONITORINFO monitorInfo = new MONITORINFO();
+                                    monitorInfo.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+                                    GetMonitorInfo(monitor, ref monitorInfo);
+                                    RECT rcWorkArea = monitorInfo.rcWork;
+                                    RECT rcMonitorArea = monitorInfo.rcMonitor;
+                                    mmi.ptMaxPosition.x = Math.Abs(rcWorkArea.left - rcMonitorArea.left);
+                                    mmi.ptMaxPosition.y = Math.Abs(rcWorkArea.top - rcMonitorArea.top);
+                                    mmi.ptMaxSize.x = Math.Abs(rcWorkArea.right - rcWorkArea.left);
+                                    mmi.ptMaxSize.y = Math.Abs(rcWorkArea.bottom - rcWorkArea.top);
+                                }
+                                Marshal.StructureToPtr(mmi, lParam, true);
+                            } catch { }
                         }
                         return IntPtr.Zero;
                     }
@@ -313,10 +425,42 @@ class XAMLGUI {
                             int backdrop = int.Parse(p[0]), dark = int.Parse(p[1]);
                             DwmSetWindowAttribute(hwnd, 20, ref dark, 4);
                             DwmSetWindowAttribute(hwnd, 38, ref backdrop, 4);
+                            int borderColor = -2; // DWMWA_COLOR_NONE (0xFFFFFFFE)
+                            DwmSetWindowAttribute(hwnd, 34, ref borderColor, 4);
                         } else if (parts[0] == "Resource") {
-                            win.Resources[parts[1]] = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]);
+                            string[] rParts = parts[2].Split(new[] { ':' }, 2);
+                            if (rParts.Length == 2 && (rParts[0] == "Brush" || rParts[0] == "Thickness" || rParts[0] == "CornerRadius" || rParts[0] == "Double")) {
+                                string type = rParts[0];
+                                string val = rParts[1];
+                                if (type == "Brush") win.Resources[parts[1]] = new System.Windows.Media.BrushConverter().ConvertFromString(val);
+                                else if (type == "Thickness") win.Resources[parts[1]] = new System.Windows.ThicknessConverter().ConvertFromString(val);
+                                else if (type == "CornerRadius") {
+                                    if (parts[1] == "WindowRadius") {
+                                        win.Resources["BaseWindowRadius"] = new System.Windows.CornerRadiusConverter().ConvertFromString(val);
+                                        if (Application.Current != null) Application.Current.Resources["BaseWindowRadius"] = win.Resources["BaseWindowRadius"];
+                                        UpdateSnapState(win);
+                                    } else {
+                                        win.Resources[parts[1]] = new System.Windows.CornerRadiusConverter().ConvertFromString(val);
+                                    }
+                                }
+                                else if (type == "Double") win.Resources[parts[1]] = double.Parse(val);
+                            } else {
+                                win.Resources[parts[1]] = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]);
+                            }
+                            if (Application.Current != null) Application.Current.Resources[parts[1]] = win.Resources[parts[1]];
+                            // Force-apply ScrollBarWidth to all ScrollBar elements in the visual tree
+                            if (parts[1] == "ScrollBarWidth" && win.Resources[parts[1]] is double) {
+                                double sz = (double)win.Resources[parts[1]];
+                                WalkVisualTree(win, (obj) => {
+                                    if (obj is ScrollBar) {
+                                        ScrollBar sb = (ScrollBar)obj;
+                                        if (sb.Orientation == System.Windows.Controls.Orientation.Vertical) sb.Width = sz;
+                                        else sb.Height = sz;
+                                    }
+                                });
+                            }
                         } else {
-                            var ctrl = win.FindName(parts[0]);
+                            object ctrl = parts[0] == "Window" ? win : win.FindName(parts[0]);
                             if (ctrl != null) {
                                 if (parts[1] == "AddItem" && ctrl is ItemsControl) {
                                     ((ItemsControl)ctrl).Items.Add(parts[2]);
@@ -324,6 +468,13 @@ class XAMLGUI {
                                         ListBox lb = (ListBox)ctrl;
                                         lb.SelectedIndex = lb.Items.Count - 1;
                                         lb.ScrollIntoView(lb.SelectedItem);
+                                    }
+                                } else if (parts[1] == "AddXamlItem" && ctrl is ItemsControl) {
+                                    try {
+                                        object element = XamlReader.Parse(parts[2]);
+                                        ((ItemsControl)ctrl).Items.Add(element);
+                                    } catch (Exception ex) {
+                                        Console.WriteLine("XamlParse Error: " + ex.Message);
                                     }
                                 } else if (parts[1] == "ClearItems" && ctrl is ItemsControl) {
                                     ((ItemsControl)ctrl).Items.Clear();
@@ -336,12 +487,31 @@ class XAMLGUI {
                                         else if (prop.PropertyType.IsEnum) val = Enum.Parse(prop.PropertyType, parts[2], true);
                                         else if (pt == "Double") val = double.Parse(parts[2]);
                                         else if (pt == "Boolean" || pt == "Nullable`1") val = Convert.ToBoolean(parts[2]);
+                                        else if (pt == "Thickness") val = new System.Windows.ThicknessConverter().ConvertFromString(parts[2]);
+                                        else if (pt == "CornerRadius") val = new System.Windows.CornerRadiusConverter().ConvertFromString(parts[2]);
+                                        else if (pt == "ImageSource") {
+                                            if (parts[2].StartsWith("HICON:")) {
+                                                IntPtr hIcon = new IntPtr(long.Parse(parts[2].Substring(6)));
+                                                val = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(hIcon, System.Windows.Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+                                            } else {
+                                                val = new System.Windows.Media.ImageSourceConverter().ConvertFromString(parts[2]);
+                                            }
+                                        }
                                         else if (pt == "Object" || pt == "String") val = parts[2];
                                         else val = Convert.ChangeType(parts[2], prop.PropertyType);
                                         prop.SetValue(ctrl, val, null);
                                     }
                                 }
                             }
+                        }
+                    }
+                
+                    private void WalkVisualTree(System.Windows.DependencyObject parent, Action<System.Windows.DependencyObject> callback) {
+                        int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+                        for (int i = 0; i < count; i++) {
+                            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                            callback(child);
+                            WalkVisualTree(child, callback);
                         }
                     }
                 }
@@ -373,16 +543,6 @@ class XAMLGUI {
                 XAMLGUI.ShowErrorDialog("Engine Compile Error", "Failed to compile background engine.", "", errOut)
                 return
             }
-        } else {
-            unique := Map()
-            for ctrlName in this.events
-                unique[ctrlName] := true
-            for ctrlName in this.tracked
-                unique[ctrlName] := true
-
-            for name in unique
-                trackedCsv .= name ","
-            trackedCsv := RTrim(trackedCsv, ",")
         }
 
         if FileExist(this.errLog)
@@ -414,7 +574,7 @@ class XAMLGUI {
 
         instance := XAMLGUI._instances[winId]
 
-        if (ctrlName == "Window" && eventName == "Loaded") {
+        if (ctrlName == "Window" && eventName == "LoadedHwnd") {
             instance.wpfHwnd := Integer(parts[5])
         }
         if (ctrlName == "Window" && eventName == "Closed") {
@@ -423,6 +583,10 @@ class XAMLGUI {
         }
 
         stateMap := Map()
+        if (eventName == "Drop" && parts.Length >= 5) {
+            stateMap["DropFiles"] := StrSplit(XAMLGUI.Base64Decode(parts[5]), "|")
+        }
+
         Loop lines.Length {
             if (A_Index == 1 || lines[A_Index] == "")
                 continue
@@ -466,13 +630,14 @@ XAML_TEMPLATE := '
 (
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            xmlns:sys="clr-namespace:System;assembly=mscorlib"
             Width="940" Height="700"
             WindowStyle="None" AllowsTransparency="False" Background="Transparent"
             WindowStartupLocation="CenterScreen"
             TextElement.Foreground="{DynamicResource TextMain}" FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif">
         
         <WindowChrome.WindowChrome>
-            <WindowChrome GlassFrameThickness="-1" CaptionHeight="0" CornerRadius="12" />
+            <WindowChrome GlassFrameThickness="-1" CaptionHeight="50" CornerRadius="{DynamicResource WindowRadius}" />
         </WindowChrome.WindowChrome>
     
         %components%
