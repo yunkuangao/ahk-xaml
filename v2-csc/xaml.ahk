@@ -123,7 +123,7 @@ class XAMLGUI {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf_SharedEngine.exe"
+        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf_SharedEngine_v3.exe"
         trackedCsv := ""
 
         uniqueCsv := Map()
@@ -244,14 +244,34 @@ class XAMLGUI {
                             string snippet = "Unknown";
                             string ahkLine = "Unknown";
                             if (ex.LineNumber > 0 && ex.LineNumber <= xamlLines.Length) {
-                                snippet = xamlLines[ex.LineNumber - 1].Trim();
-                                int idx1 = snippet.IndexOf("<!-- [ahk:");
+                                int startLine = Math.Max(0, ex.LineNumber - 8);
+                                int endLine = Math.Min(xamlLines.Length - 1, ex.LineNumber + 8);
+                                StringBuilder sb = new StringBuilder();
+                                for (int i = startLine; i <= endLine; i++) {
+                                    string prefix = (i == ex.LineNumber - 1) ? ">> " : "   ";
+                                    sb.AppendLine(prefix + (i+1) + "| " + xamlLines[i].TrimEnd());
+                                }
+                                snippet = sb.ToString().TrimEnd();
+
+                                string errLine = xamlLines[ex.LineNumber - 1];
+                                int idx1 = errLine.IndexOf("<!-- [ahk:");
                                 if (idx1 != -1) {
-                                    int idx2 = snippet.IndexOf("] -->", idx1);
-                                    if (idx2 != -1) ahkLine = snippet.Substring(idx1 + 10, idx2 - (idx1 + 10));
+                                    int idx2 = errLine.IndexOf("] -->", idx1);
+                                    if (idx2 != -1) ahkLine = errLine.Substring(idx1 + 10, idx2 - (idx1 + 10));
+                                } else {
+                                    for(int i = ex.LineNumber - 1; i >= 0; i--) {
+                                        int i1 = xamlLines[i].IndexOf("<!-- [ahk:");
+                                        if (i1 != -1) {
+                                            int i2 = xamlLines[i].IndexOf("] -->", i1);
+                                            if (i2 != -1) {
+                                                ahkLine = "~" + xamlLines[i].Substring(i1 + 10, i2 - (i1 + 10));
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            throw new Exception("AHK_LINE:" + ahkLine + "\nXAML_SNIPPET:" + snippet + "\n\n" + ex.ToString());
+                            throw new Exception("AHK_LINE:" + ahkLine + "\nXAML_SNIPPET:\n" + snippet + "\n\n" + ex.ToString());
                         }
 
                         if (!string.IsNullOrEmpty(scriptName)) {
@@ -570,6 +590,19 @@ class XAMLGUI {
                                     tb.ScrollToEnd();
                                 } else if (parts[1] == "NativeOwner" && ctrl is Window) {
                                     new System.Windows.Interop.WindowInteropHelper((Window)ctrl).Owner = new IntPtr(long.Parse(parts[2]));
+                                } else if (parts[1] == "Focus" && ctrl is UIElement) {
+                                    if (parts[2].ToLower() == "true") ((UIElement)ctrl).Focus();
+                                    else System.Windows.Input.Keyboard.ClearFocus();
+                                } else if (parts[1] == "Invoke" && ctrl is System.Windows.Controls.Primitives.ButtonBase) {
+                                    if (ctrl is System.Windows.Controls.Primitives.ToggleButton) {
+                                        var tPeer = new System.Windows.Automation.Peers.ToggleButtonAutomationPeer((System.Windows.Controls.Primitives.ToggleButton)ctrl);
+                                        var toggleProv = tPeer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Toggle) as System.Windows.Automation.Provider.IToggleProvider;
+                                        if (toggleProv != null) toggleProv.Toggle();
+                                    } else if (ctrl is System.Windows.Controls.Button) {
+                                        var peer = new System.Windows.Automation.Peers.ButtonAutomationPeer((System.Windows.Controls.Button)ctrl);
+                                        var invokeProv = peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke) as System.Windows.Automation.Provider.IInvokeProvider;
+                                        if (invokeProv != null) invokeProv.Invoke();
+                                    }
                                 } else {
                                     var prop = ctrl.GetType().GetProperty(parts[1]);
                                     if (prop != null) {
@@ -621,7 +654,7 @@ class XAMLGUI {
         FileAppend(eventBindings, eventsFile, "UTF-8")
 
         if !FileExist(targetExe) {
-            csPath := A_Temp "\AhkWpf_SharedEngine.cs"
+            csPath := A_Temp "\AhkWpf_SharedEngine_v3.cs"
             if FileExist(csPath)
                 FileDelete(csPath)
             FileAppend(csCode, csPath, "UTF-8")
@@ -633,7 +666,7 @@ class XAMLGUI {
             SplitPath(cscPath, , &cscDir)
             wpfDir := cscDir "\WPF"
 
-            cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' targetExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll "' csPath '" > "' this.errLog '" 2>&1"'
+            cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' targetExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll "' csPath '" > "' this.errLog '" 2>&1"'
             RunWait(cmd, "", "Hide")
             FileDelete(csPath)
 
@@ -730,6 +763,7 @@ XAML_TEMPLATE := '
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+            xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
             Width="940" Height="700"
             WindowStyle="None" AllowsTransparency="False" Background="Transparent"
             WindowStartupLocation="CenterScreen"
