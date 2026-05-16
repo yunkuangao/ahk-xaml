@@ -129,7 +129,7 @@ BuildComponentsTab(tab) {
     chkSp.Add("CheckBox").Content("Enable hardware acceleration").Foreground("{DynamicResource TextMain}")
 
     panel.Add("TextBlock").Text("HIERARCHICAL TREEVIEW")
-    tv := panel.Add("Border").Use("CardPanel").Margin("0,0,0,20").Add("TreeView").Background("Transparent").BorderThickness(0).Foreground("{DynamicResource TextMain}").Margin("10")
+    tv := panel.Add("Border").Use("CardPanel").Margin("0,0,0,20").Add("TreeView").MaxHeight(200).Background("Transparent").BorderThickness(0).Foreground("{DynamicResource TextMain}").Margin("10")
     n1 := tv.Add("TreeViewItem").Header("Local Network").IsExpanded("True")
     n1.Add("TreeViewItem").Header("Workstation-Alpha")
     n1.Add("TreeViewItem").Header("Gateway-Router-01")

@@ -112,10 +112,10 @@ class XColorPicker {
             }
         }
 
-        main := XAML_Generator("Grid").Background("{DynamicResource " bgRes "}").Margin("15")
+        main := XAML_Generator("Grid").Background("{DynamicResource " bgRes "}")
         main.Rows("Auto", "10", "*", "15", "Auto")
 
-        tb := main.Add("Grid").Grid_Row(0).Background("Transparent").Name("DragArea")
+        tb := main.Add("Grid").Grid_Row(0).Background("Transparent").Name("DragArea").Margin("15,15,15,0")
         tb.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").FontSize(14).FontWeight("Bold").VerticalAlignment("Center")
         
         CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
@@ -123,7 +123,7 @@ class XColorPicker {
         closeBtn.InjectResources(CloseBtnTemplate)
         closeBtn.Add("TextBlock").Text(Chr(0xE8BB)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
 
-        cpGrid := main.Add("Grid").Grid_Row(2).Margin("0,10,0,0")
+        cpGrid := main.Add("Grid").Grid_Row(2).Margin("15,10,15,0")
         cpGrid.Cols("Auto", "20", "*")
         cpGrid.Rows("Auto", "15", "Auto", "15", "Auto")
 
@@ -158,7 +158,7 @@ class XColorPicker {
         rgbGrid.Add("TextBlock").Text("HEX").Grid_Column(12).Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").FontSize(11).FontWeight("Bold")
         rgbGrid.Add("TextBox").Name("HexInput").Text(defaultColor).Grid_Column(14).Height("24").Padding("4,2").HorizontalContentAlignment("Center")
 
-        btnSp := main.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Grid_Row(4)
+        btnSp := main.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Grid_Row(4).Margin("0,0,15,15")
         
         main.InjectResources('<Style x:Key="DialogBtn" TargetType="Button"><Setter Property="Background" Value="#10FFFFFF"/><Setter Property="Foreground" Value="{DynamicResource TextMain}"/><Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style x:Key="DialogPrimaryBtn" TargetType="Button"><Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
         

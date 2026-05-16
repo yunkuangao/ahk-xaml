@@ -4,12 +4,20 @@
 #Include "XAML_Generator.ahk"
 
 class XAML_GUI {
-    __New(title := "Fluid UI Workbench", options := {}) {
+    __New(title := "Fluid UI", options := {}) {
         this.title := title
         this.sidebarVisible := false
         this.focusedInput := ""
         this.numericInputs := Map()
         this.tokenizers := Map()
+
+        hasOpt(key) => Type(options) == "Map" ? options.Has(key) : options.HasOwnProp(key)
+        getOpt(key) => Type(options) == "Map" ? options[key] : options.%key%
+
+        this.showSidebar := hasOpt("Sidebar") ? getOpt("Sidebar") : true
+        this.showBurger := hasOpt("BurgerMenu") ? getOpt("BurgerMenu") : true
+        this.showMinMax := hasOpt("MinMaxButtons") ? getOpt("MinMaxButtons") : true
+        this.showIcon := hasOpt("AppIcon") ? getOpt("AppIcon") : true
 
         ; Expose the root generator for customization
         this.X := XAML_Generator("Grid").Name("AppGrid").Background("{DynamicResource BgColor}").Focusable("True")
@@ -17,9 +25,13 @@ class XAML_GUI {
         this.X.Cols("Auto", "*")
 
         this.SetupTemplates(this.X)
-        
-        this.sidebar := this.X.Add("Border").Name("SidebarBorder").Style("{StaticResource SidebarAnimStyle}").Grid_Column(0).Background("{DynamicResource SidebarColor}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,1,0").ClipToBounds("True")
-        this.BuildSidebar(this.sidebar)
+
+        if (this.showSidebar) {
+            this.sidebar := this.X.Add("Border").Name("SidebarBorder").Style("{StaticResource SidebarAnimStyle}").Grid_Column(0).Background("{DynamicResource SidebarColor}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,1,0").ClipToBounds("True")
+            this.BuildSidebar(this.sidebar)
+        } else {
+            this.sidebar := this.X.Add("Border").Name("SidebarBorder").Grid_Column(0).Visibility("Collapsed")
+        }
 
         this.main := this.X.Add("Grid").Grid_Column(1)
         this.main.Rows("50", "*", "Auto")
@@ -30,11 +42,11 @@ class XAML_GUI {
         this.tabs := this.main.Add("TabControl").Name("MainTabs").Grid_Row(1).Margin("40,0,40,10")
 
         this.bottomBar := this.main.Add("Grid").Grid_Row(2).Background("{DynamicResource SidebarColor}").Visibility("Collapsed")
-        
+
         ; Built-in overlays
         this.overlay := this.X.Add("Grid").Name("AppOverlay").Grid_ColumnSpan(2)
         this.modalOverlay := this.overlay.Add("Border").Name("ModalOverlay").Style("{StaticResource OverlayDialogLayer}")
-        
+
         ; Snackbar
         snackbar := this.overlay.Add("Border").Name("SnackbarContainer").Style("{StaticResource SnackbarNotification}").Visibility("Collapsed")
         snackSp := snackbar.Add("StackPanel").Orientation("Horizontal")
@@ -74,7 +86,7 @@ class XAML_GUI {
         scaleCombo.Add("ComboBoxItem").Content("Thin")
         scaleCombo.Add("ComboBoxItem").Content("Balanced")
         scaleCombo.Add("ComboBoxItem").Content("Chunky")
-        
+
         ; Expose for customization
         this.sidebarPanel := sp
     }
@@ -83,10 +95,17 @@ class XAML_GUI {
         grid := container.Add("Grid")
 
         leftSp := grid.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").Margin("15,0,0,0")
-        leftSp.Add("ToggleButton").Name("BtnToggleSidebar").Style("{StaticResource HamburgerButton}").WindowChrome_IsHitTestVisibleInChrome("True").ToolTip("Toggle Sidebar (Ctrl+B)").Margin("0,0,10,0")
+        
+        if (this.showBurger) {
+            leftSp.Add("ToggleButton").Name("BtnToggleSidebar").Style("{StaticResource HamburgerButton}").WindowChrome_IsHitTestVisibleInChrome("True").ToolTip("Toggle Sidebar (Ctrl+B)").Margin("0,0,10,0")
+        }
 
         titleSp := leftSp.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").IsHitTestVisible("False")
-        titleSp.Add("Image").Name("AppIcon").Width(16).Height(16).Margin("0,0,10,0")
+        
+        if (this.showIcon) {
+            titleSp.Add("Image").Name("AppIcon").Width(16).Height(16).Margin("0,0,10,0")
+        }
+        
         titleSp.Add("TextBlock").Name("AppTitle").Text(this.title).Foreground("{DynamicResource TextMain}").FontSize(12).FontWeight("SemiBold")
 
         winBtns := grid.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").VerticalAlignment("Top")
@@ -94,13 +113,15 @@ class XAML_GUI {
         ChromeBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
         CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
 
-        minBtn := winBtns.Add("Button").Name("BtnMinimize").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(35).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Minimize")
-        minBtn.InjectResources(ChromeBtnTemplate)
-        minBtn.Add("TextBlock").Text(Chr(0xE921)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
+        if (this.showMinMax) {
+            minBtn := winBtns.Add("Button").Name("BtnMinimize").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(35).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Minimize")
+            minBtn.InjectResources(ChromeBtnTemplate)
+            minBtn.Add("TextBlock").Text(Chr(0xE921)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
 
-        maxBtn := winBtns.Add("Button").Name("BtnMaximize").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(35).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Maximize")
-        maxBtn.InjectResources(ChromeBtnTemplate)
-        maxBtn.Add("TextBlock").Name("BtnMaximizeTxt").Text(Chr(0xE922)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
+            maxBtn := winBtns.Add("Button").Name("BtnMaximize").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(35).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Maximize")
+            maxBtn.InjectResources(ChromeBtnTemplate)
+            maxBtn.Add("TextBlock").Name("BtnMaximizeTxt").Text(Chr(0xE922)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
+        }
 
         closeBtn := winBtns.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(35).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Close Application")
         closeBtn.InjectResources(CloseBtnTemplate)
@@ -126,7 +147,7 @@ class XAML_GUI {
             this.host := XAMLHost(this.xamlString, outFile, options*)
         }
         this.BindBaseEvents()
-        
+
         for k, v in this.tokenizers {
             this.host.OnEvent(v.inputName, "GotFocus", ObjBindMethod(this, "OnInputFocus"))
             this.host.OnEvent(v.inputName, "LostFocus", ObjBindMethod(this, "OnInputBlur"))
@@ -139,7 +160,7 @@ class XAML_GUI {
             this.host.OnEvent("PART_DownButton", "Click", (s, c, e) => this.HandleSpinnerButton(v, false))
             v.Bind()
         }
-        
+
         return this.host
     }
 
@@ -149,12 +170,15 @@ class XAML_GUI {
 
         this.host.OnEvent("ComboTheme", "SelectionChanged", ObjBindMethod(this, "ThemeChanged"))
         this.host.OnEvent("ComboScale", "SelectionChanged", ObjBindMethod(this, "ScaleChanged"))
-        this.host.OnEvent("BtnToggleSidebar", "Click", ObjBindMethod(this, "OnSidebarClick"))
         
+        if (this.showBurger) {
+            this.host.OnEvent("BtnToggleSidebar", "Click", ObjBindMethod(this, "OnSidebarClick"))
+            this.host.Track("BtnToggleSidebar")
+        }
+
         this.host.Track("ComboTheme")
         this.host.Track("ComboScale")
-        this.host.Track("BtnToggleSidebar")
-        
+
         ; Keyboard hooks for bound components
         this.InitKeyboardHooks()
     }
@@ -178,7 +202,10 @@ class XAML_GUI {
         TraySetIcon("shell32.dll", 15)
 
         this.host.Update("AppTitle", "Text", this.title)
-        this.host.Update("AppIcon", "Source", "HICON:" hIcon)
+        
+        if (this.showIcon) {
+            this.host.Update("AppIcon", "Source", "HICON:" hIcon)
+        }
 
         this.ThemeChanged(state, ctrl, event)
         this.ScaleChanged(state, ctrl, event)
@@ -256,7 +283,7 @@ class XAML_GUI {
 
     HandleSpinnerButton(num, isUp) {
         ; When the user clicks the spin buttons, WPF triggers PART_UpButton
-        ; but XAMLHost doesn't easily let us know *which* control's spin button it was 
+        ; but XAMLHost doesn't easily let us know *which* control's spin button it was
         ; unless we extract parents. For now, if there's a focused numeric input, use it.
         ; Alternatively, we'd need a more robust binding. Let's just use focusedInput.
         if (this.focusedInput && this.numericInputs.Has(this.focusedInput)) {
@@ -270,7 +297,7 @@ class XAML_GUI {
     OnInputFocus(state, ctrl, event) {
         this.focusedInput := ctrl
     }
-    
+
     OnInputBlur(state, ctrl, event) {
         this.focusedInput := ""
     }
@@ -284,7 +311,7 @@ class XAML_GUI {
         Hotkey "Enter", (*) => this.HandleEnterKey(), "On"
         Hotkey "Escape", (*) => this.HandleEscapeKey(), "On"
         HotIf
-        
+
         HotIf (*) => WinActive("ahk_id " this.host.wpfHwnd)
         Hotkey "^b", (*) => this.host.Update("BtnToggleSidebar", "Invoke", "1"), "On"
         HotIf

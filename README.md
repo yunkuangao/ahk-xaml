@@ -1,115 +1,53 @@
-# ahk-xaml: v3-generator
+# AHK-XAML Framework
 
-This is the modern, cutting-edge version of `ahk-xaml`. It completely eliminates the need to write raw XML/XAML strings by introducing the powerful `XAML_Generator` class. 
+The modern, object-oriented framework for building native WPF (Windows Presentation Foundation) interfaces entirely within AutoHotkey v2.
 
-## The Object-Oriented Builder Engine
+By combining the speed of AHK with the rendering power of a compiled C# WPF engine, `ahk-xaml` allows you to create incredibly rich, hardware-accelerated, themable UIs without writing a single line of raw XML or dealing with complex thread-blocking UI code.
 
-`XAML_Generator.ahk` provides a powerful, chainable builder pattern that lets you construct comprehensive, beautiful WPF UIs natively in AutoHotkey v2. The engine translates your AHK method chains into raw XAML automatically.
+## Core Features
 
-### 1. Chainable Properties
-Instead of messy string manipulation (`X.Tag("Grid", 'Width="100" Margin="10"')`), any method you call dynamically generates a XAML property.
-
-```ahk
-btn := X.Add("Button").Width(100).Margin("0,10,0,0").Content("Click Me")
-```
-
-### 2. Attached Properties (Underscores to Dots)
-Since AutoHotkey v2 does not allow dots in method names, the generator seamlessly converts underscores to dots for you.
-
-```ahk
-; Automatically generates Grid.Row="1" and Grid.Column="0"
-btn.Grid_Row(1).Grid_Column(0)
-```
-
-### 3. Tree Navigation
-The `.Add("Tag")` method creates a new child element and **returns the child** so you can chain properties onto it. If you need to step back up the hierarchy to add siblings, you can use `.Parent()`.
-
-```ahk
-grid := X.Add("Grid")
-
-; Use .Parent() to navigate back up to the grid after defining the first child!
-grid.Add("TextBlock").Text("Row 1").Parent()
-    .Add("TextBlock").Text("Row 2")
-```
-
-### 4. Cascading Scope Defaults (CSS-style)
-Tired of endlessly repeating `.Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold")`? The generator supports full CSS-like cascading defaults! 
-
-When you set a default on an element, all children added inside that scope will automatically inherit those properties.
-
-```ahk
-; Apply a default style to all TextBlocks inside this panel and its descendants
-panel1.SetDefaults("TextBlock", {Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,8"})
-
-; These inherit the default properties automatically!
-panel1.Add("TextBlock").Text("USERNAME")
-panel1.Add("TextBlock").Text("PASSWORD")
-
-; You can cleanly override specific defaults dynamically:
-panel1.Add("TextBlock").Text("HEADER").FontSize(22) ; Overrides the 11pt font size!
-```
-
-> **Note:** Defaults are strictly scoped! When you stop adding children to `panel1` and move to `panel2`, the defaults reset automatically.
-
-### 5. Reusable Templates (Theming Components)
-If you want to apply a specific style *anywhere* without relying on scoped defaults, you can define **Global Templates**. These let you store object maps or complex callbacks and chain them onto any element using `.Use()`.
-
-```ahk
-X := XAML_Generator("Grid")
-
-; Define a template using a simple properties object
-X.DefineTemplate("SubtitleText", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold" })
-
-; Define a template using a callback function for complex logic
-PrimaryButtonTemplate(el) {
-    el.Background("{DynamicResource Accent}").Foreground("White").FontWeight("Bold").BorderThickness(0)
-    ; You can even inject XAML resources or append child elements inside a template!
-    el.InjectResources('<Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>')
-}
-X.DefineTemplate("PrimaryBtn", PrimaryButtonTemplate)
-
-; --- Using them anywhere ---
-sp.Add("TextBlock").Text("A styled label!").Use("SubtitleText")
-btn := X.Add("Button").Content("Submit").Use("PrimaryBtn")
-```
-
-### 6. Custom Power-Tools (Component Injection)
-You can build highly complex, reusable components and inject them globally into the `XAMLElement` prototype. This lets you call your custom shorthand methods natively anywhere in your UI tree!
-
-```ahk
-; 1. Define your custom component
-XAMLElement.Prototype.DefineProp("LabeledInput", {Call: LabeledInput})
-
-LabeledInput(this, labelText, placeholder := "") {
-    sp := this.Add("StackPanel").Margin("0,0,0,15")
-    sp.Add("TextBlock").Text(labelText).FontWeight("Bold")
-    sp.Add("TextBox").Text(placeholder)
-    return this ; Return the parent to continue chaining siblings
-}
-
-; 2. Use it natively anywhere!
-panel := X.Add("StackPanel")
-panel.LabeledInput("Username", "admin")
-     .LabeledInput("Password")
-```
+- **No Raw XAML Strings:** The powerful `XAML_Generator` builds your UI procedurally using a clean, chainable AHK method syntax.
+- **Compiled Engine:** Uses a dynamically compiled, standalone C# executable (`AhkWpfEngine`) to host the UI on a separate thread, ensuring your AHK logic never blocks the UI rendering, and the UI never blocks your AHK scripts.
+- **Robust IPC:** Communication between AHK and WPF is handled via low-latency `WM_COPYDATA` messaging. Events (clicks, text input, window dragging) are automatically captured and passed to your AHK callbacks.
+- **Pre-Built Component Library:** Comes with a comprehensive set of modern, Win11-styled components (ColorPickers, Tokenizers, Code Editors, Toggle Switches) ready to drop into your app.
+- **Dynamic Theming:** Supports hot-swapping themes by injecting WPF `ResourceDictionaries`. It fully integrates with Windows DWM (Desktop Window Manager) for native Mica/Acrylic effects and rounded corners.
 
 ## Quick Start Example
 
-Look at `example.ahk` in this directory to see how a massively complex UI is constructed without any raw XAML strings. Here is a minimal implementation:
+Here is a minimal implementation to show how a UI is constructed and launched.
 
 ```ahk
 #Requires AutoHotkey v2.0
-#Include "../v2-csc/xaml.ahk"
-#Include "XAML_Generator.ahk"
+#Include "lib\XAML_GUI.ahk"
 
-; 1. Build your UI procedurally
-X := XAML_Generator("Grid").Background("{DynamicResource BgColor}")
-X.Add("TextBlock").Text("Hello, World!").HorizontalAlignment("Center")
+; 1. Initialize the Main App Window
+app := XAML_GUI("My Application", 800, 600)
 
-; Generate the compiled XAML string
-CompiledMarkup := X.Compile()
+; 2. Build the UI using the generator syntax
+app.Add("TextBlock").Text("Hello, World!").FontSize(24).Foreground("{DynamicResource TextMain}").HorizontalAlignment("Center").Margin("0,20,0,0")
 
-; 2. Initialize the GUI engine
-ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", CompiledMarkup))
-ui.Show()
+btn := app.Add("Button").Content("Click Me!").Width(120).Height(40).Margin("0,20,0,0").Cursor("Hand")
+
+; 3. Bind events to AHK callbacks
+app.Events.OnEvent("BtnClickMe", "Click", (state, ctrl, event) => MsgBox("Button Clicked!"))
+btn.Name("BtnClickMe") ; Assign the name so the engine can track it
+
+; 4. Show the Window
+app.Show()
 ```
+
+## Directory Structure
+
+- `lib/XAML_Host.ahk`: The core bridge that compiles the background engine and handles the IPC messaging.
+- `lib/XAML_Generator.ahk`: The class that converts your chained method calls into an AST, then compiles it to XAML markup.
+- `lib/XAML_GUI.ahk`: A high-level wrapper to easily scaffold main application windows with standard layouts and sidebars.
+- `lib/XAML_Components.ahk`: A massive library of complex custom components extending `XAMLElement.Prototype`.
+- `lib/XAML_Dialog.ahk`: A robust dialog system for modal alerts, inputs, and confirmations.
+- `lib/xaml.components.xaml`: The core WPF `ResourceDictionary` containing all the visual styles, templates, and triggers for the components.
+
+## Further Reading
+
+This repository has been fully modularized. For deep dives into specific areas, please see the following documentation files:
+
+1. [Components Guide](Components.md) - A definitive list of all available UI components, from simple toggle switches to complex code editors, with coding examples.
+2. [Syntax & Principles](SyntaxAndPrinciples.md) - Learn how the `XAML_Generator` works, how scoped defaults operate, and the internal architecture of the compiled C# engine.

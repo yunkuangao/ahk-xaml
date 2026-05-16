@@ -129,7 +129,7 @@ class XAMLHost {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\AhkWpf_SharedEngine_v6.exe"
+        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\AhkWpf_SharedEngine_v8.exe"
         trackedCsv := ""
 
         uniqueCsv := Map()
@@ -194,6 +194,44 @@ class XAMLHost {
                     public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
                 
                     string winId; IntPtr ahkHwnd; string[] tracked; Window win;
+                
+                    static AhkWpfEngine() {
+                        EventManager.RegisterClassHandler(typeof(TreeView), UIElement.PreviewMouseWheelEvent, new System.Windows.Input.MouseWheelEventHandler(OnPreviewMouseWheel), false);
+                        EventManager.RegisterClassHandler(typeof(ScrollViewer), UIElement.PreviewMouseWheelEvent, new System.Windows.Input.MouseWheelEventHandler(OnPreviewMouseWheel), false);
+                    }
+                    
+                    private static void OnPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs args) {
+                        if (!args.Handled) {
+                            ScrollViewer sv = null;
+                            if (sender is ScrollViewer) sv = (ScrollViewer)sender;
+                            else sv = FindVisualChild<ScrollViewer>(sender as DependencyObject);
+                            
+                            bool canScroll = false;
+                            if (sv != null && sv.ComputedVerticalScrollBarVisibility == Visibility.Visible) {
+                                if (args.Delta > 0 && sv.VerticalOffset > 0) canScroll = true;
+                                else if (args.Delta < 0 && sv.VerticalOffset < sv.ScrollableHeight) canScroll = true;
+                            }
+                            
+                            if (!canScroll) {
+                                args.Handled = true;
+                                var eventArg = new System.Windows.Input.MouseWheelEventArgs(args.MouseDevice, args.Timestamp, args.Delta) { RoutedEvent = UIElement.MouseWheelEvent, Source = sender };
+                                var parent = System.Windows.Media.VisualTreeHelper.GetParent(sender as DependencyObject) as UIElement;
+                                if (parent != null) parent.RaiseEvent(eventArg);
+                            }
+                        }
+                    }
+                    
+                    private static T FindVisualChild<T>(DependencyObject obj) where T : DependencyObject {
+                        if (obj != null) {
+                            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(obj); i++) {
+                                var child = System.Windows.Media.VisualTreeHelper.GetChild(obj, i);
+                                if (child is T) return (T)child;
+                                T childItem = FindVisualChild<T>(child);
+                                if (childItem != null) return childItem;
+                            }
+                        }
+                        return null;
+                    }
                 
                     [STAThread]
                     public static void Main(string[] args) {
