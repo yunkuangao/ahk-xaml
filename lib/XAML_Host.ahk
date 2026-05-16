@@ -129,7 +129,7 @@ class XAMLHost {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\AhkWpf_SharedEngine_v8.exe"
+        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\AhkWpf_SharedEngine_v9.exe"
         trackedCsv := ""
 
         uniqueCsv := Map()
@@ -702,6 +702,7 @@ class XAMLHost {
                                                 val = new System.Windows.Media.ImageSourceConverter().ConvertFromString(parts[2]);
                                             }
                                         }
+                                        else if (pt == "GridLength") val = new System.Windows.GridLengthConverter().ConvertFromString(parts[2]);
                                         else if (pt == "Object" || pt == "String") val = parts[2];
                                         else val = Convert.ChangeType(parts[2], prop.PropertyType);
                                         prop.SetValue(ctrl, val, null);
@@ -737,7 +738,7 @@ class XAMLHost {
         FileAppend(eventBindings, eventsFile, "UTF-8")
 
         if !FileExist(targetExe) {
-            csPath := A_Temp "\AhkWpf\AhkWpf_SharedEngine_v4.cs"
+            csPath := A_Temp "\AhkWpf\AhkWpf_SharedEngine_v5.cs"
             if FileExist(csPath)
                 FileDelete(csPath)
             FileAppend(csCode, csPath, "UTF-8")

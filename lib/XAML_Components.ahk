@@ -1101,35 +1101,6 @@ _AddRichPopover(this) {
     return sp
 }
 
-XAMLElement.Prototype.DefineProp("Carousel", { Call: _Carousel })
-_Carousel(this, items, id := "MyCarousel") {
-    grid := this.Add("Grid")
-    grid.Rows("*", "Auto")
-    grid.Cols("Auto", "*", "Auto")
-    
-    ; Left nav button
-    grid.Add("Button").Content(Chr(0xE76B)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Width(30).Height(30).Use("IconBtn").Grid_Column(0).Grid_Row(0).VerticalAlignment("Center").Margin("0,0,5,0").Name(id "_BtnL").Cursor("Hand")
-    
-    ; ScrollViewer with horizontal StackPanel
-    sv := grid.Add("ScrollViewer").Name(id "_Scroll").Grid_Column(1).Grid_Row(0).HorizontalScrollBarVisibility("Hidden").VerticalScrollBarVisibility("Disabled").CanContentScroll("False")
-    sp := sv.Add("StackPanel").Orientation("Horizontal")
-    
-    for item in items {
-        sp.Add("Border").Width(200).Height(120).Background(item).CornerRadius(8).Margin("5,0")
-    }
-    
-    ; Right nav button
-    grid.Add("Button").Content(Chr(0xE76C)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Width(30).Height(30).Use("IconBtn").Grid_Column(2).Grid_Row(0).VerticalAlignment("Center").Margin("5,0,0,0").Name(id "_BtnR").Cursor("Hand")
-    
-    ; Pagination dots
-    pagSp := grid.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Center").Grid_Row(1).Grid_Column(1).Margin("0,10,0,0")
-    for i, _ in items {
-        pagSp.Add("RadioButton").GroupName(id "_Bubbles").IsChecked(i == 1 ? "True" : "False").Margin("3").Name(id "_Bubble_" i)
-    }
-    
-    return grid
-}
-
 XAMLElement.Prototype.DefineProp("StatCard", { Call: _StatCard })
 _StatCard(this, title, metric, trendText, trendUp) {
     card := this.Add("Border").Use("CardPanel").Padding("20")
@@ -1234,7 +1205,7 @@ class DataGridEx {
         this.data := dataArray
         this.columns := []
         this.columnWidths := Map()
-        this.sortCol := ""
+        this.sortCol := opts.HasProp("SortCol") ? opts.SortCol : ""
         this.sortAsc := true
         this.page := 1
         this.pageSize := opts.HasProp("PageSize") ? opts.PageSize : 50
@@ -1247,6 +1218,13 @@ class DataGridEx {
         this.filterColumn := opts.HasProp("FilterColumn") ? opts.FilterColumn : ""
         this.filterValues := opts.HasProp("FilterValues") ? opts.FilterValues : []
         this.filterStates := Map()
+        
+        this.hiddenColumns := Map()
+        if (opts.HasProp("HiddenColumns")) {
+            for _, cName in opts.HiddenColumns
+                this.hiddenColumns[cName] := true
+        }
+        
         this.ui := ""
         
         ; Auto-detect columns from first row
@@ -1276,6 +1254,9 @@ class DataGridEx {
     
     ; Get WPF width string for a column
     _GetColWidth(colName, colIndex) {
+        if (this.hiddenColumns.Has(colName) && this.hiddenColumns[colName])
+            return "0"
+            
         if (this.columnWidths.Has(colName)) {
             w := this.columnWidths[colName]
             ; Percentage: convert "30%" to "3*" (approx star ratio)
@@ -1291,7 +1272,7 @@ class DataGridEx {
     
     ; Build the XAML UI into a parent element
     Build(parent) {
-        grid := parent.Add("Grid").Margin("0,0,0,0")
+        grid := parent.Add("Grid").Name(this.id "_MainGrid").Margin("0,0,0,0")
         rows := "Auto,*"
         if (this.showPagination)
             rows .= ",Auto"
@@ -1308,6 +1289,7 @@ class DataGridEx {
             toolCols .= "Auto,"
         if (this.showFilters)
             toolCols .= "Auto,"
+        toolCols .= "Auto," ; Columns toggle
         if (this.showRowCount)
             toolCols .= "Auto,"
         toolCols := RTrim(toolCols, ",")
@@ -1335,12 +1317,59 @@ class DataGridEx {
             }
             tci++
         }
+        
+        ; Columns toggle
+        colBtn := toolbar.Add("ToggleButton").Content("Columns").Grid_Column(tci).Width(80).Height(30).VerticalAlignment("Top").Margin("0,0,10,0").Use("IconBtn").Cursor("Hand")
+        colPop := colBtn.AddRichPopover()
+        colPop.Add("TextBlock").Text("Visible Columns").FontWeight("Bold").Foreground("{DynamicResource TextMain}").Margin("0,0,0,8")
+        for col in this.columns {
+            isChecked := this.hiddenColumns.Has(col) && this.hiddenColumns[col] ? "False" : "True"
+            colPop.Add("CheckBox").Content(col).Name(this.id "_ToggleCol_" StrReplace(col, " ", "")).IsChecked(isChecked).Margin("0,0,0,5")
+        }
+        tci++
+        
         if (this.showRowCount) {
-            toolbar.Add("TextBlock").Name(this.id "_RowCount").Text(this.data.Length " rows").Grid_Column(tci).VerticalAlignment("Center").Foreground("{DynamicResource TextSub}").FontSize(12).FontWeight("Normal")
+            initEnd := Min(this.pageSize, this.data.Length)
+            initText := this.data.Length == 0 ? "0 rows" : this.data.Length " rows, showing (" initEnd ")"
+            toolbar.Add("TextBlock").Name(this.id "_RowCount").Text(initText).Grid_Column(tci).VerticalAlignment("Center").Foreground("{DynamicResource TextSub}").FontSize(12).FontWeight("Normal")
+        }        
+        ; --- Table ---
+        tableBdr := grid.Add("Border").Grid_Row(1).Margin("0,0,15,0").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Background("{DynamicResource ControlBg}").ClipToBounds("True")
+        
+        tableGrid := tableBdr.Add("Grid")
+        tableGrid.Rows("30", "*")
+        tableGrid.IsSharedSizeScope("True")
+        
+        ; Table Header
+        headerGrid := tableGrid.Add("Grid").Name(this.id "_HeaderGrid").Grid_Row(0).Background("{DynamicResource ControlBgHover}")
+        hColDefs := headerGrid.Add("Grid.ColumnDefinitions")
+        for i, col in this.columns {
+            w := this._GetColWidth(col, i)
+            hColDefs.Add("ColumnDefinition").Name(this.id "_HeaderCol_" i).Width(w)
+            if (i < this.columns.Length)
+                hColDefs.Add("ColumnDefinition").Name(this.id "_HeaderSplit_" i).Width(w == "0" ? "0" : "Auto")
         }
         
-        ; --- Table ---
-        grid.Add("Border").Grid_Row(1).Margin("0,0,15,0").DataTableView(this.id "_Table", this.data)
+        ; Dummy Grid to proxy explicit Widths into SharedSizeGroups (fixes GridSplitter bug)
+        dummyGrid := tableGrid.Add("Grid").Height(0).IsHitTestVisible("False").Grid_Row(0)
+        dColDefs := dummyGrid.Add("Grid.ColumnDefinitions")
+        for i, col in this.columns {
+            dColDefs.Add("ColumnDefinition").Width("{Binding ElementName=" this.id "_HeaderCol_" i ", Path=Width}").SharedSizeGroup("TableCol_" i)
+            if (i < this.columns.Length)
+                dColDefs.Add("ColumnDefinition").Width("{Binding ElementName=" this.id "_HeaderSplit_" i ", Path=Width}").SharedSizeGroup("TableSplit_" i)
+        }
+        
+        for i, col in this.columns {
+            colIdx := (i - 1) * 2
+            headerGrid.Add("Button").Name(this.id "_Table_Header_" StrReplace(col, " ", "")).Content(col).Grid_Column(colIdx).Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("0").FontSize(11).FontWeight("Bold").HorizontalContentAlignment("Left").Padding("10,0").Cursor("Hand")
+            if (i < this.columns.Length) {
+                headerGrid.Add("Border").Grid_Column(colIdx + 1).Width(1).HorizontalAlignment("Center").Background("{DynamicResource ControlBorder}").IsHitTestVisible("False")
+                headerGrid.Add("GridSplitter").Name(this.id "_Table_Splitter_" i).Grid_Column(colIdx + 1).Width(7).HorizontalAlignment("Center").VerticalAlignment("Stretch").Background("Transparent").Cursor("SizeWE").ResizeBehavior("PreviousAndNext")
+            }
+        }
+        
+        ; Table ListBox
+        tableGrid.Add("ListBox").Name(this.id "_Table_List").Grid_Row(1).Background("Transparent").BorderThickness("0").ScrollViewer_HorizontalScrollBarVisibility("Auto").VirtualizingPanel_IsVirtualizing("False").HorizontalContentAlignment("Stretch")
         
         ; --- Pagination ---
         if (this.showPagination) {
@@ -1357,10 +1386,14 @@ class DataGridEx {
     Bind(uiHost) {
         this.ui := uiHost
         
-        ; Header sort buttons
-        for col in this.columns {
+        ; Header sort buttons & splitters
+        for i, col in this.columns {
             colName := col
             uiHost.OnEvent(this.id "_Table_Header_" StrReplace(col, " ", ""), "Click", (state, ctrl, ev) => this.Sort(state, colName))
+            if (i < this.columns.Length) {
+                uiHost.Track(this.id "_Table_Splitter_" i)
+                uiHost.OnEvent(this.id "_Table_Splitter_" i, "MouseDoubleClick", (state, ctrl, ev) => this.OnSplitterDoubleClick(state, ctrl))
+            }
         }
         
         ; Search
@@ -1383,11 +1416,22 @@ class DataGridEx {
             }
         }
         
+        ; Column Toggles
+        for col in this.columns {
+            trackName := this.id "_ToggleCol_" StrReplace(col, " ", "")
+            uiHost.Track(trackName)
+            uiHost.OnEvent(trackName, "Click", (state, ctrl, ev) => this.OnColumnToggle(state))
+        }
+        
         ; Pagination
         if (this.showPagination) {
             uiHost.OnEvent(this.id "_BtnPrev", "Click", (state, ctrl, ev) => this.ChangePage(state, -1))
             uiHost.OnEvent(this.id "_BtnNext", "Click", (state, ctrl, ev) => this.ChangePage(state, 1))
         }
+        
+        ; Initial Render on Load
+        uiHost.Track(this.id "_MainGrid")
+        uiHost.OnEvent(this.id "_MainGrid", "Loaded", (state, ctrl, ev) => this.Render(state))
     }
     
     Sort(state, col) {
@@ -1425,6 +1469,57 @@ class DataGridEx {
         this.Render(state)
     }
     
+    OnColumnToggle(state) {
+        for i, col in this.columns {
+            key := this.id "_ToggleCol_" StrReplace(col, " ", "")
+            isVisible := state.Has(key) ? (state[key] ~= "i)true|1") : true
+            
+            wasHidden := this.hiddenColumns.Has(col) ? this.hiddenColumns[col] : false
+            isHidden := !isVisible
+            
+            if (wasHidden == isHidden)
+                continue
+                
+            this.hiddenColumns[col] := isHidden
+            
+            if (isHidden) {
+                this.ui.Update(this.id "_HeaderCol_" i, "Width", "0")
+                if (i < this.columns.Length)
+                    this.ui.Update(this.id "_HeaderSplit_" i, "Width", "0")
+            } else {
+                w := this._GetColWidth(col, i)
+                this.ui.Update(this.id "_HeaderCol_" i, "Width", w)
+                if (i < this.columns.Length)
+                    this.ui.Update(this.id "_HeaderSplit_" i, "Width", "Auto")
+            }
+        }
+        this.Render(state)
+    }
+    
+    OnSplitterDoubleClick(state, ctrlName) {
+        colIndex := RegExReplace(ctrlName, ".*_(\d+)$", "$1")
+        colName := this.columns[colIndex]
+        
+        ; Find the longest text string in the column to approximate pixel width
+        maxLen := StrLen(colName)
+        for row in this.data {
+            if (row.HasProp(colName)) {
+                val := String(row.%colName%)
+                if (StrLen(val) > maxLen)
+                    maxLen := StrLen(val)
+            }
+        }
+        
+        ; Approximate pixel width: ~7.5px per char (Segoe UI 12) + 30px padding
+        newWidth := Round(maxLen * 7.5 + 30)
+        
+        this.ui.Update(this.id "_HeaderCol_" colIndex, "Width", String(newWidth))
+        if (colIndex < this.columns.Length)
+            this.ui.Update(this.id "_HeaderSplit_" colIndex, "Width", "Auto")
+            
+        this.columnWidths[colName] := String(newWidth)
+    }
+    
     Reset(state) {
         this.page := 1
         this.sortCol := this.columns.Length > 0 ? this.columns[1] : ""
@@ -1448,7 +1543,13 @@ class DataGridEx {
                     j := A_Index
                     v1 := this.data[j].%sc%
                     v2 := this.data[j + 1].%sc%
-                    swap := sa ? (StrCompare(v1, v2) > 0) : (StrCompare(v1, v2) < 0)
+                    
+                    isNum := IsNumber(v1) && IsNumber(v2)
+                    if (isNum)
+                        swap := sa ? (v1 > v2) : (v1 < v2)
+                    else
+                        swap := sa ? (StrCompare(v1, v2) > 0) : (StrCompare(v1, v2) < 0)
+                        
                     if (swap) {
                         tmp := this.data[j]
                         this.data[j] := this.data[j + 1]
@@ -1488,10 +1589,18 @@ class DataGridEx {
         if (this.page < 1)
             this.page := 1
         
+        startIdx := (this.page - 1) * this.pageSize + 1
+        endIdx := Min(startIdx + this.pageSize - 1, total)
+        
         if (this.showPagination)
             this.ui.Update(this.id "_PageStatus", "Text", "Page " this.page " of " totalPages)
-        if (this.showRowCount)
-            this.ui.Update(this.id "_RowCount", "Text", total " rows")
+            
+        if (this.showRowCount) {
+            if (total == 0)
+                this.ui.Update(this.id "_RowCount", "Text", "0 rows")
+            else
+                this.ui.Update(this.id "_RowCount", "Text", total " rows, showing (" (endIdx - startIdx + 1) ")")
+        }
         
         ; --- 4. Clear & guard ---
         this.ui.Update(this.id "_Table_List", "ClearItems", "")
@@ -1511,13 +1620,16 @@ class DataGridEx {
             
             rowGrid := XAML_Generator()
             rowGrid.Background(Mod(A_Index, 2) == 0 ? "{DynamicResource ControlBg}" : "Transparent")
+            rowGrid.MinWidth("{Binding ElementName=" this.id "_HeaderGrid, Path=ActualWidth}")
             rColDefs := rowGrid.Add("Grid.ColumnDefinitions")
             
             for i, col in this.columns {
                 w := this._GetColWidth(col, i)
-                rColDefs.Add("ColumnDefinition").Width(w).SharedSizeGroup("TableCol_" i)
+                ; Use Width="0" so the row content does not stretch the SharedSizeGroup
+                rColDefs.Add("ColumnDefinition").Width("0").SharedSizeGroup("TableCol_" i)
+                
                 if (i < this.columns.Length)
-                    rColDefs.Add("ColumnDefinition").Width("1")
+                    rColDefs.Add("ColumnDefinition").Width(w == "0" ? "0" : "Auto").SharedSizeGroup("TableSplit_" i)
             }
             
             for i, col in this.columns {

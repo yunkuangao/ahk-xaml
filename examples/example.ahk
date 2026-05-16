@@ -113,11 +113,19 @@ BuildDataGridExTab(tab) {
         n := names[Random(1, names.Length)] " " lasts[Random(1, lasts.Length)]
         r := roles[Random(1, roles.Length)]
         s := statuses[Random(1, statuses.Length)]
-        testData.Push({ Name: n, Role: r, Status: s })
+        testData.Push({ Id: A_Index, Name: n, Role: r, Status: s })
+    }
+    
+    ; Scramble the data to prove "random order"
+    scrambled := []
+    while (testData.Length > 0) {
+        idx := Random(1, testData.Length)
+        scrambled.Push(testData[idx])
+        testData.RemoveAt(idx)
     }
     
     ; Create DataGridEx with all features enabled
-    myGrid := DataGridEx("DGX", testData, {
+    myGrid := DataGridEx("DGX", scrambled, {
         PageSize: 50,
         ShowSearch: true,
         ShowFilters: true,
@@ -126,7 +134,9 @@ BuildDataGridExTab(tab) {
         ShowRowCount: true,
         FilterColumn: "Status",
         FilterValues: ["Active", "Offline", "Pending"],
-        ColumnWidths: { Name: "40%", Role: "30%", Status: "30%" }
+        SortCol: "Id",
+        HiddenColumns: ["Id"],
+        ColumnWidths: { Id: "50", Name: "250", Role: "180", Status: "180" }
     })
     
     panel := tab.Add("Grid").Margin("0,20,0,20")
@@ -419,8 +429,6 @@ ui.OnEvent("BtnOpenColorPicker", "Click", ShowColorPickerModal)
 ; Advanced UI Tab Events
 ui.OnEvent("MyDropZone", "PreviewMouseLeftButtonDown", OnFileDropClick)
 ui.OnEvent("BtnBadge", "Click", (*) => app.ShowSnackbar("You have 3 new notifications!", "DISMISS"))
-ui.OnEvent("MyCarousel_BtnL", "Click", (*) => ui.Update("MyCarousel_Scroll", "LineLeft", ""))
-ui.OnEvent("MyCarousel_BtnR", "Click", (*) => ui.Update("MyCarousel_Scroll", "LineRight", ""))
 
 ; Rating — bind star click events
 RatingBind(ui, "Rating5", 5, false, Chr(0xE735), Chr(0xE734), "#FFD700", "{DynamicResource TextSub}")
@@ -694,8 +702,6 @@ BuildAdvancedUITab(tab) {
     panel.Stepper(["Configuration", "Authentication", "Deployment", "Verification"], 3)
 
 
-    panel.Add("TextBlock").Text("CAROUSEL")
-    panel.Carousel(["#FF453A", "#FF9F0A", "#FFD60A", "#32D74B", "#0A84FF", "#5E5CE6"]).Margin("0,0,0,20")
 
     panel.Add("TextBlock").Text("STAT CARDS & TIMELINE")
     split := panel.SplitPanel("Horizontal", "1:1")
@@ -716,13 +722,13 @@ BuildAdvancedUITab(tab) {
     panel.Add("TextBlock").Text("OVERLAY COMPONENTS").Margin("0,20,0,10")
     ovSp := panel.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,20")
 
-    btnBadge := ovSp.Add("Button").Name("BtnBadge").Content("Notifications").Margin("0,0,15,0").Width(120).Height(35).Use("PrimaryBtn").Cursor("Hand")
-    btnBadge.AddBadge("3")
+    ;btnBadge := ovSp.Add("Button").Name("BtnBadge").Content("Notifications").Margin("0,0,15,0").Width(120).Height(35).Use("PrimaryBtn").Cursor("Hand")
+    ;btnBadge.AddBadge("3")
 
     btnCtx := ovSp.Add("Button").Content("Right-Click Me").Margin("0,0,15,0").Width(120).Height(35)
     btnCtx.AddContextMenu(["Edit", "Copy", "-", "Delete"])
 
-    btnPop := ovSp.Add("ToggleButton").Content("Filter Options").Margin("0,0,15,0").Width(120).Height(35)
+    btnPop := ovSp.Add("ToggleButton").Content("Filter Options").Use("PrimaryBtn").Cursor("Hand").Margin("0,0,15,0").Width(120).Height(35)
     pop := btnPop.AddRichPopover()
     pop.Add("TextBlock").Text("Filter Settings").FontWeight("Bold").Margin("0,0,0,10")
     pop.Add("CheckBox").Content("Show Hidden Files").Margin("0,0,0,5")

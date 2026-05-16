@@ -219,6 +219,11 @@ class XAML_GUI {
         for _, tok in this.tokenizers {
             tok.RenderTags()
         }
+        
+        ; Force window to foreground on load
+        if (this.host.wpfHwnd) {
+            try WinActivate("ahk_id " this.host.wpfHwnd)
+        }
     }
 
     ThemeChanged(state, ctrl, event) {
