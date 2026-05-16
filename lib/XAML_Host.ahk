@@ -489,14 +489,16 @@ class XAMLHost {
                             var parameters = evt.EventHandlerType.GetMethod("Invoke").GetParameters();
                             
                             if (eventName == "Drop") {
-                                win.AllowDrop = true;
-                                win.Drop += (s, e) => {
-                                    if (e.Data.GetDataPresent(DataFormats.FileDrop)) {
-                                        string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                                        string fileList = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join("|", files)));
-                                        SendToAhk("EVENT|" + winId + "|" + ctrlName + "|Drop|" + fileList + "\n");
-                                    }
-                                };
+                                if (ctrl is UIElement) {
+                                    ((UIElement)ctrl).AllowDrop = true;
+                                    ((UIElement)ctrl).Drop += (s, e) => {
+                                        if (e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                                            string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                                            string fileList = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join("|", files)));
+                                            SendToAhk("EVENT|" + winId + "|" + ctrlName + "|Drop|" + fileList + "\n");
+                                        }
+                                    };
+                                }
                                 return;
                             }
                             
@@ -671,6 +673,16 @@ class XAMLHost {
                                         var invokeProv = peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke) as System.Windows.Automation.Provider.IInvokeProvider;
                                         if (invokeProv != null) invokeProv.Invoke();
                                     }
+                                } else if (parts[1] == "TrapScroll" && ctrl is ScrollViewer) {
+                                    var sv = (ScrollViewer)ctrl;
+                                    System.Windows.Input.MouseWheelEventHandler handler = (s, e) => {
+                                        sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta / 3.0);
+                                        e.Handled = true;
+                                    };
+                                    sv.PreviewMouseWheel -= handler;
+                                    sv.PreviewMouseWheel += handler;
+                                    sv.MouseWheel -= handler;
+                                    sv.MouseWheel += handler;
                                 } else {
                                     var prop = ctrl.GetType().GetProperty(parts[1]);
                                     if (prop != null) {

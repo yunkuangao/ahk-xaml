@@ -81,7 +81,7 @@ class PanelManager {
         }
         wasDown := true
             
-        activeHwnd := WinGetID("A")
+        activeHwnd := WinExist("A")
         if !activeHwnd
             return
             
@@ -406,13 +406,18 @@ class PanelManager {
             n2.Add("TreeViewItem").Header("StackPanel")
         }
 
-        ; Initialize XAML Host for this panel
-        ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", this.MainWindow)
+        ; Initialize XAML Host for this panel (No owner, so Z-order is standard)
+        ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", "")
         
         ; Replace template dimensions, add title/taskbar visibility, remove CenterScreen, and use dynamic PanelRadius
         ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Title="' pInfo.Title '" ShowInTaskbar="False" Width="' w '" Height="' h '" Left="' x '" Top="' y '"')
         ui.xaml := StrReplace(ui.xaml, 'WindowStartupLocation="CenterScreen"', 'WindowStartupLocation="Manual"')
         ui.xaml := StrReplace(ui.xaml, 'CornerRadius="{DynamicResource WindowRadius}"', 'CornerRadius="{DynamicResource PanelRadius}"')
+        
+        noShadows := this.GetSavedState("Global", "NoShadows", "0") == "1"
+        if (noShadows) {
+            ui.xaml := StrReplace(ui.xaml, 'GlassFrameThickness="-1"', 'GlassFrameThickness="0" ResizeBorderThickness="6"')
+        }
         
         ; Callbacks
         ui.OnEvent("BtnFill", "Click", (state, ctrl, event) => this.AutoFillSpace(id))
@@ -530,6 +535,9 @@ mainH := IniRead("docking_layout.ini", "MainWindow", "H", "700")
 if (mainX != "" && mainY != "") {
     ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Width="' mainW '" Height="' mainH '" Left="' mainX '" Top="' mainY '"')
     ui.xaml := StrReplace(ui.xaml, 'WindowStartupLocation="CenterScreen"', 'WindowStartupLocation="Manual"')
+}
+if (IniRead("docking_layout.ini", "Global", "NoShadows", "0") == "1") {
+    ui.xaml := StrReplace(ui.xaml, 'GlassFrameThickness="-1"', 'GlassFrameThickness="0" ResizeBorderThickness="6"')
 }
 ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => OnMainLoaded())
 ui.OnEvent("BtnAppMaximize", "Click", (*) => PanelManager.AutoFillSpace("Main"))

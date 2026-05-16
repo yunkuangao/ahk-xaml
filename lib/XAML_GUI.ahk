@@ -64,6 +64,12 @@ class XAML_GUI {
         X.DefineTemplate("PageTitle", { FontSize: 28, FontWeight: "SemiBold", Foreground: "{DynamicResource TextMain}", Margin: "0" })
         X.DefineTemplate("BodyText", { FontSize: 13, FontWeight: "Normal", TextWrapping: "Wrap" })
         X.DefineTemplate("CardPanel", { BorderBrush: "{DynamicResource ControlBorder}", BorderThickness: 1, CornerRadius: 6, Background: "{DynamicResource ControlBg}" })
+        
+        IconButtonTemplate(el) {
+            el.Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").FontWeight("Bold")
+            el.InjectResources('<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="15"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style TargetType="RepeatButton"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="{TemplateBinding Background}" CornerRadius="15"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style TargetType="ToggleButton"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton"><Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="15" BorderBrush="{DynamicResource ControlBorder}" BorderThickness="1" Padding="8,4"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBgHover}"/><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
+        }
+        X.DefineTemplate("IconBtn", IconButtonTemplate)
         X.SetDefaults("ListBox", { Background: "Transparent", BorderThickness: 0, ScrollViewer_HorizontalScrollBarVisibility: "Disabled" })
     }
 
@@ -308,7 +314,6 @@ class XAML_GUI {
         Hotkey "Down", (*) => this.HandleDownKey(), "On"
         Hotkey "+Up", (*) => this.HandleUpKey(true), "On"
         Hotkey "+Down", (*) => this.HandleDownKey(true), "On"
-        Hotkey "Enter", (*) => this.HandleEnterKey(), "On"
         Hotkey "Escape", (*) => this.HandleEscapeKey(), "On"
         HotIf
 
@@ -325,13 +330,6 @@ class XAML_GUI {
     HandleDownKey(shift := false) {
         if this.numericInputs.Has(this.focusedInput)
             this.numericInputs[this.focusedInput].Decrement(shift)
-    }
-
-    HandleEnterKey() {
-        if this.tokenizers.Has(this.focusedInput) {
-            this.tokenizers[this.focusedInput].ValidateCurrentInput()
-        }
-        this.host.Update("AppGrid", "Focus", "True")
     }
 
     HandleEscapeKey() {

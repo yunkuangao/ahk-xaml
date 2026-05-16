@@ -98,6 +98,44 @@ BuildDataGridTab(tab) {
 }
 app.AddTab("DATA GRID", BuildDataGridTab)
 
+; DATAGRID EX TAB
+global myGrid := ""
+BuildDataGridExTab(tab) {
+    global myGrid
+    
+    ; Generate test data
+    testData := []
+    roles := ["Administrator", "Developer", "Guest", "Manager", "Analyst"]
+    statuses := ["Active", "Offline", "Pending"]
+    names := ["John", "Jane", "Bob", "Alice", "Charlie", "Diana", "Eve", "Frank"]
+    lasts := ["Doe", "Smith", "Wilson", "Johnson", "Brown", "Taylor", "Anderson"]
+    loop 200 {
+        n := names[Random(1, names.Length)] " " lasts[Random(1, lasts.Length)]
+        r := roles[Random(1, roles.Length)]
+        s := statuses[Random(1, statuses.Length)]
+        testData.Push({ Name: n, Role: r, Status: s })
+    }
+    
+    ; Create DataGridEx with all features enabled
+    myGrid := DataGridEx("DGX", testData, {
+        PageSize: 50,
+        ShowSearch: true,
+        ShowFilters: true,
+        ShowPagination: true,
+        ShowReset: true,
+        ShowRowCount: true,
+        FilterColumn: "Status",
+        FilterValues: ["Active", "Offline", "Pending"],
+        ColumnWidths: { Name: "40%", Role: "30%", Status: "30%" }
+    })
+    
+    panel := tab.Add("Grid").Margin("0,20,0,20")
+    panel.Rows("Auto", "*")
+    panel.Add("TextBlock").Text("Data View Engine").Use("PageTitle").Margin("0,0,0,10").Grid_Row(0)
+    myGrid.Build(panel).Grid_Row(1)
+}
+app.AddTab("DATAGRID EX", BuildDataGridExTab)
+
 ; UI COMPONENTS TAB
 BuildComponentsTab(tab) {
     scroll := tab.Add("ScrollViewer").CanContentScroll("False").VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled").Padding("0,0,15,0")
@@ -279,8 +317,8 @@ BuildRichComponentsTab(tab) {
 
     ; --- USING NEW COMPONENT CLASSES ---
     numSp := inputGrid.Add("StackPanel").Grid_Column(2)
-    num1 := XNumericUpDown(app, numSp, false, {Default: 42})
-    num2 := XNumericUpDown(app, numSp, true, {Default: 3.14})
+    num1 := XNumericUpDown(app, numSp, false, { Default: 42 })
+    num2 := XNumericUpDown(app, numSp, true, { Default: 3.14 })
     app.RegisterNumericInput(num1)
     app.RegisterNumericInput(num2)
     ; -----------------------------------
@@ -308,7 +346,7 @@ BuildRichComponentsTab(tab) {
     bc.Add("Button").Style("{StaticResource BreadcrumbButton}").Content("Configuration").Foreground("{DynamicResource Accent}")
 
     ; --- USING NEW COMPONENT CLASSES ---
-    tok := XTokenizer(app, panel, {InitialTags: ["system32", "drivers"], LogTarget: "LogList"})
+    tok := XTokenizer(app, panel, { InitialTags: ["system32", "drivers"], LogTarget: "LogList" })
     app.RegisterTokenizer(tok)
     ; -----------------------------------
 
@@ -329,6 +367,7 @@ BuildRichComponentsTab(tab) {
     mi3.Add("MenuItem.Icon").Add("TextBlock").Text(Chr(0xE74D)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(12).Foreground("#FF453A").Margin("0")
 }
 app.AddTab("RICH COMPONENTS", BuildRichComponentsTab)
+app.AddTab("ADVANCED UI", BuildAdvancedUITab)
 
 ; BOTTOM BAR
 BuildBottomBar(actions) {
@@ -377,6 +416,30 @@ ui.OnEvent("BtnShowTestModal", "Click", ShowTestModal)
 ui.OnEvent("ComboStrictSearch", "LostFocus", OnStrictSearchLostFocus)
 ui.OnEvent("BtnOpenColorPicker", "Click", ShowColorPickerModal)
 
+; Advanced UI Tab Events
+ui.OnEvent("MyDropZone", "PreviewMouseLeftButtonDown", OnFileDropClick)
+ui.OnEvent("BtnBadge", "Click", (*) => app.ShowSnackbar("You have 3 new notifications!", "DISMISS"))
+ui.OnEvent("MyCarousel_BtnL", "Click", (*) => ui.Update("MyCarousel_Scroll", "LineLeft", ""))
+ui.OnEvent("MyCarousel_BtnR", "Click", (*) => ui.Update("MyCarousel_Scroll", "LineRight", ""))
+
+; Rating — bind star click events
+RatingBind(ui, "Rating5", 5, false, Chr(0xE735), Chr(0xE734), "#FFD700", "{DynamicResource TextSub}")
+RatingBind(ui, "Rating10", 10, false, Chr(0xEB52), Chr(0xEB51), "#FF453A", "{DynamicResource TextSub}")
+
+; Emoji Picker — bind all emoji button events
+emojiList := ["😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎","😍","🥰","😘","😗","😙","🤗","🤩","🤔","🤨","😐","😑","😶","🙄","😏","😣","😥","😮","🤐","😯","😪","😫","🥱","😴","😌","👍","👎","👏","🙌","🤝","👋","✌️","🤞","🤟","🤘","👌","🤌","👈","👉","👆","👇","☝️","✋","❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","❣️","💕","💞","💓","💗","💖","💘","💝","💟","🔥","⭐","🌟","✨","💫","🎉","🎊","🏆","🥇","🎯","💡","📌","📎","🔑","🔒","💬","💭","🗨️"]
+EmojiPickerBind(ui, "MyEmoji", emojiList)
+
+; Bind DateRangePickerEx events
+myDatePicker.Bind(ui)
+ui.OnEvent("PriceFilter_SliderMin", "ValueChanged", ClampSliderMin)
+ui.OnEvent("PriceFilter_SliderMax", "ValueChanged", ClampSliderMax)
+ui.Track("PriceFilter_SliderMin")
+ui.Track("PriceFilter_SliderMax")
+
+; DataGridEx — single call to register all events
+myGrid.Bind(ui)
+
 ui.Track("TxtUser")
 ui.Track("ComboRegion")
 ui.Track("TglProxy")
@@ -385,6 +448,9 @@ ui.Track("TxtSearch")
 ui.Track("ComboTheme")
 
 app.Show()
+
+; Prevent scroll leak on emoji picker's inner ScrollViewer
+ui.Update("MyEmoji_EmojiScroll", "TrapScroll", "")
 
 ; --- Custom Event Implementations ---
 
@@ -402,6 +468,37 @@ ShowColorPickerModal(state, ctrl, event) {
     if (res.Status == "OK") {
         ui.Update("BtnColorPreview", "Background", res.Color)
         app.ShowSnackbar("Color updated to " res.Color)
+    }
+}
+
+OnFileDropClick(state, ctrl, event) {
+    selectedFile := FileSelect(3, , "Select a file to load")
+    if (selectedFile) {
+        OnFileDropped(selectedFile)
+    }
+}
+
+OnFileDropped(filePath) {
+    SplitPath filePath, &name, &dir, &ext, &name_no_ext, &drive
+    ui.Update("MyDropZone_Text", "Text", name)
+    ui.Update("MyDropZone_Icon", "Text", Chr(0xE8A5)) ; Document icon
+}
+
+; Slider clamping: prevent min > max and max < min
+ClampSliderMin(state, ctrl, event) {
+    if (state.Has("PriceFilter_SliderMin") && state.Has("PriceFilter_SliderMax")) {
+        minVal := Number(state["PriceFilter_SliderMin"])
+        maxVal := Number(state["PriceFilter_SliderMax"])
+        if (minVal > maxVal)
+            ui.Update("PriceFilter_SliderMin", "Value", String(maxVal))
+    }
+}
+ClampSliderMax(state, ctrl, event) {
+    if (state.Has("PriceFilter_SliderMin") && state.Has("PriceFilter_SliderMax")) {
+        minVal := Number(state["PriceFilter_SliderMin"])
+        maxVal := Number(state["PriceFilter_SliderMax"])
+        if (maxVal < minVal)
+            ui.Update("PriceFilter_SliderMax", "Value", String(minVal))
     }
 }
 
@@ -567,5 +664,90 @@ ShowComplexDialog4(state, ctrl, event) {
 ShowTestModal(state, ctrl, event) {
     res := XDialog.Show({ Id: "test_modal", Title: "Modal Dialog Test", Message: "This is a simple modal dialog.", Icon: Chr(0xE814), Owner: ui.wpfHwnd, Modal: true, Theme: state.Has("ComboTheme") ? state["ComboTheme"] : "Dark Mica (Win 11)", Movable: false, ShowCloseBtn: false, DarkenOwner: true })
 }
+
+; NEW ADVANCED COMPONENTS TAB
+BuildAdvancedUITab(tab) {
+    scroll := tab.Add("ScrollViewer").VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled").Padding("0,0,15,0")
+    panel := scroll.Add("StackPanel").Margin("0,20,0,20")
+    panel.SetDefaults("TextBlock", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,8" })
+
+    panel.Add("TextBlock").Text("Advanced Component Suite").Use("PageTitle").Margin("0,0,0,5")
+    panel.Add("TextBlock").Text("A demonstration of the newly integrated advanced XAML components.").Use("BodyText").Margin("0,0,0,20")
+
+    panel.Add("TextBlock").Text("FILE DROP ZONE")
+    panel.FileDropZone("MyDropZone", "Drag & Drop files here", [".txt", ".json", ".ahk"]).Margin("0,0,0,20")
+
+    panel.Add("TextBlock").Text("SLIDER RANGE & DATE PICKER")
+    grid := panel.Add("Grid").Margin("0,0,0,20")
+    grid.Cols("*", "20", "*")
+    grid.Add("Border").Grid_Column(0).Use("CardPanel").Padding("15").SliderRange("Price Filter", 0, 100, 20, 80)
+    
+    dpBdr := grid.Add("Border").Grid_Column(2).Use("CardPanel").Padding("15")
+    dpSp := dpBdr.Add("StackPanel")
+    dpSp.Add("TextBlock").Text("EVENT DATES").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10").FontWeight("Bold")
+    global myDatePicker := DateRangePickerEx("EventDates", "2026-05-16", "2026-06-16")
+    myDatePicker.Build(dpSp)
+    panel.Add("TextBlock").Text("BREADCRUMB BAR")
+    panel.BreadcrumbBar(["Home", "Projects", "AHK", "XAML_Components.ahk"])
+
+    panel.Add("TextBlock").Text("STEPPER (WIZARD)")
+    panel.Stepper(["Configuration", "Authentication", "Deployment", "Verification"], 3)
+
+
+    panel.Add("TextBlock").Text("CAROUSEL")
+    panel.Carousel(["#FF453A", "#FF9F0A", "#FFD60A", "#32D74B", "#0A84FF", "#5E5CE6"]).Margin("0,0,0,20")
+
+    panel.Add("TextBlock").Text("STAT CARDS & TIMELINE")
+    split := panel.SplitPanel("Horizontal", "1:1")
+
+    leftSp := split.LeftPanel.Add("StackPanel").Margin("0,0,10,0")
+    leftSp.StatCard("MONTHLY REVENUE", "$45,231", "12.5% from last month", true).Margin("0,0,0,10")
+    leftSp.StatCard("SERVER LOAD", "89%", "2% above threshold", false)
+
+    rightBdr := split.RightPanel.Add("Border").Use("CardPanel").Padding("20").Margin("10,0,0,0")
+    rightSp := rightBdr.Add("StackPanel")
+    rightSp.Add("TextBlock").Text("SYSTEM TIMELINE").Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold").Margin("0,0,0,15")
+    events := []
+    events.Push({ time: "10:45 AM", desc: "System initialized and booted successfully." })
+    events.Push({ time: "11:02 AM", desc: "User 'Admin' authenticated via Token." })
+    events.Push({ time: "11:15 AM", desc: "Deployment to Production failed. Retrying..." })
+    rightSp.Timeline(events)
+
+    panel.Add("TextBlock").Text("OVERLAY COMPONENTS").Margin("0,20,0,10")
+    ovSp := panel.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,20")
+
+    btnBadge := ovSp.Add("Button").Name("BtnBadge").Content("Notifications").Margin("0,0,15,0").Width(120).Height(35).Use("PrimaryBtn").Cursor("Hand")
+    btnBadge.AddBadge("3")
+
+    btnCtx := ovSp.Add("Button").Content("Right-Click Me").Margin("0,0,15,0").Width(120).Height(35)
+    btnCtx.AddContextMenu(["Edit", "Copy", "-", "Delete"])
+
+    btnPop := ovSp.Add("ToggleButton").Content("Filter Options").Margin("0,0,15,0").Width(120).Height(35)
+    pop := btnPop.AddRichPopover()
+    pop.Add("TextBlock").Text("Filter Settings").FontWeight("Bold").Margin("0,0,0,10")
+    pop.Add("CheckBox").Content("Show Hidden Files").Margin("0,0,0,5")
+    pop.Add("CheckBox").Content("Match Case")
+    
+    ; --- Rating Selectors ---
+    panel.Add("TextBlock").Text("RATING SELECTORS").Margin("0,20,0,10")
+    
+    ratingCard := panel.Add("Border").Use("CardPanel").Padding("20").Margin("0,0,0,15")
+    ratingSp := ratingCard.Add("StackPanel")
+    
+    ratingSp.Add("TextBlock").Text("5-Star Rating").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,0,0,8")
+    ratingSp.Rating("Rating5", { Max: 5, Default: 3 })
+    
+    ratingSp.Add("TextBlock").Text("10-Heart Rating").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
+    ratingSp.Rating("Rating10", { Max: 10, Default: 7, Icon: Chr(0xEB52), IconEmpty: Chr(0xEB51), Color: "#FF453A", Size: 18 })
+    
+    ; --- Emoji Picker ---
+    panel.Add("TextBlock").Text("EMOJI PICKER").Margin("0,10,0,10")
+    emojiCard := panel.Add("Border").Use("CardPanel").Padding("20").Margin("0,0,0,20")
+    emojiSp := emojiCard.Add("StackPanel")
+    emojiSp.Add("TextBlock").Text("Select an emoji:").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,0,0,8")
+    emojiSp.EmojiPicker("MyEmoji")
+}
+
+app.AddTab("ADVANCED UI", BuildAdvancedUITab)
 
 Persistent()
