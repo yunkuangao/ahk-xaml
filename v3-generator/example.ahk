@@ -1,7 +1,7 @@
 #Requires AutoHotkey v2.0
 #Include "../v2-csc/xaml.ahk"
 #Include "XAML_Generator.ahk"
-
+#Include "FluidDialog.ahk"
 ; ==============================================================================
 ; 1. CUSTOM UI COMPONENTS (Extend the XAML Generator)
 ; ==============================================================================
@@ -338,6 +338,13 @@ BuildComponentsTab(tab) {
     para.Add("Run").Text(";").Foreground(cOperator)
     para.Add("LineBreak")
     para.Add("Run").Text("}").Foreground(cOperator)
+
+    panel.Add("TextBlock").Text("FLUID DIALOGS").Margin("0,20,0,0")
+    diagSp := panel.Add("StackPanel").Orientation("Horizontal").Margin("0,10,0,0")
+    diagSp.Add("Button").Name("BtnShowAlert").Content("Show Alert").Width(120).Height(35).Margin("0,0,10,0")
+    diagSp.Add("Button").Name("BtnShowInput").Content("Ask Name").Width(120).Height(35).Margin("0,0,10,0")
+    diagSp.Add("Button").Name("BtnShowError").Content("Critical Error").Width(120).Height(35).Margin("0,0,10,0").Foreground("#FF453A")
+    diagSp.Add("Button").Name("BtnShowAuth").Content("Auth Dialog").Width(120).Height(35).Margin("0,0,10,0").Foreground("{DynamicResource Accent}")
 }
 
 BuildBottomBar(actions) {
@@ -367,7 +374,12 @@ ui.OnEvent("ComboTheme", "SelectionChanged", ThemeChanged)
 ui.OnEvent("ComboScale", "SelectionChanged", ScaleChanged)
 ui.OnEvent("BtnExecute", "Click", ExecuteProcess)
 ui.OnEvent("BtnToggleSidebar", "Click", ToggleSidebar)
+ui.OnEvent("BtnShowAlert", "Click", ShowAlertDialog)
+ui.OnEvent("BtnShowInput", "Click", ShowInputDialog)
+ui.OnEvent("BtnShowError", "Click", ShowErrorDialog)
+ui.OnEvent("BtnShowAuth", "Click", ShowAuthDialog)
 ui.OnEvent("Window", "Loaded", OnUIReady)
+ui.OnEvent("Window", "Closed", (*) => ExitApp())
 
 ui.Track("ComboTheme")
 ui.Track("ComboScale")
@@ -467,4 +479,94 @@ ToggleSidebar(state, ctrl, event) {
         ui.Update("SidebarBorder", "Visibility", "Visible")
     else
         ui.Update("SidebarBorder", "Visibility", "Collapsed")
+}
+
+ShowAlertDialog(state, ctrl, event) {
+    res := FluidDialog.Show({
+        Title: "Alert",
+        Message: "This is your custom message content.",
+        Icon: Chr(0xE946), ; Info icon
+        IconColor: "#FF453A",
+        Progress: true,
+        Buttons: ["OK", "Cancel"],
+        Width: 400,
+        Modal: true,
+        Owner: ui.wpfHwnd,
+        Theme: state["ComboTheme"],
+        Sound: "*-1" ; Default beep
+    })
+    
+    if (res.Button == "OK") {
+        ui.Update("LogList", "AddItem", "Alert dialog accepted!")
+    }
+}
+
+ShowInputDialog(state, ctrl, event) {
+    res := FluidDialog.Show({
+        Title: "What is your name?",
+        Message: "This is your custom message content.",
+        Icon: Chr(0xE70F), ; Pencil icon
+        IconColor: "#0A84FF",
+        InputText: "Type here...",
+        Buttons: ["OK", "Cancel"],
+        Width: 450,
+        Modal: true,
+        Owner: ui.wpfHwnd,
+        Theme: state["ComboTheme"]
+    })
+    
+    if (res.Button == "OK") {
+        ui.Update("LogList", "AddItem", "User inputted: " res.Input)
+        
+        ; Chain a second dialog to prove sequential execution works!
+        FluidDialog.Show({
+            Title: "Hello there!",
+            Message: "Welcome to the AHKAST Workbench, " res.Input "!",
+            Icon: Chr(0xE77B), ; User icon
+            IconColor: "#32D74B",
+            Buttons: ["Awesome"],
+            Width: 400,
+            Modal: true,
+            Owner: ui.wpfHwnd,
+            Theme: state["ComboTheme"],
+            Sound: "*-1"
+        })
+    }
+}
+
+ShowErrorDialog(state, ctrl, event) {
+    res := FluidDialog.Show({
+        Title: "Critical Error",
+        Message: "There was a critical error found before saving!`nThe following error was found in the board file:",
+        Icon: Chr(0xE7BA), ; Warning icon
+        IconColor: "#FFD60A",
+        DetailText: "MESSAGE: 0x0000000`n`nThis is a very long error message that will definitely wrap around to`nmultiple lines`n`nto test the selection functionality and ensure`nthat it works`ncorrectly`nacross all visible text within the control's boundaries.",
+        DetailRows: 10,
+        Buttons: ["Close"],
+        Width: 550,
+        Modal: true,
+        Owner: ui.wpfHwnd,
+        Theme: state["ComboTheme"],
+        Sound: "*16" ; Critical stop
+    })
+}
+
+ShowAuthDialog(state, ctrl, event) {
+    res := FluidDialog.Show({
+        Title: "Advanced Tool Authentication",
+        Message: "The AI Agent has requested to execute a tool:",
+        Icon: Chr(0xE7BA),
+        IconColor: "#E0AA00",
+        DetailText: "GET_TIME",
+        DetailRows: 5,
+        InputText: "Provide feedback or a reason for denial (Optional):",
+        Buttons: ["Allow Execution", "Deny & Send Feedback"],
+        Width: 500,
+        Modal: true,
+        Owner: ui.wpfHwnd,
+        Theme: state["ComboTheme"],
+        Sound: "*-1"
+    })
+    
+    ui.Update("LogList", "AddItem", "Auth result: " res.Button)
 }

@@ -155,8 +155,14 @@ class XAMLElement {
     ; Generate XAML string recursively
     ToString(indent := "") {
         attrStr := ""
-        for k, v in this._Props
-            attrStr .= ' ' k '="' v '"'
+        for k, v in this._Props {
+            val := StrReplace(String(v), "&", "&amp;")
+            val := StrReplace(val, "<", "&lt;")
+            val := StrReplace(val, ">", "&gt;")
+            val := StrReplace(val, '"', "&quot;")
+            val := StrReplace(val, "'", "&apos;")
+            attrStr .= ' ' k '="' val '"'
+        }
         
         tracker := (this.HasProp("_AhkLine") && this._AhkLine != "") ? "<!-- [ahk:" this._AhkLine "] -->" : ""
         

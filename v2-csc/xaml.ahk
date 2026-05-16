@@ -25,10 +25,10 @@ class XAMLGUI {
         }
     }
 
-    OnEvent(controlName, eventName, callback) {
+    OnEvent(controlName, eventName, callback, priority := 0) {
         if !this.events.Has(controlName)
             this.events[controlName] := Map()
-        this.events[controlName][eventName] := callback
+        this.events[controlName][eventName] := { Callback: callback, Priority: priority }
     }
 
     Track(controlName) {
@@ -122,7 +122,7 @@ class XAMLGUI {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf_" this.id ".exe"
+        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf_SharedEngine.exe"
         trackedCsv := ""
 
         uniqueCsv := Map()
@@ -135,17 +135,17 @@ class XAMLGUI {
             trackedCsv .= name ","
         trackedCsv := RTrim(trackedCsv, ",")
 
-        if !FileExist(targetExe) {
-
-            eventBindings := ""
-            for ctrlName, events in this.events {
-                for eventName, cb in events {
-                    eventBindings .= 'BindEvent("' ctrlName '", "' eventName '");`n            '
-                }
+        eventBindings := ""
+        for ctrlName, events in this.events {
+            for eventName, evtObj in events {
+                eventBindings .= ctrlName ":" eventName ","
             }
+        }
+        eventBindings := RTrim(eventBindings, ",")
 
-            b64Xaml := XAMLGUI.Base64Encode(this.xaml)
+        b64Xaml := XAMLGUI.Base64Encode(this.xaml)
 
+        if !FileExist(targetExe) {
             csCode := '
             (
                 using System;
@@ -209,17 +209,22 @@ class XAMLGUI {
                                 t.IsBackground = true;
                                 t.Start();
                             }
-                            engine.RunEngine(args[0], args[1], args[2], args.Length >= 5 ? args[4] : "");
+                            engine.RunEngine(args[0], args[1], args[2], args.Length >= 5 ? args[4] : "", args.Length >= 6 ? args[5] : "", args.Length >= 7 ? args[6] : "");
                         } catch (Exception ex) {
                             System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpfError.log"), ex.ToString());
                         }
                     }
                 
-                    public void RunEngine(string id, string hwndStr, string trackedCsv, string scriptName) {
+                    public void RunEngine(string id, string hwndStr, string trackedCsv, string scriptName, string xamlFilePath, string eventsFilePath) {
                         winId = id; ahkHwnd = (IntPtr)long.Parse(hwndStr);
                         tracked = trackedCsv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                         
-                        string b64Xaml = "{B64_XAML}";
+                        string b64Xaml = "";
+                        if (!string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
+                            b64Xaml = System.IO.File.ReadAllText(xamlFilePath);
+                        } else {
+                            b64Xaml = "{B64_XAML}"; // Fallback
+                        }
                         byte[] xamlBytes = Convert.FromBase64String(b64Xaml);
                         if (Application.Current == null) new Application();
                         try {
@@ -307,7 +312,14 @@ class XAMLGUI {
                         };
                         win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
                 
-                        {EVENT_BINDINGS}
+                        if (!string.IsNullOrEmpty(eventsFilePath) && System.IO.File.Exists(eventsFilePath)) {
+                            string bindingsStr = System.IO.File.ReadAllText(eventsFilePath);
+                            string[] pairs = bindingsStr.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                            foreach (string p in pairs) {
+                                string[] kv = p.Split(':');
+                                if (kv.Length == 2) BindEvent(kv[0], kv[1]);
+                            }
+                        }
                 
                         win.ShowDialog();
                     }
@@ -525,6 +537,8 @@ class XAMLGUI {
                                     }
                                 } else if (parts[1] == "ClearItems" && ctrl is ItemsControl) {
                                     ((ItemsControl)ctrl).Items.Clear();
+                                } else if (parts[1] == "Close" && ctrl is Window) {
+                                    win.Dispatcher.BeginInvoke(new Action(() => ((Window)ctrl).Close()));
                                 } else {
                                     var prop = ctrl.GetType().GetProperty(parts[1]);
                                     if (prop != null) {
@@ -563,15 +577,22 @@ class XAMLGUI {
                     }
                 }
             )'
+        }
 
-            csCode := StrReplace(csCode, "{B64_XAML}", b64Xaml)
-            csCode := StrReplace(csCode, "{EVENT_BINDINGS}", eventBindings)
+        xamlFile := A_Temp "\AhkWpf_" this.id ".xaml.b64"
+        if FileExist(xamlFile)
+            FileDelete(xamlFile)
+        FileAppend(b64Xaml, xamlFile, "UTF-8")
 
-            csPath := A_Temp "\AhkWpf_" this.id ".cs"
+        eventsFile := A_Temp "\AhkWpf_" this.id ".events.txt"
+        if FileExist(eventsFile)
+            FileDelete(eventsFile)
+        FileAppend(eventBindings, eventsFile, "UTF-8")
 
+        if !FileExist(targetExe) {
+            csPath := A_Temp "\AhkWpf_SharedEngine.cs"
             if FileExist(csPath)
                 FileDelete(csPath)
-
             FileAppend(csCode, csPath, "UTF-8")
 
             cscPath := "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -595,7 +616,7 @@ class XAMLGUI {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        Run('"' targetExe '" "' this.id '" "' String(this.receiver.Hwnd) '" "' trackedCsv '" "' ProcessExist() '" "' A_ScriptName '"', "", "Hide", &pid)
+        Run('"' targetExe '" "' this.id '" "' String(this.receiver.Hwnd) '" "' trackedCsv '" "' ProcessExist() '" "' A_ScriptName '" "' xamlFile '" "' eventsFile '"', "", "Hide", &pid)
         this.pid := pid
 
         SetTimer(ObjBindMethod(this, "CheckForCrashes"), 500)
@@ -625,8 +646,7 @@ class XAMLGUI {
             instance.wpfHwnd := Integer(parts[5])
         }
         if (ctrlName == "Window" && eventName == "Closed") {
-            ExitApp()
-            return 1
+            instance.wpfHwnd := 0
         }
 
         stateMap := Map()
@@ -645,8 +665,9 @@ class XAMLGUI {
         }
 
         if (instance.events.Has(ctrlName) && instance.events[ctrlName].Has(eventName)) {
-            cb := instance.events[ctrlName][eventName]
-            SetTimer(() => cb(stateMap, ctrlName, eventName), -1)
+            evtObj := instance.events[ctrlName][eventName]
+            cb := evtObj.Callback
+            SetTimer(() => cb(stateMap, ctrlName, eventName), -1, evtObj.Priority)
         }
         return 1
     }
