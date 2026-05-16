@@ -10,6 +10,8 @@ class XAML_GUI {
         this.focusedInput := ""
         this.numericInputs := Map()
         this.tokenizers := Map()
+        this.hotkeyBoxes := Map()
+        this.segmentedInputs := Map()
 
         hasOpt(key) => Type(options) == "Map" ? options.Has(key) : options.HasOwnProp(key)
         getOpt(key) => Type(options) == "Map" ? options[key] : options.%key%
@@ -166,6 +168,13 @@ class XAML_GUI {
             this.host.OnEvent("PART_DownButton", "Click", (s, c, e) => this.HandleSpinnerButton(v, false))
             v.Bind()
         }
+        for k, v in this.hotkeyBoxes {
+            this.host.OnEvent(k, "GotFocus", ObjBindMethod(this, "OnInputFocus"))
+            this.host.OnEvent(k, "LostFocus", ObjBindMethod(this, "OnInputBlur"))
+        }
+        for k, v in this.segmentedInputs {
+            v.Bind(this.host)
+        }
 
         return this.host
     }
@@ -298,6 +307,15 @@ class XAML_GUI {
         this.numericInputs[num.id] := num
     }
 
+    RegisterHotKeyChange(element, callback) {
+        id := element._Props["Name"]
+        this.hotkeyBoxes[id] := { id: id, onChange: callback }
+    }
+
+    RegisterSegmentedInput(seg) {
+        this.segmentedInputs[seg.id] := seg
+    }
+
     HandleSpinnerButton(num, isUp) {
         ; When the user clicks the spin buttons, WPF triggers PART_UpButton
         ; but XAMLHost doesn't easily let us know *which* control's spin button it was
@@ -313,10 +331,61 @@ class XAML_GUI {
 
     OnInputFocus(state, ctrl, event) {
         this.focusedInput := ctrl
+        if (this.hotkeyBoxes.Has(ctrl)) {
+            SetTimer(ObjBindMethod(this, "StartHotKeyCapture", ctrl), -1)
+        }
     }
 
     OnInputBlur(state, ctrl, event) {
         this.focusedInput := ""
+        if (this.HasProp("ih") && this.ih) {
+            this.ih.Stop()
+            this.ih := ""
+        }
+    }
+
+    StartHotKeyCapture(ctrl) {
+        this.host.Update(ctrl, "Text", "Listening...")
+        this.ih := InputHook("L1 M")
+        this.ih.KeyOpt("{All}", "E")
+        this.ih.KeyOpt("{LCtrl}{RCtrl}{LAlt}{RAlt}{LShift}{RShift}{LWin}{RWin}", "-E")
+        this.ih.Start()
+        this.ih.Wait()
+        
+        if (this.focusedInput != ctrl || !this.ih)
+            return
+            
+        key := this.ih.EndKey != "" ? this.ih.EndKey : this.ih.Input
+        this.ih := ""
+        
+        if (key == "Escape") {
+            this.host.Update("AppGrid", "Focus", "True")
+            return
+        }
+        
+        mods := ""
+        if GetKeyState("Ctrl", "P")
+            mods .= "^"
+        if GetKeyState("Shift", "P")
+            mods .= "+"
+        if GetKeyState("Alt", "P")
+            mods .= "!"
+        if GetKeyState("LWin", "P") || GetKeyState("RWin", "P")
+            mods .= "#"
+            
+        if (key == "Backspace") {
+            newBind := ""
+        } else if (key != "") {
+            newBind := mods key
+        } else {
+            newBind := ""
+        }
+        
+        this.host.Update(ctrl, "Text", newBind)
+        if (this.hotkeyBoxes[ctrl].onChange)
+            this.hotkeyBoxes[ctrl].onChange.Call(newBind)
+            
+        this.host.Update("AppGrid", "Focus", "True")
     }
 
     InitKeyboardHooks() {

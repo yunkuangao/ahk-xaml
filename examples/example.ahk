@@ -755,6 +755,29 @@ BuildAdvancedUITab(tab) {
     emojiSp := emojiCard.Add("StackPanel")
     emojiSp.Add("TextBlock").Text("Select an emoji:").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,0,0,8")
     emojiSp.EmojiPicker("MyEmoji")
+
+    ; --- NEW COMPONENTS ---
+    panel.Add("TextBlock").Text("NEW COMPONENTS").Margin("0,20,0,10")
+    newCard := panel.Add("Border").Use("CardPanel").Padding("20").Margin("0,0,0,20")
+    newSp := newCard.Add("StackPanel")
+    
+    newSp.Add("TextBlock").Text("HotKey Box").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,0,0,8")
+    hkInput := newSp.HotKeyBox("QuickSaveBinding", "^+S", "Press a key combination...")
+    app.RegisterHotKeyChange(hkInput, (newBind) => app.ShowSnackbar("New bind set to: " newBind))
+    
+    newSp.Add("TextBlock").Text("Segmented Network Input").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
+    segInput := XSegmentedNetworkInput("MyIP", "IP", ["192", "168", "1", "100"])
+    segInput.Build(newSp)
+    app.RegisterSegmentedInput(segInput)
+    
+    newSp.Add("TextBlock").Text("Skeleton Block").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
+    newSp.SkeletonBlock("100%", 120, 8)
+    
+    newSp.Add("TextBlock").Text("Avatar").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
+    newSp.Avatar("", "JD", "#34C759") ; JD with green status
+    
+    newSp.Add("TextBlock").Text("Gauge").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
+    newSp.Gauge("CPU Usage", 45, 100, "%")
 }
 
 app.AddTab("ADVANCED UI", BuildAdvancedUITab)

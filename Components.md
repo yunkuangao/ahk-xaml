@@ -464,6 +464,53 @@ panel.SkeletonLoader(200, 20)
 panel.SkeletonLoader(40, 40, true)  ; Circular
 ```
 
+### HotKeyBox / ShortcutRecorder
+
+An input box that captures physical key combinations (e.g., Ctrl + Shift + S) and formats it into an AHK-compatible hotkey string.
+
+```ahk
+; Parameters: ID Name, Default Hotkey String, Placeholder text
+hkInput := panel.HotKeyBox("QuickSaveBinding", "^+S", "Press a key combination...")
+```
+
+### Segmented Network Input
+
+A custom input box for IP addresses or MAC addresses that automatically handles individual octet entry.
+
+```ahk
+; Parameters: ID Name, Type ("IP" or "MAC"), Array of default octets
+seg := XSegmentedNetworkInput("MyIP", "IP", ["192", "168", "1", "100"])
+seg.Build(panel)
+app.RegisterSegmentedInput(seg)
+```
+
+### SkeletonBlock
+
+A modern alternative to a spinning loading wheel, showing a subtle animating block.
+
+```ahk
+; Parameters: Width, Height, CornerRadius (Defaults to 4)
+skeleton := panel.SkeletonBlock("100%", 120, 8) 
+```
+
+### Avatar / PersonaCard
+
+A circular UI element for user profiles or contacts. Handles image filling, fallback text (initials), and an optional status dot.
+
+```ahk
+; Parameters: ImagePath/URL, Fallback Initials, Status Color
+userPic := panel.Avatar("", "JD", "#34C759") ; JD with Green status dot
+```
+
+### Gauge / RadialGauge
+
+A half-circle dashboard component used to visualize stats or threshold values with a visual arc.
+
+```ahk
+; Parameters: Title, Current Value, Max Value, Units
+cpuGauge := panel.Gauge("CPU Usage", 45, 100, "%")
+```
+
 ---
 
 ## V. Data & Tables

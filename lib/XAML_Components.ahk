@@ -1152,6 +1152,149 @@ _SkeletonLoader(this, w, h, isCircle := false) {
     return bdr
 }
 
+XAMLElement.Prototype.DefineProp("HotKeyBox", { Call: _HotKeyBox })
+_HotKeyBox(this, id, defaultVal := "", placeholder := "Press a key combination...") {
+    bdr := this.Add("Border").Use("CardPanel").Padding("10,5").BorderThickness(1).BorderBrush("{DynamicResource ControlBorder}")
+    grid := bdr.Add("Grid")
+    grid.Cols("*", "Auto")
+    
+    tb := grid.Add("TextBox").Name(id).Grid_Column(0).Text(defaultVal).Background("Transparent").BorderThickness(0).Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").Tag(placeholder).IsReadOnly("True").Cursor("Hand")
+    
+    grid.Add("TextBlock").Grid_Column(1).Text(Chr(0xE765)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").Margin("10,0,0,0")
+    
+    return tb
+}
+
+class XSegmentedNetworkInput {
+    __New(id, type := "IP", defaultVals := []) {
+        this.id := id
+        this.type := type
+        this.defaultVals := defaultVals
+        this.count := (type == "IP") ? 4 : 6
+        this.sep := (type == "IP") ? "." : ":"
+        this.ui := ""
+    }
+    
+    Build(parent) {
+        sp := parent.Add("StackPanel").Orientation("Horizontal")
+        bdr := sp.Add("Border").Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(4).Padding("4")
+        inner := bdr.Add("StackPanel").Orientation("Horizontal")
+        
+        loop this.count {
+            idx := A_Index
+            val := (this.defaultVals.Length >= idx) ? String(this.defaultVals[idx]) : ""
+            inner.Add("TextBox").Name(this.id "_Octet_" idx).Text(val).Width(35).Height(24).Padding("0,2").HorizontalContentAlignment("Center").Background("Transparent").BorderThickness(0).Foreground("{DynamicResource TextMain}")
+            if (idx < this.count)
+                inner.Add("TextBlock").Text(this.sep).Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").Margin("2,0")
+        }
+        return sp
+    }
+    
+    Bind(ui) {
+        this.ui := ui
+        loop this.count {
+            ui.Track(this.id "_Octet_" A_Index)
+            ui.OnEvent(this.id "_Octet_" A_Index, "TextChanged", ObjBindMethod(this, "OnTextChanged", A_Index))
+        }
+    }
+    
+    OnTextChanged(idx, state, ctrl, ev) {
+        val := state[ctrl]
+        orig := val
+        
+        if (this.type == "IP")
+            val := RegExReplace(val, "[^\d\.\ ]", "")
+        else
+            val := RegExReplace(val, "[^\da-fA-F\:\ ]", "")
+            
+        shouldJump := false
+        
+        if (SubStr(val, -1) == this.sep || SubStr(val, -1) == " ") {
+            val := StrReplace(val, this.sep, "")
+            val := StrReplace(val, " ", "")
+            shouldJump := true
+        }
+        
+        if (val != orig)
+            this.ui.Update(ctrl, "Text", val)
+            
+        if (shouldJump) {
+            if (idx < this.count)
+                this.ui.Update(this.id "_Octet_" (idx+1), "Focus", "True")
+        } else {
+            if (this.type == "IP" && StrLen(val) >= 3 && idx < this.count) {
+                this.ui.Update(this.id "_Octet_" (idx+1), "Focus", "True")
+            } else if (this.type == "MAC" && StrLen(val) >= 2 && idx < this.count) {
+                this.ui.Update(this.id "_Octet_" (idx+1), "Focus", "True")
+            }
+        }
+    }
+}
+
+XAMLElement.Prototype.DefineProp("RadialGauge", { Call: _RadialGauge })
+_RadialGauge(this, title, value, maxVal, units := "%") {
+    card := this.Add("Border").Use("CardPanel").Padding("15")
+    sp := card.Add("StackPanel")
+    sp.Add("TextBlock").Text(title).Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold").HorizontalAlignment("Center").Margin("0,0,0,10")
+    
+    gaugeGrid := sp.Add("Grid").Width(100).Height(50)
+    
+    bgArc := gaugeGrid.Add("Path").Data("M 4,50 A 46,46 0 0,1 96,50").Stroke("{DynamicResource ControlBorder}").StrokeThickness(8).HorizontalAlignment("Center")
+    
+    fillArc := gaugeGrid.Add("Path").Data("M 4,50 A 46,46 0 0,1 96,50").Stroke("{DynamicResource Accent}").StrokeThickness(8).HorizontalAlignment("Center")
+    pct := value / maxVal
+    dashLen := pct * 144.5
+    spaceLen := 144.5 - dashLen
+    fillArc.StrokeDashArray(dashLen " " spaceLen)
+    
+    valSp := gaugeGrid.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Center").VerticalAlignment("Bottom").Margin("0,0,0,-10")
+    valSp.Add("TextBlock").Text(value).Foreground("{DynamicResource TextMain}").FontSize(20).FontWeight("Bold").VerticalAlignment("Bottom")
+    valSp.Add("TextBlock").Text(units).Foreground("{DynamicResource TextSub}").FontSize(12).VerticalAlignment("Bottom").Margin("2,0,0,3")
+    
+    return card
+}
+
+XAMLElement.Prototype.DefineProp("Gauge", { Call: _Gauge })
+_Gauge(this, title, value, maxVal, units := "%") {
+    return this.RadialGauge(title, value, maxVal, units)
+}
+
+XAMLElement.Prototype.DefineProp("SkeletonBlock", { Call: _SkeletonBlock })
+_SkeletonBlock(this, w, h, radius := 4) {
+    bdr := this.Add("Border").Height(h).CornerRadius(radius).Background("{DynamicResource ControlBorder}")
+    
+    if (w == "100%") {
+        bdr.HorizontalAlignment("Stretch")
+    } else if (w != "") {
+        bdr.Width(w)
+    }
+    
+    trigger := bdr.Add("Border.Triggers").Add("EventTrigger").RoutedEvent("FrameworkElement.Loaded")
+    sb := trigger.Add("BeginStoryboard").Add("Storyboard")
+    sb.Add("DoubleAnimation").Storyboard_TargetProperty("Opacity").From(0.3).To(0.8).Duration("0:0:1.5").AutoReverse("True").RepeatBehavior("Forever")
+    
+    return bdr
+}
+
+XAMLElement.Prototype.DefineProp("Avatar", { Call: _Avatar })
+_Avatar(this, imagePath, initials, statusColor := "") {
+    grid := this.Add("Grid").Width(40).Height(40).HorizontalAlignment("Left")
+    
+    circleBg := grid.Add("Ellipse").Fill("{DynamicResource ControlBgHover}").Width(40).Height(40)
+    
+    grid.Add("TextBlock").Text(initials).Foreground("{DynamicResource TextSub}").FontWeight("Bold").FontSize(14).HorizontalAlignment("Center").VerticalAlignment("Center")
+    
+    if (imagePath != "") {
+        imgBrush := grid.Add("Ellipse.Fill").Add("ImageBrush").ImageSource(imagePath).Stretch("UniformToFill")
+    }
+    
+    if (statusColor != "") {
+        statusBdr := grid.Add("Border").Width(12).Height(12).CornerRadius(6).Background(statusColor).BorderBrush("{DynamicResource ControlBg}").BorderThickness(2).HorizontalAlignment("Right").VerticalAlignment("Bottom")
+    }
+    
+    return grid
+}
+
 XAMLElement.Prototype.DefineProp("AddBadge", { Call: _AddBadge })
 _AddBadge(this, text, bgColor := "#FF453A") {
     target := this
