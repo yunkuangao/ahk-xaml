@@ -5,11 +5,12 @@ class XAMLGUI {
     static _instances := Map()
     static _msgHooked := false
 
-    __New(xaml := "", exePath := "") {
+    __New(xaml := "", exePath := "", ownerHwnd := 0) {
         this.id := "WPF_" A_TickCount "_" Random(1000, 9999)
         XAMLGUI._instances[this.id] := this
         this.xaml := xaml
         this.exePath := exePath
+        this.ownerHwnd := ownerHwnd
         this.events := Map()
         this.tracked := Map()
         this.wpfHwnd := 0
@@ -167,6 +168,10 @@ class XAMLGUI {
                     }
                     [DllImport("user32.dll", CharSet = CharSet.Auto)]
                     public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, ref COPYDATASTRUCT lParam);
+                    [DllImport("user32.dll")]
+                    public static extern bool SetForegroundWindow(IntPtr hWnd);
+                    [DllImport("user32.dll")]
+                    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
                     [DllImport("dwmapi.dll")]
                     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
                     
@@ -209,13 +214,13 @@ class XAMLGUI {
                                 t.IsBackground = true;
                                 t.Start();
                             }
-                            engine.RunEngine(args[0], args[1], args[2], args.Length >= 5 ? args[4] : "", args.Length >= 6 ? args[5] : "", args.Length >= 7 ? args[6] : "");
+                            engine.RunEngine(args[0], args[1], args[2], args.Length >= 5 ? args[4] : "", args.Length >= 6 ? args[5] : "", args.Length >= 7 ? args[6] : "", args.Length >= 8 ? args[7] : "0");
                         } catch (Exception ex) {
                             System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpfError.log"), ex.ToString());
                         }
                     }
                 
-                    public void RunEngine(string id, string hwndStr, string trackedCsv, string scriptName, string xamlFilePath, string eventsFilePath) {
+                    public void RunEngine(string id, string hwndStr, string trackedCsv, string scriptName, string xamlFilePath, string eventsFilePath, string ownerHwndStr = "0") {
                         winId = id; ahkHwnd = (IntPtr)long.Parse(hwndStr);
                         tracked = trackedCsv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                         
@@ -310,6 +315,14 @@ class XAMLGUI {
                             UpdateSnapState(win);
                             DumpState("Window", "Loaded");
                         };
+                        win.Closing += (s, e) => { 
+                            var ownerHwnd = new System.Windows.Interop.WindowInteropHelper(win).Owner;
+                            if (ownerHwnd != IntPtr.Zero) {
+                                SetWindowPos(ownerHwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0003);
+                                SetForegroundWindow(ownerHwnd);
+                            }
+                            SendToAhk("EVENT|" + winId + "|Window|Closing\n"); 
+                        };
                         win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
                 
                         if (!string.IsNullOrEmpty(eventsFilePath) && System.IO.File.Exists(eventsFilePath)) {
@@ -321,6 +334,14 @@ class XAMLGUI {
                             }
                         }
                 
+                        if (ownerHwndStr != "0") {
+                            try {
+                                IntPtr oHwnd = new IntPtr(long.Parse(ownerHwndStr));
+                                if (oHwnd != IntPtr.Zero) {
+                                    new System.Windows.Interop.WindowInteropHelper(win).Owner = oHwnd;
+                                }
+                            } catch { }
+                        }
                         win.ShowDialog();
                     }
                 
@@ -538,7 +559,17 @@ class XAMLGUI {
                                 } else if (parts[1] == "ClearItems" && ctrl is ItemsControl) {
                                     ((ItemsControl)ctrl).Items.Clear();
                                 } else if (parts[1] == "Close" && ctrl is Window) {
+                                    var ownerHwnd = new System.Windows.Interop.WindowInteropHelper((Window)ctrl).Owner;
+                                    if (ownerHwnd != IntPtr.Zero) {
+                                        SetForegroundWindow(ownerHwnd);
+                                    }
                                     win.Dispatcher.BeginInvoke(new Action(() => ((Window)ctrl).Close()));
+                                } else if (parts[1] == "AppendText" && ctrl is System.Windows.Controls.TextBox) {
+                                    var tb = (System.Windows.Controls.TextBox)ctrl;
+                                    tb.AppendText(parts[2]);
+                                    tb.ScrollToEnd();
+                                } else if (parts[1] == "NativeOwner" && ctrl is Window) {
+                                    new System.Windows.Interop.WindowInteropHelper((Window)ctrl).Owner = new IntPtr(long.Parse(parts[2]));
                                 } else {
                                     var prop = ctrl.GetType().GetProperty(parts[1]);
                                     if (prop != null) {
@@ -616,7 +647,7 @@ class XAMLGUI {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        Run('"' targetExe '" "' this.id '" "' String(this.receiver.Hwnd) '" "' trackedCsv '" "' ProcessExist() '" "' A_ScriptName '" "' xamlFile '" "' eventsFile '"', "", "Hide", &pid)
+        Run('"' targetExe '" "' this.id '" "' String(this.receiver.Hwnd) '" "' trackedCsv '" "' ProcessExist() '" "' A_ScriptName '" "' xamlFile '" "' eventsFile '" "' String(this.ownerHwnd) '"', "", "Hide", &pid)
         this.pid := pid
 
         SetTimer(ObjBindMethod(this, "CheckForCrashes"), 500)

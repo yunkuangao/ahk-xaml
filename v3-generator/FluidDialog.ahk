@@ -25,8 +25,23 @@ class FluidDialog {
         soundFx := options.HasProp("Sound") ? options.Sound : ""
         disableAltF4 := options.HasProp("DisableAltF4") ? options.DisableAltF4 : false
 
+        bgRes := "DropdownBg"
+        if FileExist(iniPath) {
+            try {
+                themeData := IniRead(iniPath, themeName)
+                Loop Parse, themeData, "`n", "`r" {
+                    parts := StrSplit(A_LoopField, "=", " `t", 2)
+                    if (parts.Length == 2 && parts[1] == "Window_DWM") {
+                        if (SubStr(parts[2], 1, 1) == "2" || SubStr(parts[2], 1, 1) == "3")
+                            bgRes := "BgColor"
+                        break
+                    }
+                }
+            }
+        }
+
         ; --- BUILD LAYOUT ---
-        main := XAML_Generator("Grid").Background("Transparent")
+        main := XAML_Generator("Grid").Background("{DynamicResource " bgRes "}")
         main.Rows("40", "*", "Auto")
 
         ; Titlebar (draggable)
@@ -53,7 +68,7 @@ class FluidDialog {
 
         ; Detail Textbox
         if (detail != "") {
-            body.Add("TextBox").Text(detail).IsReadOnly("True").Foreground("{DynamicResource TextSub}").Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).Padding("10").Margin("0,0,0,15").Height(detailRows * 20).TextWrapping("Wrap").VerticalScrollBarVisibility("Auto")
+            body.Add("TextBox").Name("DialogDetail").Text(detail).IsReadOnly("True").Foreground("{DynamicResource TextSub}").Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).Padding("10").Margin("0,0,0,15").Height(detailRows * 20).TextWrapping("Wrap").VerticalScrollBarVisibility("Auto")
         }
 
         ; Input field
@@ -76,19 +91,33 @@ class FluidDialog {
         footer := main.Add("Border").Grid_Row(2).Background("{DynamicResource ControlBg}").Padding("15").CornerRadius("0,0,8,8")
         btnSp := footer.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Center")
 
+        ; Inject beautiful Win11 rounded button styles directly into the dialog resources
+        main.InjectResources('<Style x:Key="DialogBtn" TargetType="Button"><Setter Property="Background" Value="#10FFFFFF"/><Setter Property="Foreground" Value="{DynamicResource TextMain}"/><Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style x:Key="DialogPrimaryBtn" TargetType="Button"><Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
+
         for index, btnText in buttons {
-            btnEl := btnSp.Add("Button").Name("Btn" index).Content(btnText).Width(120).Padding("8,6").Margin("5,0").Background("{DynamicResource ControlBg}").Foreground("{DynamicResource TextMain}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).Cursor("Hand")
-            if (btnText == "OK" || btnText == "Confirm")
+            isPrimary := (btnText == "OK" || btnText == "Confirm" || btnText == "Allow Execution" || btnText == "Yes" || btnText == "Save" || btnText == "Awesome")
+            isCancel := (btnText == "Cancel" || btnText == "Close" || btnText == "Abort")
+            
+            btnEl := btnSp.Add("Button").Name("Btn" index).Content(btnText).Width(120).Margin("5,0").Cursor("Hand")
+
+            if (isPrimary) {
+                btnEl.Style("{StaticResource DialogPrimaryBtn}")
                 btnEl.IsDefault("True")
+            } else {
+                btnEl.Style("{StaticResource DialogBtn}")
+                if (isCancel) {
+                    btnEl.IsCancel("True")
+                }
+            }
         }
 
         ; --- INIT LOGIC ---
-        ui := XAMLGUI(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()))
+        ui := XAMLGUI(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", owner)
 
         ; Replace some default xaml.ahk window stuff to match the dialog needs
         heightAttr := (height == "Auto") ? 'SizeToContent="Height"' : 'Height="' height '"'
         resizeAttr := resizable ? 'ResizeMode="CanResize"' : 'ResizeMode="NoResize"'
-        
+
         ; Auto Focus Logic
         focusAttr := inputText != "" ? 'FocusManager.FocusedElement="{Binding ElementName=DialogInput}"' : 'FocusManager.FocusedElement="{Binding ElementName=Btn1}"'
 
@@ -108,7 +137,7 @@ class FluidDialog {
 
         ; Callbacks
         ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => FluidDialog.OnDialogLoad(ui, owner, modal, themeName, iniPath, buttons, resultObj), 255)
-        ui.OnEvent("Window", "Closed", (state, ctrl, event) => FluidDialog.OnDialogClose(ui, resultObj, owner, modal), 255)
+        ui.OnEvent("Window", "Closing", (state, ctrl, event) => FluidDialog.OnDialogClose(ui, resultObj, owner, modal), 255)
 
         for index, btnText in buttons {
             ui.OnEvent("Btn" index, "Click", ObjBindMethod(FluidDialog, "OnButtonClick", ui, resultObj, btnText, owner, modal), 255)
@@ -130,7 +159,6 @@ class FluidDialog {
             }
             if (modal && owner) {
                 WinSetEnabled(1, "ahk_id " owner)
-                WinActivate("ahk_id " owner)
             }
             return resultObj
         } else {
@@ -158,44 +186,20 @@ class FluidDialog {
 
     static OnDialogLoad(ui, owner, modal, themeName, iniPath, buttons, resultObj, state := "", ctrl := "", event := "") {
         if (owner) {
-            ; We can use AHK's WinSetOwner if we have the WPF hwnd
-            try {
-                DllCall("user32\SetWindowLongPtrW", "Ptr", ui.wpfHwnd, "Int", -8, "Ptr", owner)
-            }
+            ui.Update("Window", "NativeOwner", owner)
         }
         FluidDialog.ApplyTheme(ui, themeName, iniPath)
-        
-        ; Setup Escape Hotkey for Cancel
-        cancelBtn := ""
-        for index, btnText in buttons {
-            if (btnText == "Cancel" || btnText == "Close") {
-                cancelBtn := btnText
-                break
-            }
-        }
-        
-        if (cancelBtn != "") {
-            HotIf (*) => WinActive("ahk_id " ui.wpfHwnd)
-            Hotkey "Escape", (hk) => FluidDialog.OnButtonClick(ui, resultObj, cancelBtn, owner, modal, Map(), "", ""), "On"
-            HotIf
-        }
     }
 
     static OnDialogClose(ui, resultObj, owner, modal, state := "", ctrl := "", event := "") {
         if (resultObj.Button == "") {
             resultObj.Button := "Closed"
         }
-        
-        ; Clean up dynamic hotkey
-        try {
-            HotIf (*) => WinActive("ahk_id " ui.wpfHwnd)
-            Hotkey "Escape", "Off"
-            HotIf
-        }
-        
-        if (modal && owner) {
-            WinSetEnabled(1, "ahk_id " owner)
-            WinActivate("ahk_id " owner)
+
+        if (owner) {
+            if (modal) {
+                WinSetEnabled(1, "ahk_id " owner)
+            }
         }
     }
 
@@ -204,19 +208,13 @@ class FluidDialog {
         if state.Has("DialogInput") {
             resultObj.Input := state["DialogInput"]
         }
-        
-        if (modal && owner) {
-            WinSetEnabled(1, "ahk_id " owner)
-            WinActivate("ahk_id " owner)
+
+        if (owner) {
+            if (modal) {
+                WinSetEnabled(1, "ahk_id " owner)
+            }
         }
-        
-        ; Clean up dynamic hotkey
-        try {
-            HotIf (*) => WinActive("ahk_id " ui.wpfHwnd)
-            Hotkey "Escape", "Off"
-            HotIf
-        }
-        
+
         ; Close the window
         ui.Update("Window", "Close", "")
     }

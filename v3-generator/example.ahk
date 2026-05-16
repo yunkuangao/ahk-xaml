@@ -55,7 +55,7 @@ _MetricCard(this, title, mainValue, subValue, subColor := "#32D74B", progressVal
     sp := card.Add("StackPanel")
     sp.Add("TextBlock").Text(title).Foreground("{DynamicResource TextSub}").FontSize(10).FontWeight("Bold")
     sp.Add("TextBlock").Text(mainValue).Foreground("{DynamicResource TextMain}").FontSize(24).FontWeight("Light").Margin("0,10,0,0")
-    
+
     if (progressValue != -1) {
         sp.Add("ProgressBar").Value(progressValue).Maximum(100).Height(4).Margin("0,10,0,0").Foreground("{DynamicResource Accent}").Background("{DynamicResource ControlBorder}").BorderThickness(0)
     } else {
@@ -73,7 +73,7 @@ _CodeEditor(this, filename) {
     ideHeader := ideGrid.Add("Border").Grid_Row(0).Background("{DynamicResource ControlBorder}").CornerRadius("5,5,0,0")
     headerInner := ideHeader.Add("Grid")
     headerInner.Add("TextBlock").Text(filename).Foreground("{DynamicResource TextMain}").FontSize(11).HorizontalAlignment("Left").VerticalAlignment("Center").Margin("15,0,0,0")
-    
+
     btns := headerInner.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Margin("0,0,10,0")
     btns.SetDefaults("Button", { Background: "Transparent", BorderThickness: 0, Foreground: "{DynamicResource TextSub}", FontSize: 10, Padding: "8,2", Margin: "2,0", Cursor: "Hand" })
     btns.Add("Button").Content("Save")
@@ -82,7 +82,7 @@ _CodeEditor(this, filename) {
 
     editorBorder := ideGrid.Add("Border").Grid_Row(1).Background("{DynamicResource ControlBg}").CornerRadius("0,0,5,5")
     editor := editorBorder.Add("RichTextBox").FontFamily("Consolas, Courier New").Background("Transparent").BorderThickness(0).Padding("15").Height(130).Foreground("{DynamicResource TextMain}").CaretBrush("{DynamicResource TextMain}")
-    
+
     return editor ; Return the RichTextBox so syntax highlighting flows can be easily chained to it
 }
 
@@ -98,9 +98,9 @@ BuildApplication() {
     ; -- 2.1 Theme & Global Styles --
     PrimaryButtonTemplate(el) {
         el.Background("{DynamicResource Accent}").Foreground("White").FontWeight("Bold").BorderThickness(0).FontSize(13).Cursor("Hand")
-        el.InjectResources('<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="6"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
+        el.InjectResources('<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
     }
-    
+
     X.DefineTemplate("PrimaryBtn", PrimaryButtonTemplate)
     X.DefineTemplate("SubtitleText", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,12" })
     X.DefineTemplate("PageTitle", { FontSize: 28, FontWeight: "SemiBold", Foreground: "{DynamicResource TextMain}", Margin: "0" })
@@ -115,14 +115,16 @@ BuildApplication() {
     ; -- 2.3 Main Application Area --
     main := X.Add("Grid").Grid_Column(1)
     main.Rows("50", "*", "90")
-    
+
     BuildWindowControls(main.Add("Border").Name("DragArea").Grid_Row(0).Background("Transparent").Cursor("Arrow"))
-    
+
     tabs := main.Add("TabControl").Grid_Row(1).Margin("40,0,40,10")
     BuildDeploymentTab(tabs.Add("TabItem").Header("DEPLOYMENT"))
     BuildDataGridTab(tabs.Add("TabItem").Header("DATA GRID"))
     BuildComponentsTab(tabs.Add("TabItem").Header("UI COMPONENTS"))
-    
+    BuildAdvancedInputsTab(tabs.Add("TabItem").Header("ADVANCED INPUTS"))
+    BuildFluidDialogsTab(tabs.Add("TabItem").Header("FLUID DIALOGS"))
+
     BuildBottomBar(main.Add("Grid").Grid_Row(2).Background("{DynamicResource SidebarColor}"))
 
     return X.Compile()
@@ -134,8 +136,8 @@ BuildSidebar(container) {
     sp := container.Add("StackPanel").Margin("25,35,25,25")
     sp.SetDefaults("TextBlock", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,12" })
 
-    sp.Add("TextBlock").Name("TxtLogo").Text("✦ FLUID UI").FontSize(22).FontWeight("Black").Foreground("{DynamicResource TextMain}").Margin("0,0,0,40")
-    
+    sp.Add("TextBlock").Name("TxtLogo").Text("SETTINGS").FontSize(22).FontWeight("Black").Foreground("{DynamicResource TextMain}").Margin("0,0,0,40")
+
     sp.Add("TextBlock").Text("THEME ENGINE").Margin("0,0,0,5")
     themeCombo := sp.Add("ComboBox").Name("ComboTheme").Height(35).Margin("0,0,0,15")
     try {
@@ -157,13 +159,13 @@ BuildSidebar(container) {
 
 BuildWindowControls(container) {
     grid := container.Add("Grid")
-    
+
     ; Left side (Button + Title)
     leftSp := grid.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").Margin("15,0,0,0")
-    
+
     ; Menu Button
     ChromeBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="4"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
-    menuBtn := leftSp.Add("Button").Name("BtnToggleSidebar").WindowChrome_IsHitTestVisibleInChrome("True").Width(30).Height(30).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Toggle Sidebar").Margin("0,0,10,0")
+    menuBtn := leftSp.Add("Button").Name("BtnToggleSidebar").WindowChrome_IsHitTestVisibleInChrome("True").Width(30).Height(30).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Toggle Sidebar (Ctrl+B)").Margin("0,0,10,0")
     menuBtn.InjectResources(ChromeBtnTemplate)
     menuBtn.Add("TextBlock").Text(Chr(0xE700)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(14).VerticalAlignment("Center").HorizontalAlignment("Center")
 
@@ -173,7 +175,7 @@ BuildWindowControls(container) {
     titleSp.Add("TextBlock").Name("AppTitle").Text("").Foreground("{DynamicResource TextMain}").FontSize(12).FontWeight("SemiBold")
 
     winBtns := grid.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").VerticalAlignment("Top")
-    
+
     ; Define a transparent chrome button template
     ChromeBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
     CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
@@ -205,7 +207,7 @@ BuildDeploymentTab(tab) {
 
     credGrid := panel.Add("Grid").Margin("0,0,0,25")
     credGrid.Cols("*", "20", "*")
-    
+
     userSp := credGrid.Add("StackPanel").Grid_Column(0)
     userSp.Add("TextBlock").Text("USERNAME")
     userSp.Add("TextBox").Name("TxtUser").Text("Administrator").ToolTip("Must be an Active Directory alias")
@@ -315,13 +317,13 @@ BuildComponentsTab(tab) {
     editor := panel.CodeEditor("core.js")
     flow := editor.Add("FlowDocument").LineHeight(20)
     para := flow.Add("Paragraph").Margin("0")
-    
+
     ; Theme-aware Syntax highlighting
     cKeyword := "{DynamicResource Accent}"
     cMethod := "{DynamicResource TextMain}"
     cString := "{DynamicResource TextSub}"
     cOperator := "{DynamicResource TextMain}"
-    
+
     para.Add("Run").Text("function").Foreground(cKeyword).FontWeight("Bold")
     para.Add("Run").Text(" ").Foreground(cOperator)
     para.Add("Run").Text("initializeCore").Foreground(cMethod)
@@ -338,29 +340,74 @@ BuildComponentsTab(tab) {
     para.Add("Run").Text(";").Foreground(cOperator)
     para.Add("LineBreak")
     para.Add("Run").Text("}").Foreground(cOperator)
+}
 
-    panel.Add("TextBlock").Text("FLUID DIALOGS").Margin("0,20,0,0")
-    diagSp := panel.Add("StackPanel").Orientation("Horizontal").Margin("0,10,0,0")
-    diagSp.Add("Button").Name("BtnShowAlert").Content("Show Alert").Width(120).Height(35).Margin("0,0,10,0")
-    diagSp.Add("Button").Name("BtnShowInput").Content("Ask Name").Width(120).Height(35).Margin("0,0,10,0")
-    diagSp.Add("Button").Name("BtnShowError").Content("Critical Error").Width(120).Height(35).Margin("0,0,10,0").Foreground("#FF453A")
-    diagSp.Add("Button").Name("BtnShowAuth").Content("Auth Dialog").Width(120).Height(35).Margin("0,0,10,0").Foreground("{DynamicResource Accent}")
+BuildAdvancedInputsTab(tab) {
+    scroll := tab.Add("ScrollViewer").VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled").Padding("0,0,15,0")
+    panel := scroll.Add("StackPanel").Margin("0,20,0,0")
+    panel.SetDefaults("TextBlock", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,8" })
+
+    panel.Add("TextBlock").Text("Advanced XAML Inputs").Use("PageTitle").Margin("0,0,0,5")
+    panel.Add("TextBlock").Text("Dynamic search boxes and filtering capabilities.").Use("BodyText").Margin("0,0,0,20")
+
+    ; Free-type Auto-Suggest
+    panel.Add("TextBlock").Text("FREE-TYPE AUTO-SUGGEST SEARCH")
+    panel.Add("TextBlock").Text("Type anything, or use the dropdown to see suggestions. It acts like a search box.").Use("BodyText").Margin("0,0,0,15").Opacity(0.7)
+    c1 := panel.Add("ComboBox").Name("ComboFreeSearch").IsEditable("True").IsTextSearchEnabled("True").StaysOpenOnEdit("True").Margin("0,0,0,30").Width(400).HorizontalAlignment("Left")
+    c1.Add("ComboBoxItem").Content("Apple")
+    c1.Add("ComboBoxItem").Content("Banana")
+    c1.Add("ComboBoxItem").Content("Cherry")
+    c1.Add("ComboBoxItem").Content("Date")
+    c1.Add("ComboBoxItem").Content("Elderberry")
+
+    ; Strict Search
+    panel.Add("TextBlock").Text("STRICT LIST SEARCH")
+    panel.Add("TextBlock").Text("Editable combobox configured for strict matching workflows. You can type to filter/jump.").Use("BodyText").Margin("0,0,0,15").Opacity(0.7)
+    c2 := panel.Add("ComboBox").Name("ComboStrictSearch").IsEditable("True").IsTextSearchEnabled("True").Margin("0,0,0,30").Width(400).HorizontalAlignment("Left")
+    c2.Add("ComboBoxItem").Content("Administrator")
+    c2.Add("ComboBoxItem").Content("Moderator")
+    c2.Add("ComboBoxItem").Content("User")
+    c2.Add("ComboBoxItem").Content("Guest")
+}
+
+BuildFluidDialogsTab(tab) {
+    scroll := tab.Add("ScrollViewer").VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled").Padding("0,0,15,0")
+    panel := scroll.Add("StackPanel").Margin("0,20,0,0")
+    panel.SetDefaults("TextBlock", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,8" })
+
+    panel.Add("TextBlock").Text("Fluid Dialog Engine").Use("PageTitle").Margin("0,0,0,5")
+    panel.Add("TextBlock").Text("A robust, non-blocking asynchronous event flow for rich popups and modals.").Use("BodyText").Margin("0,0,0,20")
+
+    ; Basic Dialogs
+    panel.Add("TextBlock").Text("BASIC INTERACTIONS")
+    basicSp := panel.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,20")
+    basicSp.Add("Button").Name("BtnShowAlert").Content("Show Alert").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn")
+    basicSp.Add("Button").Name("BtnShowInput").Content("Ask Name").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn")
+    basicSp.Add("Button").Name("BtnShowError").Content("Critical Error").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn").Background("Transparent").Foreground("#FF3B30").BorderBrush("#FF3B30").BorderThickness(1)
+    basicSp.Add("Button").Name("BtnShowAuth").Content("Auth Dialog").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn").Background("Transparent").Foreground("{DynamicResource Accent}").BorderBrush("{DynamicResource Accent}").BorderThickness(1)
+
+    ; Complex Dialogs
+    panel.Add("TextBlock").Text("COMPLEX & DYNAMIC")
+    cmplxSp := panel.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,20")
+    cmplxSp.Add("Button").Name("BtnShowComplex1").Content("Progress Task").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1)
+    cmplxSp.Add("Button").Name("BtnShowComplex2").Content("Detail Log View").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1)
+    cmplxSp.Add("Button").Name("BtnShowComplex3").Content("Resizable Tool").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn").Background("Transparent").Foreground("{DynamicResource Accent}").BorderBrush("{DynamicResource Accent}").BorderThickness(1)
 }
 
 BuildBottomBar(actions) {
     actions.Add("Border").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,1,0,0")
     statusSp := actions.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").Margin("40,0")
-    
+
     spinner := statusSp.Add("Grid").Name("LoadingSpinner").Width(18).Height(18).Margin("0,0,15,0").Visibility("Hidden").VerticalAlignment("Center")
     spinner.Add("Ellipse").Stroke("{DynamicResource Accent}").Opacity(0.25).StrokeThickness(2.5)
     animEllipse := spinner.Add("Ellipse").Stroke("{DynamicResource Accent}").StrokeThickness(2.5).StrokeDashArray("3 10").StrokeDashCap("Round").RenderTransformOrigin("0.5,0.5")
     animEllipse.Add("Ellipse.RenderTransform").Add("RotateTransform").Angle(0)
-    
+
     trigger := animEllipse.Add("Ellipse.Triggers").Add("EventTrigger").RoutedEvent("Loaded").Add("BeginStoryboard").Add("Storyboard")
     trigger.Add("DoubleAnimation").Storyboard_TargetProperty("(UIElement.RenderTransform).(RotateTransform.Angle)").From(0).To(360).Duration("0:0:0.8").RepeatBehavior("Forever")
-    
+
     statusSp.Add("TextBlock").Name("TxtStatus").Text("Awaiting your command...").Foreground("{DynamicResource TextSub}").FontSize(14).FontWeight("SemiBold").VerticalAlignment("Center")
-    
+
     actions.Add("Button").Name("BtnExecute").Content("INITIALIZE SEQUENCE").ToolTip("Commences the payload deployment via secure tunnel.").HorizontalAlignment("Right").VerticalAlignment("Center").Margin("0,0,40,0").Width(190).Height(45).Use("PrimaryBtn")
 }
 
@@ -378,6 +425,12 @@ ui.OnEvent("BtnShowAlert", "Click", ShowAlertDialog)
 ui.OnEvent("BtnShowInput", "Click", ShowInputDialog)
 ui.OnEvent("BtnShowError", "Click", ShowErrorDialog)
 ui.OnEvent("BtnShowAuth", "Click", ShowAuthDialog)
+
+ui.OnEvent("BtnShowComplex1", "Click", ShowComplexDialog1)
+ui.OnEvent("BtnShowComplex2", "Click", ShowComplexDialog2)
+ui.OnEvent("BtnShowComplex3", "Click", ShowComplexDialog3)
+
+ui.OnEvent("ComboStrictSearch", "LostFocus", OnStrictSearchLostFocus)
 ui.OnEvent("Window", "Loaded", OnUIReady)
 ui.OnEvent("Window", "Closed", (*) => ExitApp())
 
@@ -386,23 +439,43 @@ ui.Track("ComboScale")
 ui.Track("TxtUser")
 ui.Track("ComboRegion")
 ui.Track("TglProxy")
+ui.Track("ComboStrictSearch")
 
 ui.Show()
 
+; Map Ctrl+B to Toggle Sidebar when window is active
+HotIf (*) => WinActive("ahk_id " ui.wpfHwnd)
+Hotkey "^b", (*) => ToggleSidebar(Map(), "", ""), "On"
+HotIf
+
 ; --- EVENT CALLBACKS ---
+
+OnStrictSearchLostFocus(state, ctrl, event) {
+    text := state["ComboStrictSearch"]
+    valid := false
+    for item in ["Administrator", "Moderator", "User", "Guest"] {
+        if (text == item) {
+            valid := true
+            break
+        }
+    }
+    if (!valid && text != "") {
+        ui.Update("ComboStrictSearch", "Text", "")
+    }
+}
 
 OnUIReady(state, ctrl, event) {
     ui.Update("Window", "DWM", "2,1")
     ui.Update("Window", "Title", "Fluid UI Workbench")
-    
+
     hIcon := LoadPicture("shell32.dll", "Icon15", &ImageType := 1)
     ui.Update("Window", "Icon", "HICON:" hIcon)
     TraySetIcon("shell32.dll", 15)
-    
+
     ; Map the title and icon into our custom UI title bar!
     ui.Update("AppTitle", "Text", "Fluid UI Workbench")
     ui.Update("AppIcon", "Source", "HICON:" hIcon)
-    
+
     ThemeChanged(state, ctrl, event)
     ScaleChanged(state, ctrl, event)
 }
@@ -431,11 +504,11 @@ ThemeChanged(state, ctrl, event) {
 
 ExecuteProcess(state, ctrl, event) {
     ui.Update("BtnExecute", "IsEnabled", "False")
-    
+
     ui.Update("TxtStatus", "Text", "Connecting to " state["ComboRegion"] "...")
     ui.Update("TxtStatus", "Foreground", "#FF9F0A")
     ui.Update("LoadingSpinner", "Visibility", "Visible")
-    
+
     ui.Update("LogList", "ClearItems", "")
     ui.Update("LogList", "AddItem", "Authenticating " state["TxtUser"] " on " state["ComboRegion"])
     ui.Update("LogList", "AddItem", "Proxy Active: " state["TglProxy"])
@@ -448,11 +521,11 @@ ExecuteProcess(state, ctrl, event) {
 
     ui.Update("LogList", "AddItem", "")
     ui.Update("LogList", "AddItem", "--> DEPLOYMENT SUCCESSFUL.")
-    
+
     ui.Update("LoadingSpinner", "Visibility", "Hidden")
     ui.Update("TxtStatus", "Text", "Deployment Successful!")
     ui.Update("TxtStatus", "Foreground", "#32D74B")
-    
+
     ui.Update("BtnExecute", "IsEnabled", "True")
     ui.Update("BtnExecute", "Content", "RESTART SEQUENCE")
 }
@@ -495,7 +568,7 @@ ShowAlertDialog(state, ctrl, event) {
         Theme: state["ComboTheme"],
         Sound: "*-1" ; Default beep
     })
-    
+
     if (res.Button == "OK") {
         ui.Update("LogList", "AddItem", "Alert dialog accepted!")
     }
@@ -514,10 +587,10 @@ ShowInputDialog(state, ctrl, event) {
         Owner: ui.wpfHwnd,
         Theme: state["ComboTheme"]
     })
-    
+
     if (res.Button == "OK") {
         ui.Update("LogList", "AddItem", "User inputted: " res.Input)
-        
+
         ; Chain a second dialog to prove sequential execution works!
         FluidDialog.Show({
             Title: "Hello there!",
@@ -567,6 +640,96 @@ ShowAuthDialog(state, ctrl, event) {
         Theme: state["ComboTheme"],
         Sound: "*-1"
     })
-    
+
     ui.Update("LogList", "AddItem", "Auth result: " res.Button)
+}
+
+ShowComplexDialog1(state, ctrl, event) {
+    res := FluidDialog.Show({
+        Title: "Analyzing Workspace",
+        Message: "The internal AST analyzer is currently scanning the environment and building the tree index. This might take a few moments.",
+        Progress: true,
+        Buttons: ["Cancel"],
+        Width: 480,
+        Modal: true,
+        Owner: ui.wpfHwnd,
+        Theme: state["ComboTheme"],
+        WaitForResponse: false
+    })
+    
+    dialogUi := res.Instance
+    
+    ; Simulate work
+    Loop 10 {
+        if (res.Button != "") ; User clicked Cancel or closed
+            return
+            
+        dialogUi.Update("DialogProgSub1", "Text", "Scanning file " A_Index " of 10...")
+        dialogUi.Update("DialogProg1", "Value", String(A_Index * 10))
+        
+        Sleep(300)
+    }
+    
+    if (res.Button == "") {
+        dialogUi.Update("DialogProgSub1", "Text", "Analysis complete.")
+        Sleep(500)
+        dialogUi.Update("Window", "Close", "")
+        ui.Update("LogList", "AddItem", "Complex 1 result: Success")
+    } else {
+        ui.Update("LogList", "AddItem", "Complex 1 result: " res.Button)
+    }
+}
+
+ShowComplexDialog2(state, ctrl, event) {
+    res := FluidDialog.Show({
+        Title: "Diagnostic Terminal",
+        Message: "Streaming live verbose logs from the backend engine. Press 'Abort' to stop.",
+        DetailText: "Initializing diagnostics...",
+        DetailRows: 7,
+        Icon: Chr(0xE7BA),
+        IconColor: "#FFD60A",
+        Buttons: ["Abort", "Close"],
+        Width: 550,
+        Modal: true,
+        Owner: ui.wpfHwnd,
+        Theme: state["ComboTheme"],
+        WaitForResponse: false
+    })
+    
+    dialogUi := res.Instance
+    logText := "Initializing diagnostics...`n"
+    
+    Loop 25 {
+        if (res.Button != "")
+            break
+            
+        logStr := "[" A_Hour ":" A_Min ":" A_Sec "." A_MSec "] Checking subsystem " A_Index "...`n"
+        logText .= logStr
+        dialogUi.Update("DialogDetail", "AppendText", logStr)
+        Sleep(150)
+    }
+    
+    if (res.Button == "") {
+        dialogUi.Update("DialogDetail", "AppendText", "Diagnostics complete.")
+        res.Button := "Closed by script"
+    }
+}
+
+ShowComplexDialog3(state, ctrl, event) {
+    res := FluidDialog.Show({
+        Title: "Regex Workspace Tool",
+        Message: "Draft a new Regular Expression pattern. You can test it below:",
+        InputText: "^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$",
+        DetailText: "Test String Input:`nsupport@ahkast.io",
+        DetailRows: 5,
+        Resizable: true,
+        Width: 600,
+        Height: 500,
+        Buttons: ["Execute Matches", "Clear", "Close"],
+        Modal: false,
+        AlwaysOnTop: true,
+        Owner: ui.wpfHwnd,
+        Theme: state["ComboTheme"]
+    })
+    ui.Update("LogList", "AddItem", "Complex 3 Tool Exit: " res.Button)
 }
