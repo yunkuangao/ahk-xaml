@@ -1,7 +1,7 @@
 #Requires AutoHotkey v2.0
-#Include "..\v2-csc\xaml.ahk"
+#Include "XAML_Host.ahk"
 
-class FluidDialog {
+class XDialog {
     static Show(options) {
         ; --- CONFIGURATION ---
         title := options.HasProp("Title") ? options.Title : "Dialog"
@@ -97,7 +97,7 @@ class FluidDialog {
         for index, btnText in buttons {
             isPrimary := (btnText == "OK" || btnText == "Confirm" || btnText == "Allow Execution" || btnText == "Yes" || btnText == "Save" || btnText == "Awesome")
             isCancel := (btnText == "Cancel" || btnText == "Close" || btnText == "Abort")
-            
+
             btnEl := btnSp.Add("Button").Name("Btn" index).Content(btnText).Width(120).Margin("5,0").Cursor("Hand")
 
             if (isPrimary) {
@@ -112,7 +112,7 @@ class FluidDialog {
         }
 
         ; --- INIT LOGIC ---
-        ui := XAMLGUI(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", owner)
+        ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", owner)
 
         ; Replace some default xaml.ahk window stuff to match the dialog needs
         heightAttr := (height == "Auto") ? 'SizeToContent="Height"' : 'Height="' height '"'
@@ -136,11 +136,11 @@ class FluidDialog {
         }
 
         ; Callbacks
-        ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => FluidDialog.OnDialogLoad(ui, owner, modal, themeName, iniPath, buttons, resultObj), 255)
-        ui.OnEvent("Window", "Closing", (state, ctrl, event) => FluidDialog.OnDialogClose(ui, resultObj, owner, modal), 255)
+        ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => XDialog.OnDialogLoad(ui, owner, modal, themeName, iniPath, buttons, resultObj), 255)
+        ui.OnEvent("Window", "Closing", (state, ctrl, event) => XDialog.OnDialogClose(ui, resultObj, owner, modal), 255)
 
         for index, btnText in buttons {
-            ui.OnEvent("Btn" index, "Click", ObjBindMethod(FluidDialog, "OnButtonClick", ui, resultObj, btnText, owner, modal), 255)
+            ui.OnEvent("Btn" index, "Click", ObjBindMethod(XDialog, "OnButtonClick", ui, resultObj, btnText, owner, modal), 255)
         }
 
         if (inputText != "") {
@@ -188,7 +188,7 @@ class FluidDialog {
         if (owner) {
             ui.Update("Window", "NativeOwner", owner)
         }
-        FluidDialog.ApplyTheme(ui, themeName, iniPath)
+        XDialog.ApplyTheme(ui, themeName, iniPath)
     }
 
     static OnDialogClose(ui, resultObj, owner, modal, state := "", ctrl := "", event := "") {

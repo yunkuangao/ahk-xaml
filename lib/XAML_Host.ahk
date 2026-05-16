@@ -1,13 +1,13 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 
-class XAMLGUI {
+class XAMLHost {
     static _instances := Map()
     static _msgHooked := false
 
     __New(xaml := "", exePath := "", ownerHwnd := 0) {
         this.id := "WPF_" A_TickCount "_" Random(1000, 9999)
-        XAMLGUI._instances[this.id] := this
+        XAMLHost._instances[this.id] := this
         this.xaml := xaml
         this.exePath := exePath
         this.ownerHwnd := ownerHwnd
@@ -15,14 +15,16 @@ class XAMLGUI {
         this.tracked := Map()
         this.wpfHwnd := 0
         this.pid := 0
-        this.errLog := A_Temp "\AhkWpfError.log"
+        if !DirExist(A_Temp "\AhkWpf")
+            DirCreate(A_Temp "\AhkWpf")
+        this.errLog := A_Temp "\AhkWpf\AhkWpfError.log"
 
         this.receiver := Gui()
         DllCall("user32\ChangeWindowMessageFilterEx", "Ptr", this.receiver.Hwnd, "UInt", 0x004A, "UInt", 1, "Ptr", 0)
 
-        if (!XAMLGUI._msgHooked) {
-            OnMessage(0x004A, ObjBindMethod(XAMLGUI, "OnCopyData"))
-            XAMLGUI._msgHooked := true
+        if (!XAMLHost._msgHooked) {
+            OnMessage(0x004A, ObjBindMethod(XAMLHost, "OnCopyData"))
+            XAMLHost._msgHooked := true
         }
     }
 
@@ -74,7 +76,7 @@ class XAMLGUI {
                 header := "Engine crashed while rendering AHK Line " ahkLine "!"
             }
 
-            XAMLGUI.ShowErrorDialog("Engine Crash", header, snippet, err)
+            XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, err)
             ExitApp()
         }
     }
@@ -120,10 +122,12 @@ class XAMLGUI {
     }
 
     Show() {
+        if !DirExist(A_Temp "\AhkWpf")
+            DirCreate(A_Temp "\AhkWpf")
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf_SharedEngine_v3.exe"
+        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\AhkWpf_SharedEngine_v4.exe"
         trackedCsv := ""
 
         uniqueCsv := Map()
@@ -144,7 +148,7 @@ class XAMLGUI {
         }
         eventBindings := RTrim(eventBindings, ",")
 
-        b64Xaml := XAMLGUI.Base64Encode(this.xaml)
+        b64Xaml := XAMLHost.Base64Encode(this.xaml)
 
         if !FileExist(targetExe) {
             csCode := '
@@ -205,7 +209,9 @@ class XAMLGUI {
                                         Application.Current.Dispatcher.Invoke(() => {
                                             try {
                                                 string state = engine.CollectState();
-                                                System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf_StateDump_" + scriptName + ".ini"), state);
+                                                string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf");
+                                                if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
+                                                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "AhkWpf_StateDump_" + scriptName + ".ini"), state);
                                             } catch { }
                                             Environment.Exit(0);
                                         });
@@ -216,7 +222,11 @@ class XAMLGUI {
                             }
                             engine.RunEngine(args[0], args[1], args[2], args.Length >= 5 ? args[4] : "", args.Length >= 6 ? args[5] : "", args.Length >= 7 ? args[6] : "", args.Length >= 8 ? args[7] : "0");
                         } catch (Exception ex) {
-                            System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpfError.log"), ex.ToString());
+                            try {
+                                string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf");
+                                if (!System.IO.Directory.Exists(dir)) System.IO.Directory.CreateDirectory(dir);
+                                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "AhkWpfError.log"), ex.ToString());
+                            } catch { }
                         }
                     }
                 
@@ -227,6 +237,7 @@ class XAMLGUI {
                         string b64Xaml = "";
                         if (!string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
                             b64Xaml = System.IO.File.ReadAllText(xamlFilePath);
+                            try { System.IO.File.Delete(xamlFilePath); } catch { }
                         } else {
                             b64Xaml = "{B64_XAML}"; // Fallback
                         }
@@ -252,7 +263,7 @@ class XAMLGUI {
                                     sb.AppendLine(prefix + (i+1) + "| " + xamlLines[i].TrimEnd());
                                 }
                                 snippet = sb.ToString().TrimEnd();
-
+                
                                 string errLine = xamlLines[ex.LineNumber - 1];
                                 int idx1 = errLine.IndexOf("<!-- [ahk:");
                                 if (idx1 != -1) {
@@ -273,9 +284,9 @@ class XAMLGUI {
                             }
                             throw new Exception("AHK_LINE:" + ahkLine + "\nXAML_SNIPPET:\n" + snippet + "\n\n" + ex.ToString());
                         }
-
+                
                         if (!string.IsNullOrEmpty(scriptName)) {
-                            string dumpPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf_StateDump_" + scriptName + ".ini");
+                            string dumpPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf", "AhkWpf_StateDump_" + scriptName + ".ini");
                             if (System.IO.File.Exists(dumpPath)) {
                                 try {
                                     string[] lines = System.IO.File.ReadAllLines(dumpPath);
@@ -347,6 +358,7 @@ class XAMLGUI {
                 
                         if (!string.IsNullOrEmpty(eventsFilePath) && System.IO.File.Exists(eventsFilePath)) {
                             string bindingsStr = System.IO.File.ReadAllText(eventsFilePath);
+                            try { System.IO.File.Delete(eventsFilePath); } catch { }
                             string[] pairs = bindingsStr.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                             foreach (string p in pairs) {
                                 string[] kv = p.Split(':');
@@ -378,7 +390,7 @@ class XAMLGUI {
                             isSnappedOrMax = (win.Top <= workArea.Top && win.Height >= workArea.Height) || 
                                              (win.Left <= workArea.Left && win.Width >= workArea.Width);
                         }
-
+                
                         int cornerPref = wantsRound ? 2 : 1; // 1 = DoNotRound, 2 = Round
                         int hr = -1;
                         try {
@@ -387,11 +399,11 @@ class XAMLGUI {
                                 hr = DwmSetWindowAttribute(hwnd, 33, ref cornerPref, 4);
                             }
                         } catch { }
-
+                
                         // On Windows 11, if DwmSetWindowAttribute(33) succeeds, DWM rounds the physical window to exactly 8px.
                         // On Windows 10, it fails, and the physical window remains square (0px).
                         double actualRadius = (!isSnappedOrMax && wantsRound && hr == 0) ? 8 : 0;
-
+                
                         win.Resources["WindowRadius"] = new CornerRadius(actualRadius);
                         win.Resources["CloseBtnRadius"] = new CornerRadius(0, actualRadius, 0, 0);
                         
@@ -471,7 +483,7 @@ class XAMLGUI {
                         }
                         return sb.ToString();
                     }
-
+                
                     private void DumpState(string cName, string eName) {
                         var sb = new StringBuilder("EVENT|" + winId + "|" + cName + "|" + eName + "\n");
                         sb.Append(CollectState());
@@ -643,18 +655,18 @@ class XAMLGUI {
             )'
         }
 
-        xamlFile := A_Temp "\AhkWpf_" this.id ".xaml.b64"
+        xamlFile := A_Temp "\AhkWpf\AhkWpf_" this.id ".xaml.b64"
         if FileExist(xamlFile)
             FileDelete(xamlFile)
         FileAppend(b64Xaml, xamlFile, "UTF-8")
 
-        eventsFile := A_Temp "\AhkWpf_" this.id ".events.txt"
+        eventsFile := A_Temp "\AhkWpf\AhkWpf_" this.id ".events.txt"
         if FileExist(eventsFile)
             FileDelete(eventsFile)
         FileAppend(eventBindings, eventsFile, "UTF-8")
 
         if !FileExist(targetExe) {
-            csPath := A_Temp "\AhkWpf_SharedEngine_v3.cs"
+            csPath := A_Temp "\AhkWpf\AhkWpf_SharedEngine_v4.cs"
             if FileExist(csPath)
                 FileDelete(csPath)
             FileAppend(csCode, csPath, "UTF-8")
@@ -672,7 +684,7 @@ class XAMLGUI {
 
             if !FileExist(targetExe) {
                 errOut := FileExist(this.errLog) ? FileRead(this.errLog) : "Unknown compilation error."
-                XAMLGUI.ShowErrorDialog("Engine Compile Error", "Failed to compile background engine.", "", errOut)
+                XAMLHost.ShowErrorDialog("Engine Compile Error", "Failed to compile background engine.", "", errOut)
                 return
             }
         }
@@ -701,10 +713,10 @@ class XAMLGUI {
             return 0
 
         winId := parts[2], ctrlName := parts[3], eventName := parts[4]
-        if !XAMLGUI._instances.Has(winId)
+        if !XAMLHost._instances.Has(winId)
             return 0
 
-        instance := XAMLGUI._instances[winId]
+        instance := XAMLHost._instances[winId]
 
         if (ctrlName == "Window" && eventName == "LoadedHwnd") {
             instance.wpfHwnd := Integer(parts[5])
@@ -715,7 +727,7 @@ class XAMLGUI {
 
         stateMap := Map()
         if (eventName == "Drop" && parts.Length >= 5) {
-            stateMap["DropFiles"] := StrSplit(XAMLGUI.Base64Decode(parts[5]), "|")
+            stateMap["DropFiles"] := StrSplit(XAMLHost.Base64Decode(parts[5]), "|")
         }
 
         Loop lines.Length {
@@ -724,7 +736,7 @@ class XAMLGUI {
             pos := InStr(lines[A_Index], "=")
             if pos {
                 k := SubStr(lines[A_Index], 1, pos - 1)
-                stateMap[k] := XAMLGUI.Base64Decode(SubStr(lines[A_Index], pos + 1))
+                stateMap[k] := XAMLHost.Base64Decode(SubStr(lines[A_Index], pos + 1))
             }
         }
 

@@ -1,7 +1,7 @@
 #Requires AutoHotkey v2.0
-#Include "../v2-csc/xaml.ahk"
-#Include "XAML_Generator.ahk"
-#Include "FluidDialog.ahk"
+#Include "../lib/XAML_Host.ahk"
+#Include "../lib/XAML_Generator.ahk"
+#Include "../lib/XAML_Dialog.ahk"
 ; ==============================================================================
 ; 1. CUSTOM UI COMPONENTS (Extend the XAML Generator)
 ; ==============================================================================
@@ -123,7 +123,7 @@ BuildApplication() {
     BuildDataGridTab(tabs.Add("TabItem").Header("DATA GRID"))
     BuildComponentsTab(tabs.Add("TabItem").Header("UI COMPONENTS"))
     BuildAdvancedInputsTab(tabs.Add("TabItem").Header("ADVANCED INPUTS"))
-    BuildFluidDialogsTab(tabs.Add("TabItem").Header("FLUID DIALOGS"))
+    BuildXDialogsTab(tabs.Add("TabItem").Header("FLUID DIALOGS"))
     BuildRichComponentsTab(tabs.Add("TabItem").Header("RICH COMPONENTS"))
 
     BuildBottomBar(main.Add("Grid").Grid_Row(2).Background("{DynamicResource SidebarColor}"))
@@ -427,7 +427,7 @@ BuildAdvancedInputsTab(tab) {
     c2.Add("ComboBoxItem").Content("Guest")
 }
 
-BuildFluidDialogsTab(tab) {
+BuildXDialogsTab(tab) {
     scroll := tab.Add("ScrollViewer").VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled").Padding("0,0,15,0")
     panel := scroll.Add("StackPanel").Margin("0,20,0,0")
     panel.SetDefaults("TextBlock", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,8" })
@@ -622,7 +622,7 @@ BuildBottomBar(actions) {
 ; 3. INSTANTIATE & BIND AHK LOGIC
 ; ==============================================================================
 
-global ui := XAMLGUI(StrReplace(XAML_TEMPLATE, "%app%", BuildApplication()))
+global ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", BuildApplication()))
 
 ui.OnEvent("ComboTheme", "SelectionChanged", ThemeChanged)
 ui.OnEvent("ComboScale", "SelectionChanged", ScaleChanged)
@@ -808,11 +808,11 @@ ClearSearchBox(state, ctrl, event) {
 CloseDropdown(state, ctrl, event) {
     ui.Update("SplitBtn", "IsChecked", "False")
     if (ctrl == "BtnManageUsers") {
-        FluidDialog.Show({
+        XDialog.Show({
             Title: "Manage Users", Message: "You clicked the Manage Users button!", Icon: Chr(0xE77B), Buttons: ["OK"], Width: 300, Modal: true, Owner: ui.wpfHwnd, Theme: state["ComboTheme"]
         })
     } else if (ctrl == "BtnSettingsMenu") {
-        FluidDialog.Show({
+        XDialog.Show({
             Title: "Settings", Message: "You clicked the Settings button!", Icon: Chr(0xE713), Buttons: ["OK"], Width: 300, Modal: true, Owner: ui.wpfHwnd, Theme: state["ComboTheme"]
         })
     }
@@ -868,7 +868,7 @@ CloseColorPickerModal(state, ctrl, event) {
 
 DeleteTokenTag(state, ctrl, event) {
     if (state.Has("ChkConfirmDelete") && state["ChkConfirmDelete"] == "True") {
-        res := FluidDialog.Show({
+        res := XDialog.Show({
             Title: "Delete Tag?",
             Message: "Are you sure you want to remove this tag?",
             Icon: Chr(0xE74D), ; Delete icon
@@ -1160,7 +1160,7 @@ global sidebarVisible := false
 
 
 ShowAlertDialog(state, ctrl, event) {
-    res := FluidDialog.Show({
+    res := XDialog.Show({
         Title: "Alert",
         Message: "This is your custom message content.",
         Icon: Chr(0xE946), ; Info icon
@@ -1180,7 +1180,7 @@ ShowAlertDialog(state, ctrl, event) {
 }
 
 ShowInputDialog(state, ctrl, event) {
-    res := FluidDialog.Show({
+    res := XDialog.Show({
         Title: "What is your name?",
         Message: "This is your custom message content.",
         Icon: Chr(0xE70F), ; Pencil icon
@@ -1197,7 +1197,7 @@ ShowInputDialog(state, ctrl, event) {
         ui.Update("LogList", "AddItem", "User inputted: " res.Input)
 
         ; Chain a second dialog to prove sequential execution works!
-        FluidDialog.Show({
+        XDialog.Show({
             Title: "Hello there!",
             Message: "Welcome to the AHKAST Workbench, " res.Input "!",
             Icon: Chr(0xE77B), ; User icon
@@ -1213,7 +1213,7 @@ ShowInputDialog(state, ctrl, event) {
 }
 
 ShowErrorDialog(state, ctrl, event) {
-    res := FluidDialog.Show({
+    res := XDialog.Show({
         Title: "Critical Error",
         Message: "There was a critical error found before saving!`nThe following error was found in the board file:",
         Icon: Chr(0xE7BA), ; Warning icon
@@ -1230,7 +1230,7 @@ ShowErrorDialog(state, ctrl, event) {
 }
 
 ShowAuthDialog(state, ctrl, event) {
-    res := FluidDialog.Show({
+    res := XDialog.Show({
         Title: "Advanced Tool Authentication",
         Message: "The AI Agent has requested to execute a tool:",
         Icon: Chr(0xE7BA),
@@ -1250,7 +1250,7 @@ ShowAuthDialog(state, ctrl, event) {
 }
 
 ShowComplexDialog1(state, ctrl, event) {
-    res := FluidDialog.Show({
+    res := XDialog.Show({
         Title: "Analyzing Workspace",
         Message: "The internal AST analyzer is currently scanning the environment and building the tree index. This might take a few moments.",
         Progress: true,
@@ -1286,7 +1286,7 @@ ShowComplexDialog1(state, ctrl, event) {
 }
 
 ShowComplexDialog2(state, ctrl, event) {
-    res := FluidDialog.Show({
+    res := XDialog.Show({
         Title: "Diagnostic Terminal",
         Message: "Streaming live verbose logs from the backend engine. Press 'Abort' to stop.",
         DetailText: "Initializing diagnostics...",
@@ -1321,7 +1321,7 @@ ShowComplexDialog2(state, ctrl, event) {
 }
 
 ShowComplexDialog3(state, ctrl, event) {
-    res := FluidDialog.Show({
+    res := XDialog.Show({
         Title: "Regex Workspace Tool",
         Message: "Draft a new Regular Expression pattern. You can test it below:",
         InputText: "^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$",
@@ -1340,7 +1340,7 @@ ShowComplexDialog3(state, ctrl, event) {
 }
 
 ShowComplexDialog4(state, ctrl, event) {
-    res := FluidDialog.Show({
+    res := XDialog.Show({
         Title: "Permanent Deletion",
         Message: "Are you sure you want to permanently delete these 14 files? This action cannot be undone.",
         DetailText: "C:\projects\ahk\ahk-xaml\v3-generator\example.ahk`nC:\projects\ahk\ahk-xaml\v2-csc\xaml.components.xaml`nC:\projects\ahk\ahk-xaml\v2-csc\XAMLEngine.ahk",
