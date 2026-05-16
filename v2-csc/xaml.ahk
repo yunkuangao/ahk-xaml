@@ -189,13 +189,33 @@ class XAMLGUI {
                     public static void Main(string[] args) {
                         try {
                             if (args.Length < 3) return;
-                            new AhkWpfEngine().RunEngine(args[0], args[1], args[2]);
+                            AhkWpfEngine engine = new AhkWpfEngine();
+                            if (args.Length >= 5) {
+                                int ahkPid = int.Parse(args[3]);
+                                string scriptName = args[4];
+                                System.Threading.Thread t = new System.Threading.Thread(() => {
+                                    try {
+                                        System.Diagnostics.Process p = System.Diagnostics.Process.GetProcessById(ahkPid);
+                                        p.WaitForExit();
+                                        Application.Current.Dispatcher.Invoke(() => {
+                                            try {
+                                                string state = engine.CollectState();
+                                                System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf_StateDump_" + scriptName + ".ini"), state);
+                                            } catch { }
+                                            Environment.Exit(0);
+                                        });
+                                    } catch { Environment.Exit(0); }
+                                });
+                                t.IsBackground = true;
+                                t.Start();
+                            }
+                            engine.RunEngine(args[0], args[1], args[2], args.Length >= 5 ? args[4] : "");
                         } catch (Exception ex) {
                             System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpfError.log"), ex.ToString());
                         }
                     }
                 
-                    public void RunEngine(string id, string hwndStr, string trackedCsv) {
+                    public void RunEngine(string id, string hwndStr, string trackedCsv, string scriptName) {
                         winId = id; ahkHwnd = (IntPtr)long.Parse(hwndStr);
                         tracked = trackedCsv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                         
@@ -222,6 +242,38 @@ class XAMLGUI {
                                 }
                             }
                             throw new Exception("AHK_LINE:" + ahkLine + "\nXAML_SNIPPET:" + snippet + "\n\n" + ex.ToString());
+                        }
+
+                        if (!string.IsNullOrEmpty(scriptName)) {
+                            string dumpPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf_StateDump_" + scriptName + ".ini");
+                            if (System.IO.File.Exists(dumpPath)) {
+                                try {
+                                    string[] lines = System.IO.File.ReadAllLines(dumpPath);
+                                    System.IO.File.Delete(dumpPath);
+                                    foreach (string line in lines) {
+                                        string[] p = line.Split(new[] { '=' }, 2);
+                                        if (p.Length == 2) {
+                                            var ctrl = win.FindName(p[0]);
+                                            if (ctrl != null) {
+                                                string val = Encoding.UTF8.GetString(Convert.FromBase64String(p[1]));
+                                                if (ctrl is TextBox) ((TextBox)ctrl).Text = val;
+                                                else if (ctrl is PasswordBox) ((PasswordBox)ctrl).Password = val;
+                                                else if (ctrl is ToggleButton) { bool b; if (bool.TryParse(val, out b)) ((ToggleButton)ctrl).IsChecked = b; }
+                                                else if (ctrl is RangeBase) { double d; if (double.TryParse(val, out d)) ((RangeBase)ctrl).Value = d; }
+                                                else if (ctrl is ComboBox) {
+                                                    ComboBox cb = (ComboBox)ctrl;
+                                                    bool found = false;
+                                                    foreach (var item in cb.Items) {
+                                                        ComboBoxItem cbi = item as ComboBoxItem;
+                                                        if (cbi != null && cbi.Content != null && cbi.Content.ToString() == val) { cb.SelectedItem = item; found = true; break; }
+                                                    }
+                                                    if (!found) cb.Text = val;
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch { }
+                            }
                         }
                 
                         var dragArea = win.FindName("DragArea") as UIElement;
@@ -335,34 +387,23 @@ class XAMLGUI {
                         } catch { }
                     }
                 
-                    private void DumpState(string cName, string eName) {
-                        var sb = new StringBuilder("EVENT|" + winId + "|" + cName + "|" + eName + "\n");
+                    public string CollectState() {
+                        var sb = new StringBuilder();
                         foreach (var t in tracked) {
                             var c = win.FindName(t);
                             if (c != null) {
                                 string val = "";
-                                if (c is TextBox) {
-                                    val = ((TextBox)c).Text;
-                                }
-                                else if (c is PasswordBox) {
-                                    val = ((PasswordBox)c).Password;
-                                }
-                                else if (c is ToggleButton) {
-                                    bool? isChecked = ((ToggleButton)c).IsChecked;
-                                    val = isChecked.HasValue ? isChecked.Value.ToString() : "False";
-                                }
-                                else if (c is RangeBase) {
-                                    val = ((RangeBase)c).Value.ToString();
-                                }
+                                if (c is TextBox) val = ((TextBox)c).Text;
+                                else if (c is PasswordBox) val = ((PasswordBox)c).Password;
+                                else if (c is ToggleButton) { bool? isChecked = ((ToggleButton)c).IsChecked; val = isChecked.HasValue ? isChecked.Value.ToString() : "False"; }
+                                else if (c is RangeBase) val = ((RangeBase)c).Value.ToString();
                                 else if (c is ComboBox) {
                                     ComboBox cb = (ComboBox)c;
                                     if (cb.SelectedItem is ComboBoxItem) {
                                         object content = ((ComboBoxItem)cb.SelectedItem).Content;
                                         val = content != null ? content.ToString() : "";
                                     }
-                                    else {
-                                        val = cb.Text;
-                                    }
+                                    else val = cb.Text;
                                 }
                                 else if (c is TreeView) {
                                     TreeView tv = (TreeView)c;
@@ -375,6 +416,12 @@ class XAMLGUI {
                                 sb.Append(t + "=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(val)) + "\n");
                             }
                         }
+                        return sb.ToString();
+                    }
+
+                    private void DumpState(string cName, string eName) {
+                        var sb = new StringBuilder("EVENT|" + winId + "|" + cName + "|" + eName + "\n");
+                        sb.Append(CollectState());
                         SendToAhk(sb.ToString());
                     }
                 
@@ -548,7 +595,7 @@ class XAMLGUI {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        Run('"' targetExe '" "' this.id '" "' String(this.receiver.Hwnd) '" "' trackedCsv '"', "", "Hide", &pid)
+        Run('"' targetExe '" "' this.id '" "' String(this.receiver.Hwnd) '" "' trackedCsv '" "' ProcessExist() '" "' A_ScriptName '"', "", "Hide", &pid)
         this.pid := pid
 
         SetTimer(ObjBindMethod(this, "CheckForCrashes"), 500)

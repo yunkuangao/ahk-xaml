@@ -70,18 +70,18 @@ _CodeEditor(this, filename) {
     ideGrid := ideBdr.Add("Grid")
     ideGrid.Rows("30", "*")
 
-    ideHeader := ideGrid.Add("Border").Grid_Row(0).Background("#2D2D30").CornerRadius("5,5,0,0")
+    ideHeader := ideGrid.Add("Border").Grid_Row(0).Background("{DynamicResource ControlBorder}").CornerRadius("5,5,0,0")
     headerInner := ideHeader.Add("Grid")
-    headerInner.Add("TextBlock").Text(filename).Foreground("#CCCCCC").FontSize(11).HorizontalAlignment("Left").VerticalAlignment("Center").Margin("15,0,0,0")
+    headerInner.Add("TextBlock").Text(filename).Foreground("{DynamicResource TextMain}").FontSize(11).HorizontalAlignment("Left").VerticalAlignment("Center").Margin("15,0,0,0")
     
     btns := headerInner.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Margin("0,0,10,0")
-    btns.SetDefaults("Button", { Background: "Transparent", BorderThickness: 0, Foreground: "#AAAAAA", FontSize: 10, Padding: "8,2", Margin: "2,0", Cursor: "Hand" })
+    btns.SetDefaults("Button", { Background: "Transparent", BorderThickness: 0, Foreground: "{DynamicResource TextSub}", FontSize: 10, Padding: "8,2", Margin: "2,0", Cursor: "Hand" })
     btns.Add("Button").Content("Save")
     btns.Add("Button").Content("Select All")
-    btns.Add("Button").Content("Run").Foreground("#4DB33D").FontWeight("Bold")
+    btns.Add("Button").Content("Run").Foreground("{DynamicResource Accent}").FontWeight("Bold")
 
-    editorBorder := ideGrid.Add("Border").Grid_Row(1).Background("#1E1E1E").CornerRadius("0,0,5,5")
-    editor := editorBorder.Add("RichTextBox").FontFamily("Consolas, Courier New").Background("Transparent").BorderThickness(0).Padding("15").Height(130).Foreground("#D4D4D4").CaretBrush("#FFFFFF")
+    editorBorder := ideGrid.Add("Border").Grid_Row(1).Background("{DynamicResource ControlBg}").CornerRadius("0,0,5,5")
+    editor := editorBorder.Add("RichTextBox").FontFamily("Consolas, Courier New").Background("Transparent").BorderThickness(0).Padding("15").Height(130).Foreground("{DynamicResource TextMain}").CaretBrush("{DynamicResource TextMain}")
     
     return editor ; Return the RichTextBox so syntax highlighting flows can be easily chained to it
 }
@@ -93,7 +93,7 @@ _CodeEditor(this, filename) {
 BuildApplication() {
     X := XAML_Generator("Grid").Name("AppGrid").Background("{DynamicResource BgColor}")
     X.Add("Grid.LayoutTransform").Add("ScaleTransform").SetProp("x:Name", "AppScale").ScaleX(1).ScaleY(1)
-    X.Cols("240", "*")
+    X.Cols("Auto", "*")
 
     ; -- 2.1 Theme & Global Styles --
     PrimaryButtonTemplate(el) {
@@ -109,7 +109,7 @@ BuildApplication() {
     X.SetDefaults("ListBox", { Background: "Transparent", BorderThickness: 0, ScrollViewer_HorizontalScrollBarVisibility: "Disabled" })
 
     ; -- 2.2 Navigation Sidebar --
-    sidebar := X.Add("Border").Name("SidebarBorder").Grid_Column(0).Background("{DynamicResource SidebarColor}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,1,0")
+    sidebar := X.Add("Border").Name("SidebarBorder").Width(240).Grid_Column(0).Background("{DynamicResource SidebarColor}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,1,0")
     BuildSidebar(sidebar)
 
     ; -- 2.3 Main Application Area --
@@ -158,7 +158,17 @@ BuildSidebar(container) {
 BuildWindowControls(container) {
     grid := container.Add("Grid")
     
-    titleSp := grid.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").Margin("15,0,0,0").IsHitTestVisible("False")
+    ; Left side (Button + Title)
+    leftSp := grid.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").Margin("15,0,0,0")
+    
+    ; Menu Button
+    ChromeBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="4"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
+    menuBtn := leftSp.Add("Button").Name("BtnToggleSidebar").WindowChrome_IsHitTestVisibleInChrome("True").Width(30).Height(30).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Toggle Sidebar").Margin("0,0,10,0")
+    menuBtn.InjectResources(ChromeBtnTemplate)
+    menuBtn.Add("TextBlock").Text(Chr(0xE700)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(14).VerticalAlignment("Center").HorizontalAlignment("Center")
+
+    ; App Title container (IsHitTestVisible=False)
+    titleSp := leftSp.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").IsHitTestVisible("False")
     titleSp.Add("Image").Name("AppIcon").Width(16).Height(16).Margin("0,0,10,0")
     titleSp.Add("TextBlock").Name("AppTitle").Text("").Foreground("{DynamicResource TextMain}").FontSize(12).FontWeight("SemiBold")
 
@@ -306,10 +316,13 @@ BuildComponentsTab(tab) {
     flow := editor.Add("FlowDocument").LineHeight(20)
     para := flow.Add("Paragraph").Margin("0")
     
-    ; VS Code Dark+ Syntax highlighting
-    cFunction := "#569CD6", cClass := "#4EC9B0", cVar := "#9CDCFE", cString := "#CE9178", cOperator := "#D4D4D4", cKeyword := "#C586C0", cMethod := "#DCDCAA"
+    ; Theme-aware Syntax highlighting
+    cKeyword := "{DynamicResource Accent}"
+    cMethod := "{DynamicResource TextMain}"
+    cString := "{DynamicResource TextSub}"
+    cOperator := "{DynamicResource TextMain}"
     
-    para.Add("Run").Text("function").Foreground(cFunction)
+    para.Add("Run").Text("function").Foreground(cKeyword).FontWeight("Bold")
     para.Add("Run").Text(" ").Foreground(cOperator)
     para.Add("Run").Text("initializeCore").Foreground(cMethod)
     para.Add("Run").Text("() {").Foreground(cOperator)
@@ -320,8 +333,8 @@ BuildComponentsTab(tab) {
     para.Add("Run").Text("'System online.'").Foreground(cString)
     para.Add("Run").Text(");").Foreground(cOperator)
     para.Add("LineBreak")
-    para.Add("Run").Text("    return ").Foreground(cKeyword)
-    para.Add("Run").Text("true").Foreground(cFunction)
+    para.Add("Run").Text("    return ").Foreground(cKeyword).FontWeight("Bold")
+    para.Add("Run").Text("true").Foreground(cKeyword)
     para.Add("Run").Text(";").Foreground(cOperator)
     para.Add("LineBreak")
     para.Add("Run").Text("}").Foreground(cOperator)
@@ -353,6 +366,7 @@ global ui := XAMLGUI(StrReplace(XAML_TEMPLATE, "%app%", BuildApplication()))
 ui.OnEvent("ComboTheme", "SelectionChanged", ThemeChanged)
 ui.OnEvent("ComboScale", "SelectionChanged", ScaleChanged)
 ui.OnEvent("BtnExecute", "Click", ExecuteProcess)
+ui.OnEvent("BtnToggleSidebar", "Click", ToggleSidebar)
 ui.OnEvent("Window", "Loaded", OnUIReady)
 
 ui.Track("ComboTheme")
@@ -443,4 +457,14 @@ ScaleChanged(state, ctrl, event) {
         ui.Update("AppScale", "ScaleX", "1.15")
         ui.Update("AppScale", "ScaleY", "1.15")
     }
+}
+
+global sidebarVisible := true
+
+ToggleSidebar(state, ctrl, event) {
+    global sidebarVisible := !sidebarVisible
+    if (sidebarVisible)
+        ui.Update("SidebarBorder", "Visibility", "Visible")
+    else
+        ui.Update("SidebarBorder", "Visibility", "Collapsed")
 }
