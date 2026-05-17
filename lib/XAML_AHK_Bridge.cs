@@ -630,17 +630,20 @@ public class AhkWpfEngine : Application {
                         Console.WriteLine("XamlParse Error: " + ex.Message);
                     }
                 } else if (parts[1] == "Background" && ctrl is System.Windows.Controls.Control) {
-                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    ((System.Windows.Controls.Control)ctrl).Background = brush;
+                    if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Control)ctrl).SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, parts[2].Substring(17, parts[2].Length - 18));
+                    else ((System.Windows.Controls.Control)ctrl).Background = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
                 } else if (parts[1] == "Foreground" && ctrl is System.Windows.Controls.Control) {
-                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    ((System.Windows.Controls.Control)ctrl).Foreground = brush;
+                    if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Control)ctrl).SetResourceReference(System.Windows.Controls.Control.ForegroundProperty, parts[2].Substring(17, parts[2].Length - 18));
+                    else ((System.Windows.Controls.Control)ctrl).Foreground = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
                 } else if (parts[1] == "BorderBrush" && ctrl is Border) {
-                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    ((Border)ctrl).BorderBrush = brush;
+                    if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((Border)ctrl).SetResourceReference(Border.BorderBrushProperty, parts[2].Substring(17, parts[2].Length - 18));
+                    else ((Border)ctrl).BorderBrush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
                 } else if (parts[1] == "Stroke" && ctrl is System.Windows.Shapes.Shape) {
-                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    ((System.Windows.Shapes.Shape)ctrl).Stroke = brush;
+                    if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Shapes.Shape)ctrl).SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, parts[2].Substring(17, parts[2].Length - 18));
+                    else ((System.Windows.Shapes.Shape)ctrl).Stroke = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
+                } else if (parts[1] == "Fill" && ctrl is System.Windows.Shapes.Shape) {
+                    if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Shapes.Shape)ctrl).SetResourceReference(System.Windows.Shapes.Shape.FillProperty, parts[2].Substring(17, parts[2].Length - 18));
+                    else ((System.Windows.Shapes.Shape)ctrl).Fill = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
                 } else if (parts[1] == "StrokeThickness" && ctrl is System.Windows.Shapes.Shape) {
                     ((System.Windows.Shapes.Shape)ctrl).StrokeThickness = double.Parse(parts[2]);
                 } else if (parts[1] == "RemoveItem" && ctrl is ItemsControl) {
@@ -1008,14 +1011,16 @@ public class AhkWpfEngine : Application {
         if (parent != null) {
             parent.PreviewMouseWheel += (s, e) => {
                 double zoom = e.Delta > 0 ? 1.1 : 0.9;
-                double newScale = scaleTransform.ScaleX * zoom;
+                double scaleX = scaleTransform.ScaleX;
+                double newScale = scaleX * zoom;
                 if (newScale < 0.2) newScale = 0.2;
                 if (newScale > 5.0) newScale = 5.0;
                 
-                // Zoom toward mouse position
-                var pos = e.GetPosition(canvas);
-                scaleTransform.CenterX = pos.X;
-                scaleTransform.CenterY = pos.Y;
+                // Zoom keeping mouse position invariant
+                var canvasPos = e.GetPosition(canvas);
+                translateTransform.X = translateTransform.X + canvasPos.X * (scaleX - newScale);
+                translateTransform.Y = translateTransform.Y + canvasPos.Y * (scaleX - newScale);
+                
                 scaleTransform.ScaleX = newScale;
                 scaleTransform.ScaleY = newScale;
                 e.Handled = true;
@@ -1023,6 +1028,7 @@ public class AhkWpfEngine : Application {
             
             // Pan via middle-click drag
             bool isPanning = false;
+            bool panMoved = false;
             Point panStart = new Point();
             double panStartTX = 0, panStartTY = 0;
             
@@ -1035,6 +1041,7 @@ public class AhkWpfEngine : Application {
             parent.MouseDown += (s, e) => {
                 if (e.ChangedButton == System.Windows.Input.MouseButton.Middle) {
                     isPanning = true;
+                    panMoved = false;
                     panStart = e.GetPosition(parent);
                     panStartTX = translateTransform.X;
                     panStartTY = translateTransform.Y;
@@ -1042,6 +1049,12 @@ public class AhkWpfEngine : Application {
                     parent.Cursor = System.Windows.Input.Cursors.Hand;
                     e.Handled = true;
                 }
+            };
+            
+            parent.PreviewMouseRightButtonDown += (s, e) => {
+                var pos = e.GetPosition(canvas);
+                string coords = pos.X.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," + pos.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ContextMenuOpened|" + Convert.ToBase64String(Encoding.UTF8.GetBytes(coords)) + "\n");
             };
             
             // Mode logic: Left click on empty space (Canvas) triggers Pan or Select
@@ -1070,6 +1083,7 @@ public class AhkWpfEngine : Application {
                 
                 if (mode == "Pan") {
                     isPanning = true;
+                    panMoved = false;
                     panStart = e.GetPosition(parent);
                     panStartTX = translateTransform.X;
                     panStartTY = translateTransform.Y;
@@ -1093,7 +1107,7 @@ public class AhkWpfEngine : Application {
                     selectionBox.Width = 0;
                     selectionBox.Height = 0;
                     selectionBox.Visibility = Visibility.Visible;
-                    lastSelectionSet = "";
+                    lastSelectionSet = "FORCE_UPDATE";
                     parent.CaptureMouse();
                     e.Handled = true;
                 } else if (mode == "Knife") {
@@ -1118,6 +1132,7 @@ public class AhkWpfEngine : Application {
             parent.MouseMove += (s, e) => {
                 if (isPanning) {
                     var pos = e.GetPosition(parent);
+                    if (Math.Abs(pos.X - panStart.X) > 2 || Math.Abs(pos.Y - panStart.Y) > 2) panMoved = true;
                     translateTransform.X = panStartTX + (pos.X - panStart.X);
                     translateTransform.Y = panStartTY + (pos.Y - panStart.Y);
                     e.Handled = true;
@@ -1140,7 +1155,9 @@ public class AhkWpfEngine : Application {
                             double ny = Canvas.GetTop(fe);
                             if (double.IsNaN(nx)) nx = 0;
                             if (double.IsNaN(ny)) ny = 0;
-                            if (nx < x + w && nx + fe.Width > x && ny < y + h && ny + fe.Height > y) {
+                            double nw = fe.ActualWidth;
+                            double nh = fe.ActualHeight;
+                            if (nx < x + w && nx + nw > x && ny < y + h && ny + nh > y) {
                                 currentSelected.Add(fe.Name.Substring(5));
                             }
                         }
@@ -1209,10 +1226,16 @@ public class AhkWpfEngine : Application {
                     isPanning = false;
                     parent.ReleaseMouseCapture();
                     parent.Cursor = System.Windows.Input.Cursors.Arrow;
+                    if (!panMoved) {
+                        SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ClearSelection|\n");
+                    }
                     e.Handled = true;
                 } else if (selectionBox != null && selectionBox.Visibility == Visibility.Visible) {
                     selectionBox.Visibility = Visibility.Collapsed;
                     parent.ReleaseMouseCapture();
+                    if (lastSelectionSet == "FORCE_UPDATE") {
+                        SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ClearSelection|\n");
+                    }
                     lastSelectionSet = "";
                     e.Handled = true;
                 } else if (connectionSourcePort != null && tempConnection != null && tempConnection.Visibility == Visibility.Visible) {
@@ -1276,11 +1299,11 @@ public class AhkWpfEngine : Application {
                     if (double.IsNaN(top)) top = 0;
                     
                     var fe = child as FrameworkElement;
-                    if (fe != null && !double.IsNaN(fe.Width) && !double.IsNaN(fe.Height) && fe.Width > 0) {
+                    if (fe != null && fe.ActualWidth > 0 && fe.ActualHeight > 0) {
                         minX = Math.Min(minX, left);
                         minY = Math.Min(minY, top);
-                        maxX = Math.Max(maxX, left + fe.Width);
-                        maxY = Math.Max(maxY, top + fe.Height);
+                        maxX = Math.Max(maxX, left + fe.ActualWidth);
+                        maxY = Math.Max(maxY, top + fe.ActualHeight);
                     }
                 }
                 
@@ -1305,8 +1328,8 @@ public class AhkWpfEngine : Application {
                         scaleTransform.ScaleX = scale;
                         scaleTransform.ScaleY = scale;
                         
-                        translateTransform.X = (viewportWidth - contentWidth * scale) / 2 - minX * scale;
-                        translateTransform.Y = (viewportHeight - contentHeight * scale) / 2 - minY * scale;
+                        translateTransform.X = (viewportWidth - contentWidth * scale) / 2 - minX * scale - canvas.Margin.Left;
+                        translateTransform.Y = (viewportHeight - contentHeight * scale) / 2 - minY * scale - canvas.Margin.Top;
                     }
                 }
             }
@@ -1324,15 +1347,16 @@ public class AhkWpfEngine : Application {
                 if (parent != null) {
                     double centerX = parent.ActualWidth / 2;
                     double centerY = parent.ActualHeight / 2;
+                    var parentCenter = new Point(centerX, centerY);
+                    var canvasPos = parent.TranslatePoint(parentCenter, canvas);
                     
                     double newScale = scaleTransform.ScaleX * zoomFactor;
                     if (newScale > 5.0) newScale = 5.0;
                     if (newScale < 0.1) newScale = 0.1;
                     
-                    double finalFactor = newScale / scaleTransform.ScaleX;
-                    
-                    translateTransform.X = centerX - (centerX - translateTransform.X) * finalFactor;
-                    translateTransform.Y = centerY - (centerY - translateTransform.Y) * finalFactor;
+                    double scaleX = scaleTransform.ScaleX;
+                    translateTransform.X = translateTransform.X + canvasPos.X * (scaleX - newScale);
+                    translateTransform.Y = translateTransform.Y + canvasPos.Y * (scaleX - newScale);
                     
                     scaleTransform.ScaleX = newScale;
                     scaleTransform.ScaleY = newScale;

@@ -15,8 +15,8 @@ root := app.main.Add("Grid").Grid_Row(1)
 ; Command Bar
 cmdBarBorder := root.Add("Border").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,0,1").VerticalAlignment("Top").Padding("10").SetProp("Panel.ZIndex", "10")
 cmdBar := cmdBarBorder.CommandBar("TopCmdBar")
-cmdBar.AddButton(Chr(0xE74E), "Save", "BtnSave")
-cmdBar.AddButton(Chr(0xE70F), "Edit", "BtnEdit")
+cmdBar.AddButton(Chr(0xE74E), "Save State", "BtnSave")
+cmdBar.AddButton(Chr(0xE8E5), "Load State", "BtnLoad")
 cmdBar.AddSeparator()
 cmdBar.AddButton(Chr(0xE711), "Close", "BtnCmdClose")
 
@@ -64,18 +64,19 @@ mdText := "
     - No HTML rendering overhead
     - Supports **bold text** dynamically!
 )"
-docSp := docBdr.Add("StackPanel")
+docSp := docBdr.Add("Grid")
+docSp.Rows("Auto", "*")
 
-headerSp := docSp.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,10")
+headerSp := docSp.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,10")
 headerSp.Add("TextBlock").Text("Markdown Renderer").Foreground("{DynamicResource TextSub}").FontSize("12").FontWeight("Bold").Margin("0,0,10,0")
 headerSp.Add("CheckBox").Name("BtnToggleMd").Content("Edit Raw").Style("{StaticResource ToggleSwitch}")
 
-mdGrid := docSp.Add("Grid")
-mdSv := mdGrid.Add("ScrollViewer").Name("MdViewSv").VerticalScrollBarVisibility("Auto").MaxHeight("200")
-mdRenderer := mdSv.Add("StackPanel").Name("MdView")
+mdGrid := docSp.Add("Grid").Grid_Row(1)
+mdSv := mdGrid.Add("ScrollViewer").Name("MdViewSv").VerticalScrollBarVisibility("Auto")
+mdRenderer := mdSv.Add("StackPanel").Name("MdView").VerticalAlignment("Top")
 mdRenderer.MarkdownRenderer(mdText)
 
-mdGrid.Add("TextBox").Name("MdEditor").Text(mdText).TextWrapping("Wrap").AcceptsReturn("True").MaxHeight("200").VerticalScrollBarVisibility("Auto").Visibility("Collapsed").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10")
+mdGrid.Add("TextBox").Name("MdEditor").Text(mdText).TextWrapping("Wrap").AcceptsReturn("True").VerticalScrollBarVisibility("Auto").VerticalContentAlignment("Top").Visibility("Collapsed").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10")
 
 nav.AddPage("Dashboard", Chr(0xEA24), dashGrid)
 
@@ -87,16 +88,6 @@ kanbanGrid._Parent := app.X
 kanbanGrid.Rows("Auto", "Auto", "*")
 kanbanGrid.Add("TextBlock").Text("Task Board").Grid_Row(0).FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10")
 
-; Toolbar
-kbToolbar := kanbanGrid.Add("StackPanel").Grid_Row(1).Orientation("Horizontal").Margin("0,0,0,12")
-btnLeft := kbToolbar.Add("Button").Name("KbMoveLeft").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10,6").Margin("0,0,8,0").Cursor("Hand")
-spL := btnLeft.Add("StackPanel").Orientation("Horizontal")
-spL.Add("TextBlock").Text(Chr(0xE76B)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("12").VerticalAlignment("Center").Margin("0,0,6,0")
-spL.Add("TextBlock").Text("Move Left").FontSize("12").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}")
-btnRight := kbToolbar.Add("Button").Name("KbMoveRight").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10,6").Cursor("Hand")
-spR := btnRight.Add("StackPanel").Orientation("Horizontal")
-spR.Add("TextBlock").Text("Move Right").FontSize("12").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}")
-spR.Add("TextBlock").Text(Chr(0xE76C)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("12").VerticalAlignment("Center").Margin("6,0,0,0")
 
 kb := kanbanGrid.KanbanBoard("ProjectKanban")
 kb.sv.Grid_Row(2)
@@ -221,33 +212,37 @@ _RebuildMarkdown(this, state, ctrl, event) {
     if !state.Has("MdEditor")
         return
     rawText := state["MdEditor"]
-    
+
     ; Normalize line endings
     rawText := StrReplace(rawText, "`r`n", "`n")
-    
+
     ; Build markdown elements
     temp := XAML_Generator("StackPanel")
     temp._Parent := this.X
     temp.MarkdownRenderer(rawText)
-    
+
     ; Collect child XAML - the MarkdownRenderer adds a StackPanel with children
     innerXaml := ""
     for child in temp._Children {
         for innerChild in child._Children
             innerXaml .= innerChild.ToString()
     }
-    
+
     ; Wrap in a StackPanel with xmlns for XamlReader.Parse
     xamlStr := '<StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">' innerXaml '</StackPanel>'
-        
+
     ui.Update("MdView", "ClearItems", "")
     ui.Update("MdView", "AddXamlItem", xamlStr)
-    
+
     ui.Update("MdViewSv", "Visibility", "Visible")
     ui.Update("MdEditor", "Visibility", "Collapsed")
 }
 
+ui.OnEvent("BtnSave", "Click", (*) => ng.SaveState("node_state.ini"))
+ui.OnEvent("BtnLoad", "Click", (*) => ng.LoadState("node_state.ini", ui))
 ui.OnEvent("BtnCmdClose", "Click", (*) => ExitApp())
+ui.OnEvent("KbMoveLeft", "Click", (*) => kb.MoveSelectedTo(kb.selectedColIdx - 1))
+ui.OnEvent("KbMoveRight", "Click", (*) => kb.MoveSelectedTo(kb.selectedColIdx + 1))
 ui.OnEvent("BtnZoomAll", "Click", (*) => ui.Update(ng.id, "ZoomAll", ""))
 ui.OnEvent("BtnZoomIn", "Click", (*) => ui.Update(ng.id, "Zoom", "1.2"))
 ui.OnEvent("BtnZoomOut", "Click", (*) => ui.Update(ng.id, "Zoom", "0.8"))
@@ -262,8 +257,8 @@ Hotkey("Delete", (*) => ng.DeleteSelectedConnections())
 HotIfWinActive
 
 ; Enable C#-side drag on nodes and cropper after Window loads
-SetTimer(_EnableDragComponents, -500)
-_EnableDragComponents() {
+ui.OnEvent("Window", "LoadedHwnd", _EnableDragComponents)
+_EnableDragComponents(state?, ctrl?, event?) {
     kb.EnableDrag(ui)
     ng.EnableDrag(ui)
     ic.EnableDrag(ui)
