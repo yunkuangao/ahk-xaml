@@ -39,6 +39,33 @@ element.Grid_Row(1).Grid_Column(2).ScrollViewer_VerticalScrollBarVisibility("Aut
 ; Generates: Grid.Row="1" Grid.Column="2" ScrollViewer.VerticalScrollBarVisibility="Auto"
 ```
 
+### Special Methods
+
+| Method | Purpose |
+|---|---|
+| `.Add("Type")` | Create a child element |
+| `.Parent()` | Return to parent element |
+| `.Name("id")` | Set `x:Name` for event binding and tracking |
+| `.Use("Template")` | Apply a pre-defined template |
+| `.SetProp("key", "val")` | Set an attribute with special characters |
+| `.InjectResources(xaml)` | Inject raw XAML into element's `Resources` |
+| `.SetDefaults("Type", map)` | Apply cascading defaults to children |
+| `.Compile()` | Serialize the AST to XAML markup |
+
+### Naming Elements
+The `.Name()` method assigns an `x:Name` attribute, which is required for:
+- **Event binding:** `ui.OnEvent("BtnSave", "Click", callback)`
+- **State tracking:** `ui.Track("TxtUsername")`
+- **Dynamic updates:** `ui.Update("BtnSave", "Text", "Saved!")`
+
+```ahk
+; Named element — can be interacted with
+parent.Add("TextBox").Name("TxtEmail").Text("user@example.com")
+
+; Unnamed element — static display only
+parent.Add("TextBlock").Text("Email:")
+```
+
 ---
 
 ## 2. The Background Engine Architecture
@@ -46,7 +73,7 @@ element.Grid_Row(1).Grid_Column(2).ScrollViewer_VerticalScrollBarVisibility("Aut
 ### Why a C# Engine?
 AutoHotkey is single-threaded. Rendering complex, hardware-accelerated UIs on the main AHK thread causes massive latency, message blockages, and instability during heavy processing (like I/O or loops). 
 
-To solve this, `ahk-xaml` dynamically compiles a lightweight C# WPF application (`AhkWpf_SharedEngine_v7.exe`) to a temporary directory. 
+To solve this, `ahk-xaml` dynamically compiles a lightweight C# WPF application (`ahk-xaml.dll`) to a temporary directory. 
 
 1. Your AHK script generates the XAML markup string.
 2. AHK launches the C# engine and passes the XAML to it.
@@ -60,6 +87,23 @@ AHK and the C# engine communicate synchronously via Win32 `WM_COPYDATA` messages
 - When AHK needs to update the UI (e.g., change text, toggle a checkbox), it sends a payload back to the C# engine.
 
 This complete separation of concerns ensures that your AHK business logic never freezes the UI, and the UI never bottlenecks your scripts.
+
+### Payload Streaming
+For large UIs, the XAML is too big for a single `WM_COPYDATA` message. Instead, the framework uses a two-step handshake:
+
+1. Engine starts → sends `Ready` event with a temporary message window handle.
+2. AHK sends `XAML_PAYLOAD|<xaml>\n---AHK-XAML-EVENTS---\n<bindings>` to that handle.
+3. Engine parses → displays window → sends `LoadedHwnd` event.
+
+### Dynamic Element Injection
+After the window is loaded, new elements can be injected at runtime using `AddXamlItem`. The XAML string **must** include the full WPF namespace:
+
+```ahk
+xaml := '<TextBlock xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Text="Dynamic!" />'
+ui.Update("MyPanel", "AddXamlItem", xaml)
+```
+
+The C# engine parses the string via `XamlReader.Parse()`, registers any `x:Name` attributes in the window's `NameScope`, and adds the element to the target container.
 
 ---
 
@@ -86,6 +130,17 @@ X.DefineTemplate("CardPanel", { Background: "{DynamicResource ControlBg}", Borde
 app.Add("Border").Use("CardPanel")
 ```
 
+### Built-in Templates
+
+| Template | Description |
+|---|---|
+| `PrimaryBtn` | Accent-colored button with hover opacity |
+| `IconBtn` | Compact transparent button with rounded hover |
+| `CardPanel` | Rounded border with themed background |
+| `SubtitleText` | Small, bold, muted text |
+| `PageTitle` | Large, semi-bold heading |
+| `BodyText` | 13pt wrapping body text |
+
 ---
 
 ## 4. Theming & ResourceDictionaries
@@ -102,8 +157,111 @@ btn.Foreground("#FFFFFF").Background("#333333")
 btn.Foreground("{DynamicResource TextMain}").Background("{DynamicResource ControlBg}")
 ```
 
-If you need to change a theme programmatically, you can send a Resource update to the engine:
+### Core Theme Resources
+
+| Resource Key | Purpose |
+|---|---|
+| `BgColor` | Window background |
+| `SidebarColor` | Sidebar background |
+| `Accent` | Primary accent color |
+| `TextMain` | Primary text color |
+| `TextSub` | Secondary/muted text |
+| `ControlBg` | Control/card background |
+| `ControlBgHover` | Control hover state |
+| `ControlBorder` | Border color |
+| `DropdownBg` | Popup/dropdown background |
+| `WindowRadius` | Window corner radius |
+| `ScrollBarWidth` | Scrollbar width |
+
+### Runtime Theme Changes
+
 ```ahk
 ; Change the main text color to Red on the fly
-app.Events.Update("Resource", "Brush:TextMain", "#FF0000")
+ui.Update("Resource", "Brush:TextMain", "#FF0000")
+
+; Change corner radius
+ui.Update("Resource", "CornerRadius:WindowRadius", "12")
+
+; Change DWM backdrop
+ui.Update("Window", "DWM", "3,1")  ; MicaAlt + Dark Mode
 ```
+
+### Theme INI Format
+
+```ini
+[Dark Mica (Win 11)]
+Window_DWM=2,1
+Resource_Brush:BgColor=#01000000
+Resource_Brush:Accent=#0A84FF
+Resource_Brush:TextMain=#FFFFFF
+Resource_Brush:TextSub=#A0FFFFFF
+Resource_Brush:ControlBg=#15FFFFFF
+Resource_Brush:ControlBgHover=#20FFFFFF
+Resource_Brush:ControlBorder=#25FFFFFF
+```
+
+---
+
+## 5. Component Lifecycle
+
+### Build → Compile → Bind → Show
+
+Most advanced components follow a consistent lifecycle:
+
+```ahk
+; 1. BUILD: Construct the XAML AST
+myGrid := DataGridEx("DGX", data, { PageSize: 50 })
+myGrid.Build(parent)
+
+; 2. COMPILE: Generate the XAML and create the IPC host
+ui := app.Compile()
+
+; 3. BIND: Register all events and state tracking
+myGrid.Bind(ui)
+
+; 4. SHOW: Launch the WPF engine
+app.Show()
+```
+
+### Class-Based vs Prototype Components
+
+**Class-based** (standalone instances with internal state):
+```ahk
+; Create → Build → Bind
+picker := DateRangePickerEx("Dates", "2026-01-01", "2026-12-31")
+picker.Build(panel)
+picker.Bind(ui)
+```
+
+**Prototype extensions** (chainable, inline):
+```ahk
+; Just call directly on any element
+panel.Toggle("MySwitch", "Dark Mode", true)
+panel.StatCard("REVENUE", "$45K", "+12%", true)
+panel.SkeletonLoader(200, 20)
+```
+
+---
+
+## 6. Error Handling
+
+### AHK Line Tracking
+
+Every element generated by `XAML_Generator` automatically records the AHK source line:
+```xml
+<!-- [ahk:42] --><Button Width="100" />
+```
+
+When the C# engine encounters a parsing error, it traces back to the nearest AHK line marker and reports:
+```
+Engine crashed while rendering AHK Line 42!
+```
+
+### Common Pitfalls
+
+| Error | Cause | Fix |
+|---|---|---|
+| `Cannot create unknown type` | Missing xmlns on dynamic XAML | Add `xmlns="http://schemas.microsoft.com/..."` |
+| `Name already registered` | Duplicate `x:Name` values | Use unique names per element |
+| `XamlParseException` | Invalid property or typo | Check the XAML snippet in the error dialog |
+| `Timed out waiting for payload` | AHK message queue full | Increase `OnMessage` MaxThreads |

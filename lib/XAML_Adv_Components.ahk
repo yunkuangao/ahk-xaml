@@ -2183,3 +2183,303 @@ XAMLElement.Prototype.DefineProp("WebView", { Call: _WebView })
 _WebView(this, name := "") {
     return XWebView(this, name)
 }
+
+; ==============================================================================
+; XFlyout Component
+; ==============================================================================
+
+class XFlyout {
+    __New(id, side := "Left", mode := "Push", size := 240, dimBg := false) {
+        this.id := id
+        this.side := side
+        this.mode := mode
+        this.size := size
+        this.dimBg := dimBg
+        this.stateName := "Flyout_" id "_State"
+        this.containerName := "Flyout_" id "_Container"
+    }
+
+    Build(parent) {
+        ; Create a hidden ToggleButton to track state
+        parent.Add("ToggleButton").Name(this.stateName).Visibility("Collapsed")
+        
+        isVertical := (this.side == "Left" || this.side == "Right")
+        targetProp := isVertical ? "Width" : "Height"
+
+        if (this.dimBg) {
+            this.scrimName := this.id "_ScrimBtn"
+            this.scrim := parent.Add("Button").Name(this.scrimName).Background("#A0000000").SetProp("Panel.ZIndex", "98").Opacity("0").Cursor("Arrow")
+            this.scrim.Add("Button.Template").Add("ControlTemplate").TargetType("Button").Add("Border").Background("{TemplateBinding Background}")
+            
+            this.scrim.Grid_RowSpan("99").Grid_ColumnSpan("99")
+            
+            scrimStyle := this.scrim.Add("Button.Style").Add("Style").TargetType("Button")
+            scrimStyle.Add("Setter").Property("IsHitTestVisible").Value("False")
+            
+            triggers := scrimStyle.Add("Style.Triggers")
+            dt := triggers.Add("DataTrigger").Binding("{Binding IsChecked, ElementName=" this.stateName "}").Value("True")
+            dt.Add("Setter").Property("IsHitTestVisible").Value("True")
+            
+            enterActions := dt.Add("DataTrigger.EnterActions").Add("BeginStoryboard").Add("Storyboard")
+            enterActions.Add("DoubleAnimation").Storyboard_TargetProperty("Opacity").To("1").Duration("0:0:0.2")
+            
+            exitActions := dt.Add("DataTrigger.ExitActions").Add("BeginStoryboard").Add("Storyboard")
+            exitActions.Add("DoubleAnimation").Storyboard_TargetProperty("Opacity").To("0").Duration("0:0:0.2")
+        }
+
+        ; Container border
+        this.container := parent.Add("Border").Name(this.containerName).Background("{DynamicResource SidebarColor}").BorderBrush("{DynamicResource ControlBorder}")
+        
+        if (InStr(this.mode, "Overlay")) {
+            this.container.BorderThickness("0")
+            this.container.ClipToBounds("False")
+            
+            ; Add a beautiful drop shadow for overlays
+            this.container.Add("Border.Effect").Add("DropShadowEffect").BlurRadius("30").ShadowDepth("0").Opacity("0.4").Color("Black")
+        } else {
+            this.container.ClipToBounds("True")
+            if (this.side == "Right")
+                this.container.BorderThickness("1,0,0,0")
+            else if (this.side == "Left")
+                this.container.BorderThickness("0,0,1,0")
+            else if (this.side == "Top")
+                this.container.BorderThickness("0,0,0,1")
+            else if (this.side == "Bottom")
+                this.container.BorderThickness("0,1,0,0")
+        }
+        
+        isVertical := (this.side == "Left" || this.side == "Right")
+        targetProp := isVertical ? "Width" : "Height"
+
+        if (this.mode == "PopPush" || this.mode == "PopOverlay") {
+            style := this.container.Add("Border.Style").Add("Style").TargetType("Border")
+            style.Add("Setter").Property(targetProp).Value("0")
+            
+            trigger := style.Add("Style.Triggers").Add("DataTrigger").Binding("{Binding IsChecked, ElementName=" this.stateName "}").Value("True")
+            trigger.Add("Setter").Property(targetProp).Value(String(this.size))
+            
+            if (InStr(this.mode, "Overlay")) {
+                this.ApplyOverlayLayout(isVertical)
+            }
+        } else {
+            ; Push or Overlay (Animated)
+            style := this.container.Add("Border.Style").Add("Style").TargetType("Border")
+            
+            if (this.mode == "Overlay") {
+                this.container.SetProp(targetProp, String(this.size))
+                
+                ; Base Transform
+                transform := style.Add("Style.Resources").Add("TranslateTransform").SetProp("x:Key", "SlideTransform")
+                if (this.side == "Left")
+                    transform.X(String(-this.size))
+                else if (this.side == "Right")
+                    transform.X(String(this.size))
+                else if (this.side == "Top")
+                    transform.Y(String(-this.size))
+                else if (this.side == "Bottom")
+                    transform.Y(String(this.size))
+
+                style.Add("Setter").Property("RenderTransform").Value("{StaticResource SlideTransform}")
+                
+                this.ApplyOverlayLayout(isVertical)
+                this.BuildOverlayAnimations(style, isVertical)
+            } else {
+                ; Push Mode
+                style.Add("Setter").Property(targetProp).Value("0")
+                this.BuildPushAnimations(style, targetProp)
+            }
+        }
+        
+        return this.container
+    }
+    
+    ApplyOverlayLayout(isVertical) {
+        this.container.SetProp("Panel.ZIndex", "100")
+        if (this.side == "Left")
+            this.container.HorizontalAlignment("Left")
+        else if (this.side == "Right")
+            this.container.HorizontalAlignment("Right")
+        else if (this.side == "Top")
+            this.container.VerticalAlignment("Top")
+        else if (this.side == "Bottom")
+            this.container.VerticalAlignment("Bottom")
+            
+        ; To allow Overlay to work within Grids, we must span
+        if (isVertical)
+            this.container.Grid_RowSpan("99")
+        else
+            this.container.Grid_ColumnSpan("99")
+    }
+    
+    BuildPushAnimations(style, targetProp) {
+        triggers := style.Add("Style.Triggers")
+        dt := triggers.Add("DataTrigger").Binding("{Binding IsChecked, ElementName=" this.stateName "}").Value("True")
+        
+        enterActions := dt.Add("DataTrigger.EnterActions").Add("BeginStoryboard").Add("Storyboard")
+        enterActions.Add("DoubleAnimation").Storyboard_TargetProperty(targetProp).To(String(this.size)).Duration("0:0:0.2").DecelerationRatio("0.8")
+        
+        exitActions := dt.Add("DataTrigger.ExitActions").Add("BeginStoryboard").Add("Storyboard")
+        exitActions.Add("DoubleAnimation").Storyboard_TargetProperty(targetProp).To("0").Duration("0:0:0.2").DecelerationRatio("0.8")
+    }
+    
+    BuildOverlayAnimations(style, isVertical) {
+        triggers := style.Add("Style.Triggers")
+        dt := triggers.Add("DataTrigger").Binding("{Binding IsChecked, ElementName=" this.stateName "}").Value("True")
+        
+        propName := isVertical ? "X" : "Y"
+        
+        enterActions := dt.Add("DataTrigger.EnterActions").Add("BeginStoryboard").Add("Storyboard")
+        enterActions.Add("DoubleAnimation").Storyboard_TargetProperty("RenderTransform.(TranslateTransform." propName ")").To("0").Duration("0:0:0.2").DecelerationRatio("0.8")
+        
+        exitActions := dt.Add("DataTrigger.ExitActions").Add("BeginStoryboard").Add("Storyboard")
+        toVal := ""
+        if (this.side == "Left")
+            toVal := String(-this.size)
+        else if (this.side == "Right")
+            toVal := String(this.size)
+        else if (this.side == "Top")
+            toVal := String(-this.size)
+        else if (this.side == "Bottom")
+            toVal := String(this.size)
+            
+        exitActions.Add("DoubleAnimation").Storyboard_TargetProperty("RenderTransform.(TranslateTransform." propName ")").To(toVal).Duration("0:0:0.2").DecelerationRatio("0.8")
+    }
+
+    Bind(ui, hotkeyStr := "") {
+        this.ui := ui
+        ui.Track(this.stateName)
+        if (this.HasProp("scrimName")) {
+            ui.OnEvent(this.scrimName, "Click", (*) => this.Toggle())
+        }
+        if (hotkeyStr != "") {
+            Hotkey(hotkeyStr, (*) => this.Toggle(), "On")
+        }
+    }
+    
+    Toggle() {
+        if (this.HasProp("ui") && this.ui)
+            this.ui.Update(this.stateName, "Invoke", "1")
+    }
+    
+    SetState(state, isOpen) {
+        if (!this.HasProp("ui") || !this.ui)
+            return
+            
+        currentState := state.Has(this.stateName) ? (state[this.stateName] == "True") : false
+        if (currentState != isOpen) {
+            this.ui.Update(this.stateName, "Invoke", "1")
+        }
+    }
+}
+
+; ==============================================================================
+; COMMAND PALETTE (Auto-Suggest Flyout)
+; ==============================================================================
+
+class XCommandPalette {
+    __New(parentXAML, name := "") {
+        this.id := name != "" ? name : "CmdPalette_" XCommandPalette.Count()
+        this.commands := Map()
+        this.homeCommands := []
+        this.ui := ""
+        
+        ; Create the Flyout
+        this.flyout := XFlyout(this.id, "Top", "Overlay", 400, true)
+        this.flyout.Build(parentXAML).HorizontalAlignment("Center").Margin("0,10,0,0").CornerRadius("6")
+        this.flyout.container.Background("{DynamicResource SolidSidebar}").BorderBrush("{DynamicResource SolidBorder}").BorderThickness("1").Width("600").Height("300")
+        
+        grid := this.flyout.container.Add("Grid").Margin("10")
+        grid.Rows("Auto", "*")
+        
+        this.searchBox := grid.Add("TextBox").Name(this.id "_Search").Text("> ").Background("{DynamicResource SolidControl}").Foreground("{DynamicResource TextMain}").BorderThickness("1").BorderBrush("{DynamicResource Accent}").Padding("10,8").FontSize(14)
+        
+        this.listSp := grid.Add("StackPanel").Grid_Row(1).Margin("0,10,0,0")
+        this.listTitle := this.listSp.Add("TextBlock").Name(this.id "_Title").Text("recently used").Foreground("{DynamicResource TextSub}").FontSize(11).Margin("5,0,0,5")
+        
+        this.listBox := this.listSp.Add("ListBox").Name(this.id "_List").Background("Transparent").BorderThickness("0").Foreground("{DynamicResource TextMain}").Margin("0,5,0,0")
+        this.listBox.InjectResources('<Style TargetType="ListBoxItem"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="10,5"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="bg" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bg" Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="bg" Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
+        
+        this.listBox.Add("ListBox.ItemTemplate").Add("DataTemplate").Add("TextBlock").Text("{Binding}").Foreground("{DynamicResource TextMain}")
+    }
+    
+    AddCommand(id, text) {
+        this.commands[id] := text
+    }
+    
+    SetHomeCommands(idsArray) {
+        this.homeCommands := idsArray
+    }
+    
+    Bind(uiObj, hotkeyStr := "") {
+        this.ui := uiObj
+        this.flyout.Bind(uiObj, hotkeyStr)
+        
+        uiObj.OnEvent(this.id "_Search", "TextChanged", (state, ctrl, *) => this.FilterList(state[ctrl]))
+        uiObj.OnEvent(this.id "_List", "SelectionChanged", (state, ctrl, *) => this.OnSelect(state[ctrl]))
+        
+        ; Initialize home state
+        this.FilterList("> ")
+    }
+    
+    FilterList(query) {
+        if (!this.ui)
+            return
+            
+        ; Clean query
+        query := Trim(query)
+        if (SubStr(query, 1, 1) == ">")
+            query := Trim(SubStr(query, 2))
+            
+        this.ui.Update(this.id "_List", "ClearItems", "")
+        
+        if (query == "") {
+            this.ui.Update(this.id "_Title", "Text", "recently used")
+            for id in this.homeCommands {
+                if (this.commands.Has(id))
+                    this.ui.Update(this.id "_List", "AddItem", this.commands[id])
+            }
+        } else {
+            this.ui.Update(this.id "_Title", "Text", "search results")
+            for id, text in this.commands {
+                if (InStr(text, query))
+                    this.ui.Update(this.id "_List", "AddItem", text)
+            }
+        }
+    }
+    
+    OnSelect(selectedText) {
+        if (selectedText == "" || !this.ui)
+            return
+            
+        ; Find ID from text
+        selectedId := ""
+        for id, text in this.commands {
+            if (text == selectedText) {
+                selectedId := id
+                break
+            }
+        }
+        
+        if (selectedId != "") {
+            ; Close flyout
+            this.flyout.SetState(Map(), false)
+            
+            ; Reset search box and list selection natively via Update
+            this.ui.Update(this.id "_Search", "Text", "> ")
+            
+            ; Fire global callback
+            if (HasMethod(this, "OnCommandSelected"))
+                this.OnCommandSelected(selectedId)
+        }
+    }
+    
+    static Count() {
+        static counter := 0
+        return ++counter
+    }
+}
+
+XAMLElement.Prototype.DefineProp("CommandPalette", { Call: _CommandPalette })
+_CommandPalette(this, name := "") {
+    return XCommandPalette(this, name)
+}

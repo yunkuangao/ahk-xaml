@@ -1283,7 +1283,7 @@ _AddRichPopover(this) {
         this.Name(elementName)
     }
     
-    popup := this.Parent().Add("Popup").PlacementTarget("{Binding ElementName=" elementName "}").Placement("Bottom").StaysOpen("False").AllowsTransparency("True").IsOpen("{Binding IsChecked, ElementName=" elementName ", Mode=TwoWay}")
+    popup := this.Parent().Add("Popup").PlacementTarget("{Binding Source={x:Reference " elementName "}}").Placement("Bottom").StaysOpen("False").AllowsTransparency("True").IsOpen("{Binding Source={x:Reference " elementName "}, Path=IsChecked, Mode=TwoWay}")
     bdr := popup.Add("Border").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Padding("10").Margin("4")
     
     bdr.Add("Border.Effect").Add("DropShadowEffect").BlurRadius(12).ShadowDepth(3).Opacity(0.25).Color("Black")

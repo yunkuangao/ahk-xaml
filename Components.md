@@ -11,9 +11,10 @@
 2. [Standard WPF Controls (Themed)](#ii-standard-wpf-controls-themed)
 3. [Custom Composites](#iii-custom-composites)
 4. [Advanced Components](#iv-advanced-components)
-5. [Data & Tables](#v-data--tables)
-6. [Overlays & Contexts](#vi-overlays--contexts)
-7. [Event System](#vii-event-system)
+5. [Visualization Components](#v-visualization-components)
+6. [Data & Tables](#vi-data--tables)
+7. [Overlays & Contexts](#vii-overlays--contexts)
+8. [Event System](#viii-event-system)
 
 ---
 
@@ -40,7 +41,12 @@ app := XAML_GUI("My Application", options)
 |---|---|
 | `app.AddTab(title, builderFn)` | Register a tab; `builderFn(tab)` receives the tab content panel |
 | `app.Show()` | Compile and display the window |
-| `app.ShowSnackbar(msg, action?)` | Display a toast notification at the bottom |
+| `app.Export(path)` | Export UI as a compressed `.bin` asset for production |
+| `app.ShowSnackbar(msg, duration?)` | Display a toast notification at the bottom |
+| `app.RegisterTokenizer(tok)` | Register a Tokenizer for keyboard hooks |
+| `app.RegisterNumericInput(num)` | Register a NumericUpDown for arrow key support |
+| `app.RegisterHotKeyChange(el, cb)` | Register a HotKeyBox for key capture |
+| `app.RegisterSegmentedInput(seg)` | Register a SegmentedNetworkInput for auto-tab |
 | `app.main` | Direct reference to the main content area |
 
 ### Sidebar Settings
@@ -131,6 +137,9 @@ parent.Add("PasswordBox").Width(200)
 
 ; Multi-line
 parent.Add("TextBox").TextWrapping("Wrap").AcceptsReturn("True").Height(100)
+
+; Styled SearchBox
+parent.Add("TextBox").Style("{StaticResource SearchBox}").Tag("Search query...")
 ```
 
 ### Progress Indicators
@@ -174,16 +183,37 @@ parent.Add("Slider").Minimum(0).Maximum(100).Value(50).Name("MySlider")
 
 High-level components that inject complex XAML trees automatically.
 
-### CodeEditor
+### Toggle
 
-A syntax-highlighted code editing panel wrapping `RichTextBox` + `FlowDocument`.
+A pre-formatted toggle switch row with label.
 
 ```ahk
-editor := parent.CodeEditor("script.ahk")
+panel.Toggle("DarkModeToggle", "Enable Dark Mode", true)
+```
 
-flow := editor.Add("FlowDocument").LineHeight(20)
-flow.Add("Paragraph").Margin("0").Add("Run").Text("; Comment").Foreground("#6A9955")
-flow.Add("Paragraph").Margin("0").Add("Run").Text('MsgBox("Hello")')
+### SegmentGroup
+
+A group of radio buttons styled as segmented tabs.
+
+```ahk
+panel.SegmentGroup("ViewMode", ["Map", "Satellite", "Hybrid"], 1)
+```
+
+### MetricCard
+
+A dashboard KPI card with title, metric, and optional progress bar.
+
+```ahk
+panel.MetricCard("MEMORY", "4.2 GB", "+12%", "#32D74B")
+panel.MetricCard("DISK", "68%", "", "", 68)  ; With progress bar
+```
+
+### TelemetryRow
+
+A status row for monitoring dashboards.
+
+```ahk
+panel.TelemetryRow("SRV-01", "US East", "12ms", "Online", "#32D74B")
 ```
 
 ### XColorPicker
@@ -257,70 +287,120 @@ num := panel.NumericUpDown("FontSize", 8, 72, 14)
 app.RegisterNumericInput(num)
 ```
 
-### SearchBox
-
-A styled text input with a magnifying glass icon and placeholder watermark.
-
-```ahk
-panel.SearchBox("Search documentation...")
-```
-
 ---
 
 ## IV. Advanced Components
 
 Abstracted, self-contained components with rich configuration options.
 
+### CommandBar
+
+A horizontal toolbar with icon buttons and separators.
+
+```ahk
+cmdBar := panel.CommandBar("MyToolbar")
+cmdBar.AddButton(Chr(0xE74D), "Cut", "BtnCut", "Cut (Ctrl+X)")
+cmdBar.AddSeparator()
+cmdBar.AddButton(Chr(0xE8C8), "Copy", "BtnCopy", "Copy (Ctrl+C)")
+cmdBar.AddButton(Chr(0xE77F), "Paste", "BtnPaste", "Paste (Ctrl+V)")
+```
+
+### NavigationView
+
+A sidebar router with page-switching navigation, styled like Win11 Settings.
+
+```ahk
+nav := panel.NavigationView("MyNav")
+
+; Build page content
+page1 := XAML_Generator("StackPanel")
+page1.Add("TextBlock").Text("Dashboard Content")
+
+page2 := XAML_Generator("StackPanel")
+page2.Add("TextBlock").Text("Settings Content")
+
+; Add pages
+nav.AddPage("Dashboard", Chr(0xE80F), page1)
+nav.AddPage("Settings", Chr(0xE713), page2, true)  ; true = bottom item
+
+; Bind events
+nav.Bind(ui)
+```
+
+### KanbanBoard
+
+A drag-aware Kanban board with multiple columns and task cards.
+
+```ahk
+kanban := panel.KanbanBoard("MyKanban")
+kanban.AddColumn("To Do", "#FF453A")
+kanban.AddColumn("In Progress", "#FF9F0A")
+kanban.AddColumn("Done", "#32D74B")
+
+kanban.AddCard("To Do", "Design mockups", "High", "#FF453A")
+kanban.AddCard("In Progress", "Write tests", "Medium", "#FF9F0A")
+
+kanban.Bind(ui)
+```
+
+### NodeGraph / Visual Scripter
+
+A fully interactive node-based visual programming environment with zoom, pan, drag, connection drawing, and state persistence.
+
+```ahk
+graph := panel.NodeGraph("MyGraph")
+graph.AddNode("Input1", "REST API Source", 100, 40, "Input")
+graph.AddNode("Filter", "Filter Records", 280, 40, "Process")
+graph.AddNode("Output", "Export JSON", 500, 100, "Output")
+
+graph.AddConnection("Input1", "Filter")
+graph.AddConnection("Filter", "Output")
+
+graph.Bind(ui)
+graph.EnableDrag(ui)
+```
+
+**Features:**
+- Zoom via scroll wheel, pan via middle-click or Pan Mode
+- Select Mode with rubber-band selection
+- Knife Tool to cut connections
+- Grid Snap (20px increments)
+- Dynamic node creation at runtime
+- State save/load to INI with `[Nodes]` and `[Links]` sections
+- Connection paths use cubic Bézier curves
+
+**Persistence:**
+```ahk
+graph.SaveState("node_state.ini")
+graph.LoadState("node_state.ini", ui)
+```
+
 ### SliderRange
 
 A dual-thumb range slider for selecting min/max values.
 
 ```ahk
-; Parameters: Title, Min, Max, DefaultStart, DefaultEnd
 slider := panel.SliderRange("Price Filter", 0, 100, 20, 80)
-```
-
-**Properties** (on returned grid element):
-- `.MinSliderName` — Name of the min slider element
-- `.MaxSliderName` — Name of the max slider element
-
-**Clamping** (prevent crossing):
-```ahk
-ui.OnEvent(slider.MinSliderName, "ValueChanged", ClampMin)
-ui.OnEvent(slider.MaxSliderName, "ValueChanged", ClampMax)
-ui.Track(slider.MinSliderName)
-ui.Track(slider.MaxSliderName)
-
-ClampMin(state, ctrl, ev) {
-    if (Number(state["MyMin"]) > Number(state["MyMax"]))
-        ui.Update("MyMin", "Value", state["MyMax"])
-}
 ```
 
 ### DateRangePickerEx
 
-A highly customized, fully themed date range selector replacing the native WPF calendar. Provides a popover with an interactive calendar grid built entirely using XAML primitives and AHK date logic.
+A highly customized, fully themed date range selector with an interactive calendar grid.
 
 ```ahk
-; Create the instance
 myDatePicker := DateRangePickerEx("EventDates", "2026-05-16", "2026-06-16")
-
-; Build the UI into a parent container
 myDatePicker.Build(panel)
-
-; Wire up events (do this globally)
 myDatePicker.Bind(ui)
 ```
 
-**Selection Logic**:
+**Selection Logic:**
 - Click 1: Sets Start Date
 - Click 2: Sets End Date (if before start date, they swap automatically)
 - Selected days are styled with `{DynamicResource Accent}`
-- Days within the range are styled with `{DynamicResource ControlBgHover}`
 
 ### BreadcrumbBar
 
-Horizontal path navigation with clickable segments and child popovers.
+Horizontal path navigation with clickable segments.
 
 ```ahk
 panel.BreadcrumbBar(["Home", "Projects", "AHK", "XAML_Components.ahk"])
@@ -331,22 +411,109 @@ panel.BreadcrumbBar(["Home", "Projects", "AHK", "XAML_Components.ahk"])
 A multi-step progress indicator for forms and workflows.
 
 ```ahk
-; Parameters: Array of Step Names, Current Step (1-based)
 panel.Stepper(["Config", "Auth", "Deploy", "Verify"], 3)
 ```
 
-### Carousel
+### SplitPanel
 
-A horizontal scrolling container for cards or images with left/right navigation and pagination dots.
+A resizable two-pane layout with a draggable `GridSplitter`.
 
 ```ahk
-panel.Carousel(["#FF453A", "#FF9F0A", "#FFD60A", "#32D74B", "#0A84FF", "#5E5CE6"])
+split := panel.SplitPanel("Horizontal", "1:1")
+split.LeftPanel.Add("TextBlock").Text("Left")
+split.RightPanel.Add("TextBlock").Text("Right")
 ```
 
-**Event Wiring** (for scroll buttons):
+### FileDropZone
+
+A drag-and-drop file target with visual feedback icons.
+
 ```ahk
-ui.OnEvent("MyCarousel_BtnL", "Click", (*) => ui.Update("MyCarousel_Scroll", "LineLeft", ""))
-ui.OnEvent("MyCarousel_BtnR", "Click", (*) => ui.Update("MyCarousel_Scroll", "LineRight", ""))
+panel.FileDropZone("MyDropZone", "Drop files here", [".txt", ".json"])
+```
+
+### HotKeyBox / ShortcutRecorder
+
+An input box that captures physical key combinations and formats them as AHK hotkey strings.
+
+```ahk
+hkInput := panel.HotKeyBox("QuickSaveBinding", "^+S", "Press a key combination...")
+app.RegisterHotKeyChange(hkInput, (newBind) => MsgBox("New binding: " newBind))
+```
+
+**Behavior:**
+- Click to focus → shows "Listening..."
+- Press any key combo → captures `Ctrl + Shift + S` as `^+S`
+- `Escape` cancels, `Backspace` clears
+- Modifier keys alone are ignored
+
+### Segmented Network Input
+
+A custom input box for IP addresses or MAC addresses with automatic octet navigation.
+
+```ahk
+seg := XSegmentedNetworkInput("MyIP", "IP", ["192", "168", "1", "100"])
+seg.Build(panel)
+app.RegisterSegmentedInput(seg)
+```
+
+**Types:**
+- `"IP"` — 4 octets separated by `.`, max 3 digits per octet
+- `"MAC"` — 6 octets separated by `:`, max 2 hex chars per octet
+
+**Auto-tab:** Typing a separator character or reaching max length automatically focuses the next octet.
+
+### XRibbon
+
+An Office-style ribbon toolbar with tabs, groups, and large/small buttons.
+
+```ahk
+ribbon := XRibbon(panel)
+homeTab := ribbon.AddTab("Home")
+
+clipGroup := homeTab.AddGroup("Clipboard")
+clipGroup.AddLargeBtn("BtnPaste", "Paste", 0xE77F)
+vertStack := clipGroup.AddVerticalStack()
+vertStack.AddSmallBtn("BtnCut", "Cut", 0xE8C6)
+vertStack.AddSmallBtn("BtnCopy", "Copy", 0xE8C8)
+
+ribbon.BindEvents(ui)
+```
+
+**Features:**
+- Double-click tab header to collapse/pin the ribbon
+- Clicking a tab while collapsed shows it as an overlay
+- Groups with separators and title labels
+
+---
+
+## V. Visualization Components
+
+### Sparkline
+
+A compact inline line chart rendered as a WPF `Path`.
+
+```ahk
+data := [10, 25, 18, 42, 35, 55, 48, 62, 58, 70]
+panel.Sparkline("MySpark", data, 200, 40, "#0A84FF")
+```
+
+### RadialGauge / Gauge
+
+A half-circle dashboard gauge with arc fill and percentage display.
+
+```ahk
+panel.Gauge("CPU Usage", 45, 100, "%")
+panel.RadialGauge("Memory", 3.2, 8, "GB")
+```
+
+### StatCard
+
+A dashboard KPI card with title, large metric, and color-coded trend.
+
+```ahk
+panel.StatCard("REVENUE", "$45,231", "12.5% increase", true)
+panel.StatCard("SERVER LOAD", "89%", "2% above threshold", false)
 ```
 
 ### Timeline
@@ -361,40 +528,265 @@ events := [
 panel.Timeline(events)
 ```
 
-### StatCard
+### XClock
 
-A dashboard KPI card with title, large metric, and color-coded trend.
+An analog/digital clock component with real-time updates.
 
 ```ahk
-; Parameters: Title, Metric, TrendText, IsTrendUp
-panel.StatCard("REVENUE", "$45,231", "12.5% increase", true)
-panel.StatCard("SERVER LOAD", "89%", "2% above threshold", false)
+clock := panel.Clock("MyClock")
+clock.Bind(ui)
 ```
 
-### SplitPanel
+---
 
-A resizable two-pane layout with a draggable `GridSplitter`.
+## VI. Data & Tables
+
+### DataTableView
+
+A simple sortable table with alternating rows, header sort buttons, and resizable columns.
 
 ```ahk
-; Parameters: Orientation, Ratio
-split := panel.SplitPanel("Horizontal", "1:1")
-split.LeftPanel.Add("TextBlock").Text("Left")
-split.RightPanel.Add("TextBlock").Text("Right")
+data := [
+    { Name: "Alice", Role: "Admin", Status: "Active" },
+    { Name: "Bob", Role: "Dev", Status: "Offline" }
+]
+
+parent.DataTableView("MyTable", data)
 ```
 
-### FileDropZone
+### DataGridEx (Class)
 
-A drag-and-drop file target with visual feedback icons.
+A comprehensive, self-contained data grid with search, filter, sort, pagination, and dynamic row injection.
+
+**Constructor Options:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `PageSize` | Integer | `50` | Rows per page |
+| `ShowSearch` | Boolean | `true` | Show search textbox |
+| `ShowFilters` | Boolean | `false` | Show filter popover |
+| `ShowPagination` | Boolean | `true` | Show prev/next + page status |
+| `ShowReset` | Boolean | `true` | Show reset button |
+| `ShowRowCount` | Boolean | `true` | Show filtered row count |
+| `FilterColumn` | String | `""` | Column name to filter by |
+| `FilterValues` | Array | `[]` | Possible values for filter checkboxes |
+| `ColumnWidths` | Object | `{}` | Column width overrides |
+
+**Column Width Formats:**
+- `"150"` — Fixed pixel width
+- `"2*"` — Star proportional
+- `"30%"` — Percentage (converted to star ratio)
 
 ```ahk
-panel.FileDropZone("MyDropZone", "Drop files here", [".txt", ".json"])
+data := []
+loop 200
+    data.Push({ Name: "User " A_Index, Role: "Dev", Status: "Active" })
+
+myGrid := DataGridEx("DGX", data, {
+    PageSize: 50,
+    ShowSearch: true,
+    ShowFilters: true,
+    FilterColumn: "Status",
+    FilterValues: ["Active", "Offline", "Pending"],
+    ColumnWidths: { Name: "40%", Role: "30%", Status: "30%" }
+})
+
+myGrid.Build(parent)
+myGrid.Bind(ui)
+```
+
+---
+
+## VII. Overlays & Contexts
+
+### RichPopover
+
+An interactive dropdown panel anchored to a `ToggleButton`. Closes when clicking outside.
+
+```ahk
+btn := parent.Add("ToggleButton").Content("Options")
+pop := btn.AddRichPopover()
+pop.Add("TextBlock").Text("Settings").FontWeight("Bold")
+pop.Add("CheckBox").Content("Show Hidden").Margin("0,5,0,0")
+pop.Add("CheckBox").Content("Match Case")
+```
+
+### Badge
+
+A small notification counter attached to any element.
+
+```ahk
+btn := parent.Add("Button").Content("Notifications")
+btn.AddBadge("3")            ; Default red
+btn.AddBadge("!", "#FF9F0A") ; Custom color
+```
+
+### ContextMenu
+
+A native right-click menu. Use `"-"` for separators.
+
+```ahk
+btn := parent.Add("Button").Content("Right-Click Me")
+btn.AddContextMenu(["Edit", "Copy", "-", "Delete"])
+```
+
+### Snackbar
+
+A non-blocking toast notification at the bottom of a panel.
+
+```ahk
+; Via XAML_GUI
+app.ShowSnackbar("Saved!", 3000)
+
+; Via direct element
+panel.Snackbar("Settings applied.", "DISMISS")
+```
+
+### SkeletonLoader
+
+A pulsing placeholder that mimics content shape during loading.
+
+```ahk
+panel.SkeletonLoader(200, 20)       ; Rectangle
+panel.SkeletonLoader(40, 40, true)  ; Circular
+```
+
+### SkeletonBlock
+
+A modern loading placeholder with smooth pulsing animation.
+
+```ahk
+panel.SkeletonBlock("100%", 120, 8)  ; Full width, 120px tall, 8px corner radius
+panel.SkeletonBlock(200, 40)         ; Fixed 200px width
+```
+
+### Avatar / PersonaCard
+
+A circular UI element for user profiles. Handles image filling, fallback initials, and optional status dot.
+
+```ahk
+panel.Avatar("", "JD", "#34C759")           ; Initials with green status
+panel.Avatar("C:\photos\user.jpg", "", "")  ; Image, no status
+```
+
+---
+
+## VIII. Advanced Rendering Components
+
+### XCodeEditor
+
+A layered syntax highlighting code editor with debounced token rendering and line numbers.
+
+```ahk
+editor := panel.CodeEditor("MyEditor")
+editor.SetLanguage("ahk")  ; Supported: ahk, cs, json, xml
+editor.SetText(FileRead("script.ahk"))
+editor.Bind(ui)
+```
+
+**Features:**
+- Debounced 250ms syntax highlighting (no input lag)
+- Dynamic `isTyping` state with native foreground color during typing
+- Line number gutter
+- Configurable language tokenizers
+
+### XPropertyGrid / Inspector
+
+An auto-generated property inspector panel. Displays object properties as editable rows.
+
+```ahk
+props := [
+    { Name: "Width", Value: "100", Type: "Number" },
+    { Name: "Color", Value: "#FF0000", Type: "Color" },
+    { Name: "Visible", Value: "True", Type: "Bool" }
+]
+inspector := panel.PropertyGrid("MyInspector")
+inspector.SetProperties(props)
+inspector.Bind(ui)
+```
+
+### XDiffViewer
+
+A side-by-side diff viewer with syntax-colored additions, deletions, and unchanged lines.
+
+```ahk
+diff := panel.DiffViewer("MyDiff")
+diff.SetLeft(oldText)
+diff.SetRight(newText)
+diff.Bind(ui)
+```
+
+### XMediaPlayerEx
+
+A full media player wrapper with play/pause/stop/seek controls, volume slider, and time display.
+
+```ahk
+player := panel.MediaPlayerEx("MyPlayer")
+player.SetSource("C:\videos\demo.mp4")
+player.Bind(ui)
+```
+
+### XImageCropper
+
+An interactive image cropper with drag-to-select region.
+
+```ahk
+cropper := panel.ImageCropper("MyCropper")
+cropper.SetImage("C:\photos\landscape.jpg")
+cropper.Bind(ui)
+```
+
+### XSvgViewer
+
+An SVG renderer that converts SVG markup into WPF Path elements.
+
+```ahk
+viewer := panel.SvgViewer("MySvg")
+viewer.LoadFile("diagram.svg")
+viewer.Bind(ui)
+```
+
+### MarkdownRenderer
+
+Converts Markdown text into styled WPF TextBlock/Paragraph elements.
+
+```ahk
+panel.MarkdownRenderer("# Hello World\n\nThis is **bold** and *italic* text.")
+```
+
+### XWebView (WebView2)
+
+A full Chromium-based web browser component with toolbar, URL bar, and JavaScript bridge.
+
+> Requires `XAML_ENABLE_WEBVIEW := true` in `XAML_Config.ahk`.
+
+```ahk
+wv := panel.WebView("MyBrowser")
+wv.Bind(ui)
+
+; Navigate programmatically
+wv.Navigate("https://example.com")
+
+; Execute JavaScript
+wv.ExecuteJS("document.title")
+
+; Listen for messages from JS
+wv.OnMessage((msg) => MsgBox("From JS: " msg))
+```
+
+**Toolbar includes:** Back, Forward, Refresh, URL bar, Go, DevTools, Inject JS, Add JS Button.
+
+**JS → AHK Bridge:**
+```javascript
+// In the webpage:
+window.chrome.webview.postMessage("Hello from JavaScript!");
 ```
 
 ### Rating
 
-A configurable star/icon rating selector. Supports any number of items, custom icons, and half-step values.
+A configurable star/icon rating selector.
 
-**Options**:
+**Options:**
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -423,7 +815,7 @@ panel.Rating("Hearts", {
 })
 ```
 
-**Event Wiring**:
+**Event Wiring:**
 ```ahk
 RatingBind(ui, "MyRating", 5, false, Chr(0xE735), Chr(0xE734), "#FFD700", "{DynamicResource TextSub}")
 ```
@@ -431,13 +823,6 @@ RatingBind(ui, "MyRating", 5, false, Chr(0xE735), Chr(0xE734), "#FFD700", "{Dyna
 ### EmojiPicker
 
 A popover grid of clickable emoji with categories (Smileys, Gestures, Hearts, Objects).
-
-**Options**:
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `ButtonText` | String | `😀` | Text shown on toggle button |
-| `Target` | String | `""` | Name of target element to receive emoji |
 
 ```ahk
 ; Basic picker
@@ -447,199 +832,15 @@ panel.EmojiPicker("MyEmoji")
 panel.EmojiPicker("MyEmoji", { Target: "TxtComment" })
 ```
 
-**Event Wiring**:
+**Event Wiring:**
 ```ahk
-; Get emoji list from the component or define inline
 emojiList := ["😀","😁","😂", ...]  ; 90 emoji
 EmojiPickerBind(ui, "MyEmoji", emojiList)
 ```
 
-### SkeletonLoader
-
-A pulsing placeholder that mimics content shape during loading.
-
-```ahk
-; Parameters: Width, Height, IsCircle (optional)
-panel.SkeletonLoader(200, 20)
-panel.SkeletonLoader(40, 40, true)  ; Circular
-```
-
-### HotKeyBox / ShortcutRecorder
-
-An input box that captures physical key combinations (e.g., Ctrl + Shift + S) and formats it into an AHK-compatible hotkey string.
-
-```ahk
-; Parameters: ID Name, Default Hotkey String, Placeholder text
-hkInput := panel.HotKeyBox("QuickSaveBinding", "^+S", "Press a key combination...")
-```
-
-### Segmented Network Input
-
-A custom input box for IP addresses or MAC addresses that automatically handles individual octet entry.
-
-```ahk
-; Parameters: ID Name, Type ("IP" or "MAC"), Array of default octets
-seg := XSegmentedNetworkInput("MyIP", "IP", ["192", "168", "1", "100"])
-seg.Build(panel)
-app.RegisterSegmentedInput(seg)
-```
-
-### SkeletonBlock
-
-A modern alternative to a spinning loading wheel, showing a subtle animating block.
-
-```ahk
-; Parameters: Width, Height, CornerRadius (Defaults to 4)
-skeleton := panel.SkeletonBlock("100%", 120, 8) 
-```
-
-### Avatar / PersonaCard
-
-A circular UI element for user profiles or contacts. Handles image filling, fallback text (initials), and an optional status dot.
-
-```ahk
-; Parameters: ImagePath/URL, Fallback Initials, Status Color
-userPic := panel.Avatar("", "JD", "#34C759") ; JD with Green status dot
-```
-
-### Gauge / RadialGauge
-
-A half-circle dashboard component used to visualize stats or threshold values with a visual arc.
-
-```ahk
-; Parameters: Title, Current Value, Max Value, Units
-cpuGauge := panel.Gauge("CPU Usage", 45, 100, "%")
-```
-
 ---
 
-## V. Data & Tables
-
-### DataTableView
-
-A simple sortable table with alternating rows, header sort buttons, resizable columns, and text trimming.
-
-```ahk
-data := [
-    { Name: "Alice", Role: "Admin", Status: "Active" },
-    { Name: "Bob", Role: "Dev", Status: "Offline" }
-]
-
-parent.DataTableView("MyTable", data)
-```
-
-**Element Names Generated**:
-- `MyTable_Header_{ColumnName}` — Clickable sort buttons
-- `MyTable_List` — The row container (ListBox)
-
-### DataGridEx (Class)
-
-A comprehensive, self-contained data grid with search, filter, sort, pagination, and dynamic row injection. All state management is encapsulated — no global variables needed.
-
-**Constructor Options**:
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `PageSize` | Integer | `50` | Rows per page |
-| `ShowSearch` | Boolean | `true` | Show search textbox |
-| `ShowFilters` | Boolean | `false` | Show filter popover |
-| `ShowPagination` | Boolean | `true` | Show prev/next + page status |
-| `ShowReset` | Boolean | `true` | Show reset button |
-| `ShowRowCount` | Boolean | `true` | Show filtered row count |
-| `FilterColumn` | String | `""` | Column name to filter by |
-| `FilterValues` | Array | `[]` | Possible values for filter checkboxes |
-| `ColumnWidths` | Object | `{}` | Column width overrides |
-
-**Column Width Formats**:
-- `"150"` — Fixed pixel width
-- `"2*"` — Star proportional
-- `"30%"` — Percentage (converted to star ratio)
-
-```ahk
-; Generate data
-data := []
-loop 200
-    data.Push({ Name: "User " A_Index, Role: "Dev", Status: "Active" })
-
-; Create the grid
-myGrid := DataGridEx("DGX", data, {
-    PageSize: 50,
-    ShowSearch: true,
-    ShowFilters: true,
-    ShowPagination: true,
-    FilterColumn: "Status",
-    FilterValues: ["Active", "Offline", "Pending"],
-    ColumnWidths: { Name: "40%", Role: "30%", Status: "30%" }
-})
-
-; Build UI
-myGrid.Build(parent)
-
-; Wire events (single call!)
-myGrid.Bind(ui)
-```
-
-**Methods**:
-
-| Method | Description |
-|---|---|
-| `.Build(parent)` | Generate the XAML UI into a parent element |
-| `.Bind(uiHost)` | Register all events (sort, filter, search, paginate, reset) |
-| `.Render(state)` | Force re-render (called automatically by events) |
-| `.Sort(state, col)` | Sort by column |
-| `.Reset(state)` | Reset all filters, search, and pagination |
-| `.SetColumnWidth(col, width)` | Set column width after construction |
-
----
-
-## VI. Overlays & Contexts
-
-### RichPopover
-
-An interactive dropdown panel anchored to a `ToggleButton`. Closes when clicking outside.
-
-```ahk
-btn := parent.Add("ToggleButton").Content("Options")
-pop := btn.AddRichPopover()
-pop.Add("TextBlock").Text("Settings").FontWeight("Bold")
-pop.Add("CheckBox").Content("Show Hidden").Margin("0,5,0,0")
-pop.Add("CheckBox").Content("Match Case")
-```
-
-### Badge
-
-A small notification counter attached to any element.
-
-```ahk
-btn := parent.Add("Button").Content("Notifications")
-btn.AddBadge("3")         ; Default red
-btn.AddBadge("!", "#FF9F0A")  ; Custom color
-```
-
-### ContextMenu
-
-A native right-click menu. Use `"-"` for separators.
-
-```ahk
-btn := parent.Add("Button").Content("Right-Click Me")
-btn.AddContextMenu(["Edit", "Copy", "-", "Delete"])
-```
-
-### Snackbar
-
-A non-blocking toast notification at the bottom of a panel.
-
-```ahk
-; Via XAML_GUI
-app.ShowSnackbar("Saved!", "UNDO")
-
-; Via direct element
-panel.Snackbar("Settings applied.", "DISMISS")
-```
-
----
-
-## VII. Event System
+## IX. Event System
 
 All interactivity is managed through the `XAML_Host` event system.
 
@@ -654,6 +855,15 @@ ui.OnEvent("TxtSearch", "TextChanged", (state, ctrl, ev) => Search(state))
 
 ; Toggle
 ui.OnEvent("TglDarkMode", "Click", (state, ctrl, ev) => ToggleTheme(state))
+
+; Keyboard
+ui.OnEvent("TxtInput", "KeyDown:Return", (state, ctrl, ev) => Submit(state))
+
+; File Drop
+ui.OnEvent("MyDropZone", "Drop", (state, ctrl, ev) => HandleFiles(state["DropFiles"]))
+
+; Drag Move (Canvas nodes)
+ui.OnEvent("Node_1", "DragMove", (state, ctrl, ev) => OnDrag(state))
 ```
 
 ### Tracking State
@@ -673,6 +883,7 @@ ui.Track("TglProxy")
 ui.Update("TxtStatus", "Text", "Connected")
 ui.Update("BtnSave", "IsEnabled", "False")
 ui.Update("MyPanel", "Background", "#FF0000")
+ui.Update("MyPanel", "Visibility", "Collapsed")
 
 ; Collection operations
 ui.Update("MyList", "ClearItems", "")
@@ -684,7 +895,18 @@ ui.Update("MyScroll", "LineLeft", "")
 ui.Update("MyScroll", "LineRight", "")
 
 ; Dynamic resources
-ui.Update("Resource", "Accent", "#0A84FF")
+ui.Update("Resource", "Brush:Accent", "#0A84FF")
+
+; Window management
+ui.Update("Window", "DWM", "2,1")
+ui.Update("Window", "Title", "New Title")
+ui.Update("Window", "Icon", "HICON:" hIcon)
+
+; Focus
+ui.Update("TxtSearch", "Focus", "True")
+
+; Programmatic click
+ui.Update("BtnSubmit", "Invoke", "1")
 ```
 
 ### State Map

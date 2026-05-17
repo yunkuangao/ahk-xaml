@@ -611,6 +611,42 @@ public class AhkWpfEngine : Application {
                 }
                 Marshal.StructureToPtr(mmi, lParam, true);
             } catch { }
+        } else if (msg == 0x020A) { // WM_MOUSEWHEEL
+            try {
+                int delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
+                DependencyObject target = System.Windows.Input.Mouse.DirectlyOver as DependencyObject;
+                while (target != null) {
+                    ScrollViewer sv = target as ScrollViewer;
+                    if (sv != null && sv.VerticalScrollBarVisibility == ScrollBarVisibility.Disabled && sv.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled) {
+                        sv.ScrollToHorizontalOffset(sv.HorizontalOffset - delta);
+                        handled = true;
+                        break;
+                    }
+                    if (target is System.Windows.Media.Visual || target is System.Windows.Media.Media3D.Visual3D) {
+                        target = System.Windows.Media.VisualTreeHelper.GetParent(target);
+                    } else {
+                        target = LogicalTreeHelper.GetParent(target);
+                    }
+                }
+            } catch { }
+        } else if (msg == 0x020E) { // WM_MOUSEHWHEEL
+            try {
+                int delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
+                DependencyObject target = System.Windows.Input.Mouse.DirectlyOver as DependencyObject;
+                while (target != null) {
+                    ScrollViewer sv = target as ScrollViewer;
+                    if (sv != null && sv.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled) {
+                        sv.ScrollToHorizontalOffset(sv.HorizontalOffset + delta);
+                        handled = true;
+                        break;
+                    }
+                    if (target is System.Windows.Media.Visual || target is System.Windows.Media.Media3D.Visual3D) {
+                        target = System.Windows.Media.VisualTreeHelper.GetParent(target);
+                    } else {
+                        target = LogicalTreeHelper.GetParent(target);
+                    }
+                }
+            } catch { }
         }
         return IntPtr.Zero;
     }
@@ -862,6 +898,8 @@ public class AhkWpfEngine : Application {
                 } else if (parts[1] == "Focus" && ctrl is UIElement) {
                     if (parts[2].ToLower() == "true") ((UIElement)ctrl).Focus();
                     else System.Windows.Input.Keyboard.ClearFocus();
+                } else if (parts[1] == "BringIntoView" && ctrl is FrameworkElement) {
+                    ((FrameworkElement)ctrl).BringIntoView();
                 } else if (parts[1] == "Invoke" && ctrl is System.Windows.Controls.Primitives.ButtonBase) {
                     if (ctrl is System.Windows.Controls.Primitives.ToggleButton) {
                         var tPeer = new System.Windows.Automation.Peers.ToggleButtonAutomationPeer((System.Windows.Controls.Primitives.ToggleButton)ctrl);
