@@ -4,13 +4,18 @@
 #Include "../lib/XAML_Dialog.ahk"
 #Include "../lib/XAML_GUI.ahk"
 #Include "../lib/XAML_Components.ahk"
+#Include "../lib/XAML_Adv_Components.ahk"
 
 app := XAML_GUI("Fluid UI Workbench")
 
+global tabList := ["DEPLOYMENT", "DATA GRID", "DATAGRID EX", "UI COMPONENTS", "ADVANCED INPUTS", "FLUID DIALOGS", "RICH COMPONENTS", "ADVANCED UI"]
+
 ; Add toggles to the sidebar
-app.sidebarPanel.Add("TextBlock").Text("SYSTEM TOGGLES").Margin("0,15,0,15")
-app.sidebarPanel.Toggle("TglOverdrive", "Overdrive Mode", true, "Accelerate packet processing natively.")
-app.sidebarPanel.Toggle("TglProxy", "Anonymous Proxy", false)
+app.sidebarPanel.Add("TextBlock").Text("TAB VISIBILITY").Margin("0,15,0,15")
+for tabName in tabList {
+    cleanName := StrReplace(tabName, " ", "")
+    app.sidebarPanel.Toggle("TglTab" cleanName, tabName, true)
+}
 
 ; DEPLOYMENT TAB
 BuildDeploymentTab(tab) {
@@ -63,7 +68,7 @@ BuildDeploymentTab(tab) {
     progBar := panel.Add("ProgressBar").Name("ProgBar").Value("{Binding Value, ElementName=SldPower}").Maximum(100).Height(8).BorderThickness(0).Background("{DynamicResource ControlBorder}").Foreground("{DynamicResource Accent}").Margin("0,0,0,10")
     progBar.InjectResources('<Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>')
 }
-app.AddTab("DEPLOYMENT", BuildDeploymentTab)
+app.AddTab("DEPLOYMENT", (tab) => (tab.Name("Tab_DEPLOYMENT"), BuildDeploymentTab(tab)))
 
 ; DATA GRID TAB
 BuildDataGridTab(tab) {
@@ -96,7 +101,7 @@ BuildDataGridTab(tab) {
     termLog := termBorder.Add("ListBox").Name("LogList").Height(130).Foreground("#32D74B").FontFamily("Consolas, Courier New").Padding(8).ItemContainerStyle("{StaticResource TerminalItem}").ScrollViewer_VerticalScrollBarVisibility("Auto")
     termLog.Add("ListBoxItem").Content("System ready. Awaiting instructions...")
 }
-app.AddTab("DATA GRID", BuildDataGridTab)
+app.AddTab("DATA GRID", (tab) => (tab.Name("Tab_DATAGRID"), BuildDataGridTab(tab)))
 
 ; DATAGRID EX TAB
 global myGrid := ""
@@ -144,7 +149,7 @@ BuildDataGridExTab(tab) {
     panel.Add("TextBlock").Text("Data View Engine").Use("PageTitle").Margin("0,0,0,10").Grid_Row(0)
     myGrid.Build(panel).Grid_Row(1)
 }
-app.AddTab("DATAGRID EX", BuildDataGridExTab)
+app.AddTab("DATAGRID EX", (tab) => (tab.Name("Tab_DATAGRIDEX"), BuildDataGridExTab(tab)))
 
 ; UI COMPONENTS TAB
 BuildComponentsTab(tab) {
@@ -184,7 +189,7 @@ BuildComponentsTab(tab) {
     n2 := tv.Add("TreeViewItem").Header("Cloud Infrastructure").IsExpanded("True")
     n2.Add("TreeViewItem").Header("AWS-us-east-1")
 }
-app.AddTab("UI COMPONENTS", BuildComponentsTab)
+app.AddTab("UI COMPONENTS", (tab) => (tab.Name("Tab_UICOMPONENTS"), BuildComponentsTab(tab)))
 
 ; ADVANCED INPUTS TAB
 BuildAdvancedInputsTab(tab) {
@@ -212,7 +217,7 @@ BuildAdvancedInputsTab(tab) {
     c2.Add("ComboBoxItem").Content("User")
     c2.Add("ComboBoxItem").Content("Guest")
 }
-app.AddTab("ADVANCED INPUTS", BuildAdvancedInputsTab)
+app.AddTab("ADVANCED INPUTS", (tab) => (tab.Name("Tab_ADVANCEDINPUTS"), BuildAdvancedInputsTab(tab)))
 
 ; FLUID DIALOGS TAB
 BuildXDialogsTab(tab) {
@@ -237,7 +242,7 @@ BuildXDialogsTab(tab) {
     cmplxSp.Add("Button").Name("BtnShowComplex3").Content("Resizable Tool").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn").Background("Transparent").Foreground("{DynamicResource Accent}").BorderBrush("{DynamicResource Accent}").BorderThickness(1)
     cmplxSp.Add("Button").Name("BtnShowComplex4").Content("File Deletion").Width(120).Height(35).Margin("0,0,10,0").Use("PrimaryBtn").Background("Transparent").Foreground("#FF453A").BorderBrush("#FF453A").BorderThickness(1)
 }
-app.AddTab("FLUID DIALOGS", BuildXDialogsTab)
+app.AddTab("FLUID DIALOGS", (tab) => (tab.Name("Tab_FLUIDDIALOGS"), BuildXDialogsTab(tab)))
 
 ; RICH COMPONENTS TAB
 BuildRichComponentsTab(tab) {
@@ -348,8 +353,8 @@ BuildRichComponentsTab(tab) {
     mi3 := ctxMenu.Add("MenuItem").Header("Delete").InputGestureText("Del").Foreground("#FF453A")
     mi3.Add("MenuItem.Icon").Add("TextBlock").Text(Chr(0xE74D)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(12).Foreground("#FF453A").Margin("0")
 }
-app.AddTab("RICH COMPONENTS", BuildRichComponentsTab)
-app.AddTab("ADVANCED UI", BuildAdvancedUITab)
+app.AddTab("RICH COMPONENTS", (tab) => (tab.Name("Tab_RICHCOMPONENTS"), BuildRichComponentsTab(tab)))
+app.AddTab("ADVANCED UI", (tab) => (tab.Name("Tab_ADVANCEDUI"), BuildAdvancedUITab(tab)))
 
 ; BOTTOM BAR
 BuildBottomBar(actions) {
@@ -423,10 +428,18 @@ myGrid.Bind(ui)
 
 ui.Track("TxtUser")
 ui.Track("ComboRegion")
-ui.Track("TglProxy")
 ui.Track("ComboStrictSearch")
 ui.Track("TxtSearch")
 ui.Track("ComboTheme")
+ui.Track("MainTabs")
+
+for tabName in tabList {
+    cleanName := StrReplace(tabName, " ", "")
+    ui.OnEvent("TglTab" cleanName, "Click", ToggleTabVis)
+    ui.Track("TglTab" cleanName)
+}
+
+ui.OnEvent("Window", "Loaded", SyncTabVis)
 
 app.Show()
 
@@ -812,3 +825,61 @@ BuildAdvancedUITab(tab) {
 app.AddTab("ADVANCED UI", BuildAdvancedUITab)
 
 Persistent()
+global visibleTabs := 8
+
+ToggleTabVis(state, ctrl, event) {
+    global visibleTabs, tabList
+    tabName := SubStr(ctrl, 7)
+    tabId := "Tab_" tabName
+    isChecked := (state[ctrl] == "True")
+
+    if (!isChecked && visibleTabs <= 1) {
+        ui.Update(ctrl, "IsChecked", "True")
+        app.ShowSnackbar("At least 1 tab must remain visible!")
+        return
+    }
+
+    if (isChecked) {
+        ui.Update(tabId, "Visibility", "Visible")
+        visibleTabs++
+    } else {
+        ui.Update(tabId, "Visibility", "Collapsed")
+        visibleTabs--
+
+        currIdx := -1
+        if (state.Has("MainTabs") && state["MainTabs"] != "")
+            currIdx := Integer(state["MainTabs"])
+        tabIdx := -1
+        for idx, tName in tabList {
+            if (StrReplace(tName, " ", "") == tabName) {
+                tabIdx := A_Index - 1
+                break
+            }
+        }
+
+        if (currIdx == tabIdx || currIdx == -1) {
+            for idx, tName in tabList {
+                cName := "TglTab" StrReplace(tName, " ", "")
+                if (cName != ctrl && state.Has(cName) && state[cName] == "True") {
+                    ui.Update("MainTabs", "SelectedIndex", String(A_Index - 1))
+                    break
+                }
+            }
+        }
+    }
+}
+
+SyncTabVis(state, ctrl, event) {
+    global visibleTabs, tabList
+    visibleTabs := 0
+    for idx, tName in tabList {
+        cName := "TglTab" StrReplace(tName, " ", "")
+        tId := "Tab_" StrReplace(tName, " ", "")
+        if (state.Has(cName) && state[cName] == "True") {
+            ui.Update(tId, "Visibility", "Visible")
+            visibleTabs++
+        } else {
+            ui.Update(tId, "Visibility", "Collapsed")
+        }
+    }
+}

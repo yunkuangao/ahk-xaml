@@ -1355,19 +1355,51 @@ public class AhkWpfEngine : Application {
                     
                     // Magnetic search for closest port
                     FrameworkElement closestPort = null;
-                    double minDistance = 625; // 25^2
+                    double minDistance = 2500; // 50^2 for generous port snapping
                     
+                    // First pass: check if dropped directly inside a Node body
+                    FrameworkElement targetNode = null;
                     foreach (UIElement child in canvas.Children) {
                         var fe = child as FrameworkElement;
-                        if (fe != null && fe.Name != null && fe.Name.StartsWith("Port_") && fe != connectionSourcePort) {
-                            double px = Canvas.GetLeft(fe) + fe.Width / 2;
-                            double py = Canvas.GetTop(fe) + fe.Height / 2;
-                            if (double.IsNaN(px) || double.IsNaN(py)) continue;
-                            
-                            double distSq = (dropPos.X - px) * (dropPos.X - px) + (dropPos.Y - py) * (dropPos.Y - py);
-                            if (distSq < minDistance) {
-                                minDistance = distSq;
+                        if (fe != null && fe.Name != null && fe.Name.StartsWith("Node_")) {
+                            double nx = Canvas.GetLeft(fe);
+                            double ny = Canvas.GetTop(fe);
+                            if (double.IsNaN(nx) || double.IsNaN(ny)) continue;
+                            if (dropPos.X >= nx && dropPos.X <= nx + fe.ActualWidth &&
+                                dropPos.Y >= ny && dropPos.Y <= ny + fe.ActualHeight) {
+                                targetNode = fe;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (targetNode != null) {
+                        // Extract node ID and find its complementary port
+                        string nodeId = targetNode.Name.Substring(5);
+                        string expectedPortName = connectionSourcePort.Name.StartsWith("Port_Out") ? "Port_In_" + nodeId : "Port_Out_" + nodeId;
+                        foreach (UIElement child in canvas.Children) {
+                            var fe = child as FrameworkElement;
+                            if (fe != null && fe.Name == expectedPortName) {
                                 closestPort = fe;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Second pass: if no direct node hit, do proximity search for ports
+                    if (closestPort == null) {
+                        foreach (UIElement child in canvas.Children) {
+                            var fe = child as FrameworkElement;
+                            if (fe != null && fe.Name != null && fe.Name.StartsWith("Port_") && fe != connectionSourcePort) {
+                                double px = Canvas.GetLeft(fe) + fe.Width / 2;
+                                double py = Canvas.GetTop(fe) + fe.Height / 2;
+                                if (double.IsNaN(px) || double.IsNaN(py)) continue;
+                                
+                                double distSq = (dropPos.X - px) * (dropPos.X - px) + (dropPos.Y - py) * (dropPos.Y - py);
+                                if (distSq < minDistance) {
+                                    minDistance = distSq;
+                                    closestPort = fe;
+                                }
                             }
                         }
                     }

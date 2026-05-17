@@ -24,7 +24,7 @@ class XAMLHost {
         DllCall("user32\ChangeWindowMessageFilterEx", "Ptr", this.receiver.Hwnd, "UInt", 0x004A, "UInt", 1, "Ptr", 0)
 
         if (!XAMLHost._msgHooked) {
-            OnMessage(0x004A, ObjBindMethod(XAMLHost, "OnCopyData"))
+            OnMessage(0x004A, ObjBindMethod(XAMLHost, "OnCopyData"), 255)
             XAMLHost._msgHooked := true
         }
     }
@@ -110,7 +110,7 @@ class XAMLHost {
             errGui.Add("Text", "y+15", "Full Exception Trace:")
             errGui.SetFont("s9 norm cBlack", "Consolas")
             errGui.Add("Edit", "y+5 w860 h300 ReadOnly +VScroll +HScroll -Wrap", details)
-            
+
             ; Auto scroll to the '>>' marker
             lines := StrSplit(snippet, "`n", "`r")
             targetLine := 0
@@ -255,7 +255,7 @@ class XAMLHost {
             ; Copy generic engine to Temp for isolated execution if missing
             if !FileExist(targetExe)
                 FileCopy(sharedExe, targetExe, 1)
-                
+
             ; Copy WebView2 dependencies to Temp directory alongside engine
             if (XAML_ENABLE_WEBVIEW) {
                 SplitPath(targetExe, , &targetDir)
@@ -303,7 +303,7 @@ class XAMLHost {
 
         if (ctrlName == "Engine" && eventName == "Ready") {
             targetHwnd := Integer(parts[5])
-            
+
             eventBindings := ""
             for cName, events in instance.events {
                 for eName, evtList in events {
@@ -335,14 +335,14 @@ class XAMLHost {
         }
 
         stateMap := Map()
-        
+
         eventData := ""
         if (parts.Length >= 5) {
             eventData := XAMLHost.Base64Decode(parts[5])
             if (eventData != "")
                 stateMap[eventName] := eventData
         }
-        
+
         if (eventName == "Drop" && eventData != "") {
             stateMap["DropFiles"] := StrSplit(eventData, "|")
         }
@@ -378,10 +378,10 @@ class XAMLHost {
             evtList := instance.events[ctrlName][baseEventName]
             for evtObj in evtList {
                 cb := evtObj.Callback
-                
+
                 ; Handle optional event key args without breaking older 3-param callbacks
                 if (extraArg != "")
-                    SetTimer(cb.Bind(stateMap, ctrlName, {Key: extraArg}), -1, evtObj.Priority)
+                    SetTimer(cb.Bind(stateMap, ctrlName, { Key: extraArg }), -1, evtObj.Priority)
                 else
                     SetTimer(cb.Bind(stateMap, ctrlName, baseEventName), -1, evtObj.Priority)
             }

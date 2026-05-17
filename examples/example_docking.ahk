@@ -19,12 +19,12 @@ class PanelManager {
 
     static Init(mainHwnd) {
         this.MainWindow := mainHwnd
-        
+
         ; Register known panels (IDs, Titles, initial bounds)
         this.RegisterPanel("Terminal", "Terminal Output", 100, 100, 600, 300)
         this.RegisterPanel("Properties", "Object Properties", 750, 100, 300, 500)
         this.RegisterPanel("Toolbox", "Component Toolbox", 100, 450, 250, 400)
-        
+
         SetTimer(() => this.Magnetize(), 30)
         SetTimer(() => this.UpdateGlobalSnappedState(), 200)
 
@@ -57,7 +57,7 @@ class PanelManager {
     static Magnetize() {
         static wasDown := false
         isDown := GetKeyState("LButton", "P")
-        
+
         if (!isDown) {
             if (wasDown && this.HasProp("dragStates") && this.dragStates.Has("LastActive")) {
                 ; The mouse was just released. Apply the final snapped state after DragMove completes.
@@ -68,7 +68,7 @@ class PanelManager {
                     finalW := this.dragStates[lastId].w
                     finalH := this.dragStates[lastId].h
                     hwnd := lastId == "Main" ? this.MainWindow : this.Panels[lastId].GuiHwnd
-                    
+
                     if (hwnd) {
                         ; Delayed lock to override WPF DragMove
                         SetTimer(() => WinMove(finalX, finalY, finalW, finalH, "ahk_id " hwnd), -50)
@@ -80,11 +80,11 @@ class PanelManager {
             return
         }
         wasDown := true
-            
+
         activeHwnd := WinExist("A")
         if !activeHwnd
             return
-            
+
         isOurs := false
         activeId := ""
         if (activeHwnd == this.MainWindow) {
@@ -99,67 +99,67 @@ class PanelManager {
                 }
             }
         }
-        
+
         if (!isOurs)
             return
-            
+
         WinGetPos(&aX, &aY, &aW, &aH, "ahk_id " activeHwnd)
         if (aX < -10000 || aY < -10000)
             return
-            
+
         if (!this.HasProp("dragStates"))
             this.dragStates := Map()
-            
+
         if (!this.dragStates.Has(activeId)) {
-            this.dragStates[activeId] := {x: aX, y: aY, w: aW, h: aH}
+            this.dragStates[activeId] := { x: aX, y: aY, w: aW, h: aH }
             return
         }
-        
+
         lastX := this.dragStates[activeId].x
         lastY := this.dragStates[activeId].y
         lastW := this.dragStates[activeId].w
         lastH := this.dragStates[activeId].h
-        
+
         dx := aX - lastX
         dy := aY - lastY
         dw := aW - lastW
         dh := aH - lastH
-        
+
         if (dx == 0 && dy == 0 && dw == 0 && dh == 0)
             return
-            
-        this.dragStates[activeId] := {x: aX, y: aY, w: aW, h: aH}
-            
+
+        this.dragStates[activeId] := { x: aX, y: aY, w: aW, h: aH }
+
         rects := []
         if (activeId != "Main" && WinExist("ahk_id " this.MainWindow)) {
             WinGetPos(&x, &y, &w, &h, "ahk_id " this.MainWindow)
             if (x > -10000)
-                rects.Push({x: x, y: y, w: w, h: h, hwnd: this.MainWindow})
+                rects.Push({ x: x, y: y, w: w, h: h, hwnd: this.MainWindow })
         }
         for id, pInfo in this.Panels {
             if (activeId != id && pInfo.GuiHwnd && WinExist("ahk_id " pInfo.GuiHwnd)) {
                 WinGetPos(&x, &y, &w, &h, "ahk_id " pInfo.GuiHwnd)
                 if (x > -10000)
-                    rects.Push({x: x, y: y, w: w, h: h, hwnd: pInfo.GuiHwnd})
+                    rects.Push({ x: x, y: y, w: w, h: h, hwnd: pInfo.GuiHwnd })
             }
         }
-        
+
         threshold := 30
         snappedX := aX
         snappedY := aY
         snappedW := aW
         snappedH := aH
-        
+
         isMoving := (dx != 0 || dy != 0) && (dw == 0 && dh == 0)
         isResizingRight := (dw != 0 && dx == 0)
         isResizingLeft := (dw != 0 && dx != 0)
         isResizingBottom := (dh != 0 && dy == 0)
         isResizingTop := (dh != 0 && dy != 0)
-        
+
         for r in rects {
             vOverlap := (aY < r.y + r.h) && (aY + aH > r.y)
             hOverlap := (aX < r.x + r.w) && (aX + aW > r.x)
-            
+
             if (isMoving) {
                 if (vOverlap) {
                     if (Abs(aX - (r.x + r.w)) < threshold)
@@ -171,7 +171,7 @@ class PanelManager {
                     else if (Abs((aX + aW) - (r.x + r.w)) < threshold)
                         snappedX := r.x + r.w - aW
                 }
-                
+
                 if (hOverlap) {
                     if (Abs(aY - (r.y + r.h)) < threshold)
                         snappedY := r.y + r.h
@@ -197,7 +197,7 @@ class PanelManager {
                         snappedW := aW + (aX - snappedX)
                     }
                 }
-                
+
                 if (hOverlap) {
                     if (isResizingBottom && Abs((aY + aH) - r.y) < threshold) {
                         snappedH := r.y - aY
@@ -213,7 +213,7 @@ class PanelManager {
                 }
             }
         }
-        
+
         if (isMoving && (snappedX != aX || snappedY != aY)) {
             WinMove(snappedX, snappedY, , , "ahk_id " activeHwnd)
             this.dragStates[activeId].x := snappedX
@@ -225,7 +225,7 @@ class PanelManager {
             this.dragStates[activeId].w := snappedW
             this.dragStates[activeId].h := snappedH
         }
-        
+
         this.dragStates["LastActive"] := activeId
     }
 
@@ -237,30 +237,30 @@ class PanelManager {
                 return
             hwnd := this.Panels[id].GuiHwnd
         }
-        
+
         if (!hwnd)
             return
         WinGetPos(&aX, &aY, &aW, &aH, "ahk_id " hwnd)
-        
+
         rects := []
         if (id != "Main" && WinExist("ahk_id " this.MainWindow)) {
             WinGetPos(&x, &y, &w, &h, "ahk_id " this.MainWindow)
-            rects.Push({x: x, y: y, w: w, h: h})
+            rects.Push({ x: x, y: y, w: w, h: h })
         }
         for otherId, pInfo in this.Panels {
             if (otherId != id && pInfo.GuiHwnd && WinExist("ahk_id " pInfo.GuiHwnd)) {
                 WinGetPos(&x, &y, &w, &h, "ahk_id " pInfo.GuiHwnd)
-                rects.Push({x: x, y: y, w: w, h: h})
+                rects.Push({ x: x, y: y, w: w, h: h })
             }
         }
-        
+
         MonitorGetWorkArea(1, &mLeft, &mTop, &mRight, &mBottom)
-        
+
         newLeft := mLeft
         newRight := mRight
         newTop := mTop
         newBottom := mBottom
-        
+
         for r in rects {
             if (r.x + r.w <= aX && r.y < aY + aH && r.y + r.h > aY) {
                 if (r.x + r.w > newLeft)
@@ -279,7 +279,7 @@ class PanelManager {
                     newBottom := r.y
             }
         }
-        
+
         WinMove(newLeft, newTop, newRight - newLeft, newBottom - newTop, "ahk_id " hwnd)
     }
 
@@ -288,32 +288,32 @@ class PanelManager {
         if (WinExist("ahk_id " this.MainWindow)) {
             WinGetPos(&x, &y, &w, &h, "ahk_id " this.MainWindow)
             if (x > -10000)
-                allRects.Push({x: x, y: y, w: w, h: h, id: "Main"})
+                allRects.Push({ x: x, y: y, w: w, h: h, id: "Main" })
         }
         for id, pInfo in this.Panels {
             if (pInfo.GuiHwnd && WinExist("ahk_id " pInfo.GuiHwnd)) {
                 WinGetPos(&x, &y, &w, &h, "ahk_id " pInfo.GuiHwnd)
                 if (x > -10000)
-                    allRects.Push({x: x, y: y, w: w, h: h, id: id})
+                    allRects.Push({ x: x, y: y, w: w, h: h, id: id })
             }
         }
-        
+
         for id, pInfo in this.Panels {
             if (!pInfo.GuiHwnd || !WinExist("ahk_id " pInfo.GuiHwnd))
                 continue
-                
+
             WinGetPos(&px, &py, &pw, &ph, "ahk_id " pInfo.GuiHwnd)
             if (px < -10000)
                 continue
-                
+
             isSnapped := false
             for r in allRects {
                 if (r.id == id)
                     continue
-                
+
                 hOverlap := (px < r.x + r.w) && (px + pw > r.x)
                 vOverlap := (py < r.y + r.h) && (py + ph > r.y)
-                
+
                 if (vOverlap && (Abs(px - (r.x + r.w)) <= 5 || Abs((px + pw) - r.x) <= 5 || Abs(px - r.x) <= 5 || Abs((px + pw) - (r.x + r.w)) <= 5)) {
                     isSnapped := true
                     break
@@ -323,14 +323,14 @@ class PanelManager {
                     break
                 }
             }
-            
+
             if (pInfo.Snapped != isSnapped) {
                 pInfo.Snapped := isSnapped
                 this.SaveState(id, "Snapped", isSnapped ? "1" : "0")
-                
+
                 forceSquare := this.GetSavedState("Global", "SquarePanes", "0") == "1"
                 isSquare := forceSquare || isSnapped
-                
+
                 cornerPref := isSquare ? 1 : 0
                 DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", pInfo.GuiHwnd, "UInt", 33, "Int*", cornerPref, "UInt", 4)
                 pInfo.Instance.Update("Resource", "PanelRadius", isSquare ? "0" : "8")
@@ -346,7 +346,7 @@ class PanelManager {
         }
 
         pInfo := this.Panels[id]
-        
+
         ; Load saved bounds
         w := this.GetSavedState(id, "W", pInfo.W)
         h := this.GetSavedState(id, "H", pInfo.H)
@@ -367,23 +367,23 @@ class PanelManager {
         tb := main.Add("Border").Grid_Row(0).Background("Transparent").Name("DragArea")
         tbInner := tb.Add("Grid")
         tbInner.Add("TextBlock").Text(pInfo.Title).Foreground("{DynamicResource TextMain}").FontSize(titleFont).FontWeight("SemiBold").VerticalAlignment("Center").Margin("15,0,0,0")
-        
+
         BtnGroup := tbInner.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right")
-        
+
         BtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="{DynamicResource ControlBgHover}"/><Setter Property="Foreground" Value="{DynamicResource TextMain}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
         CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
-        
+
         fillBtn := BtnGroup.Add("Button").Name("BtnFill").WindowChrome_IsHitTestVisibleInChrome("True").Width(btnWidth).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0)
         fillBtn.InjectResources(BtnTemplate)
         fillBtn.Add("TextBlock").Text(Chr(0xE922)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
-        
+
         closeBtn := BtnGroup.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(btnWidth).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0)
         closeBtn.InjectResources(CloseBtnTemplate)
         closeBtn.Add("TextBlock").Text(Chr(0xE8BB)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
 
         ; Body content based on panel type
         body := main.Add("Border").Grid_Row(1).Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,1,0,0")
-        
+
         if (id == "Terminal") {
             body.Add("ListBox").Background("Transparent").BorderThickness(0).Foreground("{DynamicResource TextSub}").FontFamily("Consolas")
                 .Add("ListBoxItem").Content("> System Initialized").Parent()
@@ -408,24 +408,24 @@ class PanelManager {
 
         ; Initialize XAML Host for this panel (No owner, so Z-order is standard)
         ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", "")
-        
+
         ; Replace template dimensions, add title/taskbar visibility, remove CenterScreen, and use dynamic PanelRadius
         ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Title="' pInfo.Title '" ShowInTaskbar="False" Width="' w '" Height="' h '" Left="' x '" Top="' y '"')
         ui.xaml := StrReplace(ui.xaml, 'WindowStartupLocation="CenterScreen"', 'WindowStartupLocation="Manual"')
         ui.xaml := StrReplace(ui.xaml, 'CornerRadius="{DynamicResource WindowRadius}"', 'CornerRadius="{DynamicResource PanelRadius}"')
-        
+
         noShadows := this.GetSavedState("Global", "NoShadows", "0") == "1"
         if (noShadows) {
             ui.xaml := StrReplace(ui.xaml, 'GlassFrameThickness="-1"', 'GlassFrameThickness="0" ResizeBorderThickness="6"')
         }
-        
+
         ; Callbacks
         ui.OnEvent("BtnFill", "Click", (state, ctrl, event) => this.AutoFillSpace(id))
         ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => this.OnPanelLoaded(id, ui))
         ui.OnEvent("Window", "Closing", (state, ctrl, event) => this.OnPanelClosing(id))
 
         ui.Show()
-        
+
         this.Panels[id].Instance := ui
         this.SaveState(id, "Visible", "1")
     }
@@ -433,7 +433,7 @@ class PanelManager {
     static ApplyThemeToPanel(pInfo, themeName) {
         if (pInfo.Instance == "" || !pInfo.Instance.wpfHwnd)
             return
-        
+
         try {
             themeData := IniRead("themes.ini", themeName)
             Loop Parse, themeData, "`n", "`r" {
@@ -448,14 +448,14 @@ class PanelManager {
                 }
             }
         }
-        
+
         ; Apply Snapped/Square Radius
         forceSquare := this.GetSavedState("Global", "SquarePanes", "0") == "1"
         isSquare := forceSquare || pInfo.Snapped
-        
+
         radius := isSquare ? "0" : "8"
         pInfo.Instance.Update("Resource", "PanelRadius", radius)
-        
+
         if (pInfo.GuiHwnd) {
             cornerPref := isSquare ? 1 : 0
             DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", pInfo.GuiHwnd, "UInt", 33, "Int*", cornerPref, "UInt", 4)
@@ -472,7 +472,7 @@ class PanelManager {
     static OnPanelLoaded(id, ui) {
         this.Panels[id].GuiHwnd := ui.wpfHwnd
         this.ApplyThemeToPanel(this.Panels[id], this.CurrentTheme)
-        
+
         ; Hook the exit size move to save coordinates
         SetTimer(() => this.CheckPanelMoved(id), 1000)
     }
@@ -480,7 +480,7 @@ class PanelManager {
     static CheckPanelMoved(id) {
         if (!this.Panels.Has(id) || this.Panels[id].Instance == "")
             return
-        
+
         hwnd := this.Panels[id].GuiHwnd
         if (hwnd && WinExist("ahk_id " hwnd)) {
             WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
@@ -517,11 +517,6 @@ btnSp := contentPanel.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,
 btnSp.Add("Button").Name("BtnOpenTerminal").Content("Toggle Terminal").Margin("0,0,10,0")
 btnSp.Add("Button").Name("BtnOpenProperties").Content("Toggle Properties").Margin("0,0,10,0")
 btnSp.Add("Button").Name("BtnOpenToolbox").Content("Toggle Toolbox")
-
-editor := contentPanel.CodeEditor("main.ahk")
-flow := editor.Add("FlowDocument").LineHeight(20)
-flow.Add("Paragraph").Margin("0").Add("Run").Text("; Write your code here").Foreground("#6A9955")
-flow.Add("Paragraph").Margin("0").Add("Run").Text("MsgBox(`"Hello World`")").Foreground("#DCDCAA")
 
 ui := app.Compile()
 ui.xaml := StrReplace(ui.xaml, 'Name="BtnMaximize"', 'Name="BtnAppMaximize"')
@@ -562,7 +557,7 @@ CheckMainMoved() {
         WinGetPos(&x, &y, &w, &h, "ahk_id " ui.wpfHwnd)
         if (x < -10000 || y < -10000) ; Ignore minimized state
             return
-        
+
         static lastX := "", lastY := "", lastW := "", lastH := ""
         if (x != lastX || y != lastY || w != lastW || h != lastH) {
             lastX := x, lastY := y, lastW := w, lastH := h

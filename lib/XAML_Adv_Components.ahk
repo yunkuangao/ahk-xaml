@@ -411,12 +411,33 @@ class XNodeGraph {
 
     AddConnection(fromId, toId) {
         pathId := this.id "_Path_" fromId "_" toId
+        
+        ; Prevent duplicate links visually
+        for conn in this.connections {
+            if (conn.From == fromId && conn.To == toId) {
+                if (this.ui) {
+                    this.ui.Update(pathId, "Visibility", "Visible")
+                    this.UpdatePath(fromId, toId, pathId)
+                }
+                return
+            }
+        }
+
         pathEl := this.canvas.Add("Path").Name(pathId).Stroke("#60A0FF").StrokeThickness("2.5").Opacity("0.8").SetProp("Panel.ZIndex", "-1")
         conn := { From: fromId, To: toId, PathId: pathId, PathEl: pathEl, Selected: false }
         this.connections.Push(conn)
-        this.UpdatePath(fromId, toId, pathId, true, pathEl)
+        
         if (this.ui) {
+            ; UI is already loaded, we must push this new element to WPF dynamically
+            xamlStr := pathEl.ToString()
+            xamlStr := StrReplace(xamlStr, "<Path ", "<Path xmlns=`"http://schemas.microsoft.com/winfx/2006/xaml/presentation`" ")
+            this.ui.Update(this.id, "AddXamlItem", xamlStr)
+            this.ui.Update(pathId, "Visibility", "Visible")
+            this.UpdatePath(fromId, toId, pathId)
             this.ui.OnEvent(pathId, "MouseLeftButtonDown", ObjBindMethod(this, "OnPathClicked", pathId))
+        } else {
+            ; UI is building, just push the initial data directly
+            this.UpdatePath(fromId, toId, pathId, true, pathEl)
         }
     }
 
@@ -746,8 +767,13 @@ class XNodeGraph {
     SaveState(filename) {
         if FileExist(filename)
             FileDelete(filename)
+        FileAppend("[Nodes]`n", filename)
         for node in this.nodes {
             FileAppend(node.Id "=" node.X "," node.Y "`n", filename)
+        }
+        FileAppend("`n[Links]`n", filename)
+        for conn in this.connections {
+            FileAppend(conn.From "->" conn.To "`n", filename)
         }
         MsgBox("Node graph state saved!", "Saved", "Iconi T2")
     }
@@ -757,25 +783,66 @@ class XNodeGraph {
             MsgBox("No saved state found.", "Load Error", "Iconx")
             return
         }
+        
+        ; Mark all current connections as inactive
+        for conn in this.connections {
+            conn.Active := false
+        }
+
         stateText := FileRead(filename)
+        mode := "Nodes"
+        
         Loop Parse, stateText, "`n", "`r" {
-            if (A_LoopField == "")
+            line := Trim(A_LoopField)
+            if (line == "")
                 continue
-            parts := StrSplit(A_LoopField, "=")
-            if (parts.Length == 2) {
-                nodeId := parts[1]
-                coords := StrSplit(parts[2], ",")
-                if (coords.Length == 2) {
-                    node := this.GetNode(nodeId)
-                    if (node) {
-                        node.X := Number(coords[1])
-                        node.Y := Number(coords[2])
-                        ui.Update("Node_" nodeId, "SetPosition", String(node.X) "," String(node.Y))
-                        this.UpdateNodePorts(node)
+            if (SubStr(line, 1, 1) == "[" && SubStr(line, -1) == "]") {
+                mode := SubStr(line, 2, StrLen(line) - 2)
+                continue
+            }
+            
+            if (mode == "Nodes" || mode == "") {
+                parts := StrSplit(line, "=")
+                if (parts.Length == 2) {
+                    nodeId := Trim(parts[1])
+                    coords := StrSplit(parts[2], ",")
+                    if (coords.Length == 2) {
+                        node := this.GetNode(nodeId)
+                        if (node) {
+                            node.X := Number(coords[1])
+                            node.Y := Number(coords[2])
+                            ui.Update("Node_" nodeId, "SetPosition", String(node.X) "," String(node.Y))
+                            this.UpdateNodePorts(node)
+                        }
+                    }
+                }
+            } else if (mode == "Links") {
+                parts := StrSplit(line, "->")
+                if (parts.Length == 2) {
+                    fromId := Trim(parts[1])
+                    toId := Trim(parts[2])
+                    this.AddConnection(fromId, toId)
+                    
+                    ; Ensure it's marked active
+                    for conn in this.connections {
+                        if (conn.From == fromId && conn.To == toId) {
+                            conn.Active := true
+                        }
                     }
                 }
             }
         }
+
+        ; Collapse inactive connections and clean up array
+        newConns := []
+        for conn in this.connections {
+            if (conn.HasOwnProp("Active") && !conn.Active) {
+                ui.Update(conn.PathId, "Visibility", "Collapsed")
+            } else {
+                newConns.Push(conn)
+            }
+        }
+        this.connections := newConns
     }
 
     static Count() {
