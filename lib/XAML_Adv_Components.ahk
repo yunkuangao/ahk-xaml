@@ -1640,3 +1640,479 @@ XAMLElement.Prototype.DefineProp("CodeEditor", { Call: _CodeEditorAdvanced })
 _CodeEditorAdvanced(this, initialCode := "") {
     return XCodeEditor(this, initialCode)
 }
+
+; ==============================================================================
+; PROPERTY GRID / INSPECTOR
+; ==============================================================================
+
+class XPropertyGrid {
+    __New(parentXAML, dataObj, name := "") {
+        this.id := name != "" ? name : "PropGrid_" XPropertyGrid.Count()
+        this.dataObj := dataObj
+        this.bindings := Map()
+        
+        this.bdr := parentXAML.Add("Border").Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").CornerRadius("6")
+        this.sv := this.bdr.Add("ScrollViewer").VerticalScrollBarVisibility("Auto").Padding("10")
+        this.sp := this.sv.Add("StackPanel").Name(this.id)
+        
+        this.Render()
+    }
+    
+    Render() {
+        this.RenderItems(this.dataObj, this.sp, "")
+    }
+    
+    RenderItems(obj, parentSp, prefix) {
+        isMap := (Type(obj) == "Map")
+        
+        if (isMap) {
+            for key, val in obj {
+                this.RenderSingleItem(key, val, parentSp, prefix)
+            }
+        } else {
+            for key, val in obj.OwnProps() {
+                this.RenderSingleItem(key, val, parentSp, prefix)
+            }
+        }
+    }
+    
+    RenderSingleItem(key, val, parentSp, prefix) {
+        fullKey := prefix == "" ? String(key) : prefix "." String(key)
+        valType := Type(val)
+        
+        if (valType == "Map" || valType == "Object") {
+            catBorder := parentSp.Add("Border").Background("#10FFFFFF").CornerRadius("4").Padding("8,4").Margin("0,10,0,5")
+            catBorder.Add("TextBlock").Text(String(key)).Foreground("{DynamicResource Accent}").FontWeight("Bold").FontSize("12")
+            
+            subSp := parentSp.Add("StackPanel").Margin("10,0,0,0")
+            this.RenderItems(val, subSp, fullKey)
+            return
+        }
+        
+        itemGrid := parentSp.Add("Grid").Margin("0,4,0,4")
+        itemGrid.Cols("2*", "3*")
+        
+        itemGrid.Add("TextBlock").Text(String(key)).Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").Grid_Column(0).Margin("0,0,10,0").TextWrapping("Wrap")
+        
+        ctrlId := this.id "_" StrReplace(fullKey, ".", "_")
+        this.bindings[ctrlId] := { Key: fullKey, Type: valType, Original: val }
+        
+        if (valType == "Integer" && (val == 0 || val == 1) && (String(key) ~= "i)^(is|has|enable|show|use|allow)")) {
+            valType := "Boolean"
+            this.bindings[ctrlId].Type := "Boolean"
+        }
+        
+        if (valType == "Boolean" || (valType == "Integer" && (val == 0 || val == 1) && (valType != "String"))) {
+            chk := itemGrid.Add("CheckBox").Name(ctrlId).Style("{StaticResource ToggleSwitch}").Grid_Column(1).HorizontalAlignment("Right")
+            if (val)
+                chk.IsChecked("True")
+            this.bindings[ctrlId].Type := "Boolean"
+        } else if (valType == "Integer" || valType == "Float") {
+            itemGrid.Add("TextBox").Name(ctrlId).Text(String(val)).Grid_Column(1).VerticalAlignment("Center").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderBrush("{DynamicResource ControlBorder}").HorizontalContentAlignment("Right")
+        } else {
+            itemGrid.Add("TextBox").Name(ctrlId).Text(String(val)).Grid_Column(1).VerticalAlignment("Center").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderBrush("{DynamicResource ControlBorder}")
+        }
+    }
+    
+    Bind(ui) {
+        this.ui := ui
+        for ctrlId, info in this.bindings {
+            ui.Track(ctrlId)
+            
+            if (info.Type == "Boolean") {
+                ui.OnEvent(ctrlId, "Checked", ObjBindMethod(this, "OnValueChanged", ctrlId))
+                ui.OnEvent(ctrlId, "Unchecked", ObjBindMethod(this, "OnValueChanged", ctrlId))
+            } else {
+                ui.OnEvent(ctrlId, "TextChanged", ObjBindMethod(this, "OnValueChanged", ctrlId))
+            }
+        }
+    }
+    
+    OnValueChanged(ctrlId, state, ctrl, event) {
+        if !state.Has(ctrlId)
+            return
+            
+        info := this.bindings[ctrlId]
+        newVal := state[ctrlId]
+        
+        if (info.Type == "Integer") {
+            newVal := IsInteger(newVal) ? Integer(newVal) : (newVal == "True" ? 1 : (newVal == "False" ? 0 : 0))
+        } else if (info.Type == "Float") {
+            newVal := IsFloat(newVal) ? Float(newVal) : 0.0
+        } else if (info.Type == "Boolean") {
+            newVal := (newVal == "True" || newVal == "1")
+        }
+        
+        this.UpdateObjectValue(this.dataObj, info.Key, newVal)
+    }
+    
+    UpdateObjectValue(obj, fullKey, val) {
+        parts := StrSplit(fullKey, ".")
+        current := obj
+        Loop parts.Length - 1 {
+            k := parts[A_Index]
+            isMap := (Type(current) == "Map")
+            if (isMap)
+                current := current[k]
+            else
+                current := current.%k%
+        }
+        
+        lastK := parts[parts.Length]
+        if (Type(current) == "Map")
+            current[lastK] := val
+        else
+            current.%lastK% := val
+    }
+    
+    static Count() {
+        static counter := 0
+        return ++counter
+    }
+}
+
+XAMLElement.Prototype.DefineProp("PropertyGrid", { Call: _PropertyGrid })
+_PropertyGrid(this, dataObj, name := "") {
+    return XPropertyGrid(this, dataObj, name)
+}
+
+; ==============================================================================
+; DIFF VIEWER
+; ==============================================================================
+
+class XDiffViewer {
+    __New(parentXAML, name := "") {
+        this.id := name != "" ? name : "DiffViewer_" XDiffViewer.Count()
+        this.ui := ""
+        
+        this.bdr := parentXAML.Add("Border").Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").CornerRadius("6").ClipToBounds("True")
+        this.grid := this.bdr.Add("Grid")
+        this.grid.Rows("Auto", "*")
+        
+        ; Header / Toolbar
+        header := this.grid.Add("Border").Grid_Row(0).Background("#10FFFFFF").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,0,1").Padding("8")
+        hSp := header.Add("StackPanel").Orientation("Horizontal")
+        
+        this.btnInline := hSp.Add("RadioButton").Name(this.id "_BtnInline").Content("Inline").Style("{StaticResource SegmentedBtn}").IsChecked("True").GroupName(this.id "_ViewMode").BorderThickness("0,0,1,0")
+        this.btnSide := hSp.Add("RadioButton").Name(this.id "_BtnSide").Content("Side-by-Side").Style("{StaticResource SegmentedBtn}").GroupName(this.id "_ViewMode").BorderThickness("0")
+        
+        ; Content Area
+        this.sv := this.grid.Add("ScrollViewer").Grid_Row(1).HorizontalScrollBarVisibility("Auto").VerticalScrollBarVisibility("Auto").Padding("0,5,0,5")
+        this.contentGrid := this.sv.Add("Grid").Name(this.id "_Content")
+    }
+    
+    Bind(ui) {
+        this.ui := ui
+        ui.OnEvent(this.id "_BtnInline", "Checked", ObjBindMethod(this, "RenderInline"))
+        ui.OnEvent(this.id "_BtnSide", "Checked", ObjBindMethod(this, "RenderSideBySide"))
+        ui.OnEvent("Window", "LoadedHwnd", ObjBindMethod(this, "OnLoad"))
+    }
+    
+    OnLoad(state := "", ctrl := "", event := "") {
+        if (this.HasProp("diffData") && this.diffData) {
+            ; Check which toggle is active to render correctly
+            if (state.Has(this.id "_BtnSide") && state[this.id "_BtnSide"] == "True")
+                this.RenderSideBySide()
+            else
+                this.RenderInline()
+        }
+    }
+    
+    SetDiff(text1, text2) {
+        this.text1 := text1
+        this.text2 := text2
+        this.diffData := this.ComputeDiff(text1, text2)
+        
+        if (this.HasProp("ui") && this.ui) {
+            this.RenderInline()
+        }
+    }
+    
+    ComputeDiff(text1, text2) {
+        lines1 := StrSplit(StrReplace(text1, "`r"), "`n")
+        lines2 := StrSplit(StrReplace(text2, "`r"), "`n")
+        
+        diff := []
+        i := 1, j := 1
+        
+        while (i <= lines1.Length || j <= lines2.Length) {
+            if (i > lines1.Length) {
+                diff.Push({Type: "+", Text: lines2[j], L1: "", L2: j})
+                j++
+                continue
+            }
+            if (j > lines2.Length) {
+                diff.Push({Type: "-", Text: lines1[i], L1: i, L2: ""})
+                i++
+                continue
+            }
+            if (lines1[i] == lines2[j]) {
+                diff.Push({Type: "=", Text: lines1[i], L1: i, L2: j})
+                i++
+                j++
+                continue
+            }
+            
+            resynced := false
+            Loop 10 {
+                k := A_Index
+                if (i + k <= lines1.Length && lines1[i+k] == lines2[j]) {
+                    Loop k {
+                        diff.Push({Type: "-", Text: lines1[i], L1: i, L2: ""})
+                        i++
+                    }
+                    resynced := true
+                    break
+                }
+                if (j + k <= lines2.Length && lines1[i] == lines2[j+k]) {
+                    Loop k {
+                        diff.Push({Type: "+", Text: lines2[j], L1: "", L2: j})
+                        j++
+                    }
+                    resynced := true
+                    break
+                }
+            }
+            
+            if (!resynced) {
+                diff.Push({Type: "-", Text: lines1[i], L1: i, L2: ""})
+                i++
+                diff.Push({Type: "+", Text: lines2[j], L1: "", L2: j})
+                j++
+            }
+        }
+        return diff
+    }
+    
+    EscapeXml(txt) {
+        txt := StrReplace(txt, "&", "&amp;")
+        txt := StrReplace(txt, "<", "&lt;")
+        txt := StrReplace(txt, ">", "&gt;")
+        return txt == "" ? " " : txt
+    }
+    
+    RenderInline(state := "", ctrl := "", event := "") {
+        if (!this.HasProp("diffData") || !this.diffData)
+            return
+            
+        xaml := '<StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">'
+        for d in this.diffData {
+            bg := d.Type == "+" ? "#2032D74B" : (d.Type == "-" ? "#20FF3333" : "Transparent")
+            fg := d.Type == "+" ? "#32D74B" : (d.Type == "-" ? "#FF3333" : "{DynamicResource TextMain}")
+            sign := d.Type == "=" ? " " : d.Type
+            
+            lineXaml := '<Border Background="' bg '" BorderBrush="Transparent" BorderThickness="0"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="40"/><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>'
+            lineXaml .= '<TextBlock Grid.Column="0" Text="' d.L1 '" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/>'
+            lineXaml .= '<TextBlock Grid.Column="1" Text="' d.L2 '" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/>'
+            lineXaml .= '<TextBlock Grid.Column="2" Text="' sign '" Foreground="' fg '" FontSize="12" FontFamily="Consolas" FontWeight="Bold" TextAlignment="Center"/>'
+            
+            txt := this.EscapeXml(d.Text)
+            lineXaml .= '<TextBlock Grid.Column="3" Text="' txt '" Foreground="' fg '" FontSize="12" FontFamily="Consolas" TextWrapping="NoWrap"/></Grid></Border>'
+            xaml .= lineXaml
+        }
+        xaml .= '</StackPanel>'
+        
+        if (this.HasProp("ui") && this.ui) {
+            this.ui.Update(this.id "_Content", "ClearItems", "")
+            this.ui.Update(this.id "_Content", "AddXamlItem", xaml)
+        }
+    }
+    
+    RenderSideBySide(state := "", ctrl := "", event := "") {
+        if (!this.HasProp("diffData") || !this.diffData)
+            return
+            
+        xaml := '<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="1"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Grid.Column="0">'
+        
+        leftSp := ""
+        rightSp := ""
+        
+        i := 1
+        while (i <= this.diffData.Length) {
+            d := this.diffData[i]
+            txt := this.EscapeXml(d.Text)
+                
+            if (d.Type == "=") {
+                leftSp .= '<Border Background="Transparent"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="' d.L1 '" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' txt '" Foreground="{DynamicResource TextMain}" FontSize="12" FontFamily="Consolas" TextWrapping="NoWrap"/></Grid></Border>'
+                
+                rightSp .= '<Border Background="Transparent"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="' d.L2 '" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' txt '" Foreground="{DynamicResource TextMain}" FontSize="12" FontFamily="Consolas" TextWrapping="NoWrap"/></Grid></Border>'
+                i++
+            } else if (d.Type == "-") {
+                if (i < this.diffData.Length && this.diffData[i+1].Type == "+") {
+                    d2 := this.diffData[i+1]
+                    txt2 := this.EscapeXml(d2.Text)
+                    
+                    leftSp .= '<Border Background="#20FF3333"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="' d.L1 '" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' txt '" Foreground="#FF3333" FontSize="12" FontFamily="Consolas" TextWrapping="NoWrap"/></Grid></Border>'
+                    
+                    rightSp .= '<Border Background="#2032D74B"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="' d2.L2 '" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' txt2 '" Foreground="#32D74B" FontSize="12" FontFamily="Consolas" TextWrapping="NoWrap"/></Grid></Border>'
+                    i += 2
+                } else {
+                    leftSp .= '<Border Background="#20FF3333"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="' d.L1 '" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' txt '" Foreground="#FF3333" FontSize="12" FontFamily="Consolas" TextWrapping="NoWrap"/></Grid></Border>'
+                    
+                    rightSp .= '<Border Background="#10FF3333"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text=" " FontSize="12" FontFamily="Consolas"/></Grid></Border>'
+                    i++
+                }
+            } else if (d.Type == "+") {
+                leftSp .= '<Border Background="#1032D74B"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text=" " FontSize="12" FontFamily="Consolas"/></Grid></Border>'
+                
+                rightSp .= '<Border Background="#2032D74B"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="' d.L2 '" Foreground="{DynamicResource TextSub}" FontSize="12" FontFamily="Consolas" TextAlignment="Right" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' txt '" Foreground="#32D74B" FontSize="12" FontFamily="Consolas" TextWrapping="NoWrap"/></Grid></Border>'
+                i++
+            }
+        }
+        
+        xaml .= leftSp '</StackPanel><Rectangle Grid.Column="1" Fill="{DynamicResource ControlBorder}"/><StackPanel Grid.Column="2">' rightSp '</StackPanel></Grid>'
+        
+        if (this.HasProp("ui") && this.ui) {
+            this.ui.Update(this.id "_Content", "ClearItems", "")
+            this.ui.Update(this.id "_Content", "AddXamlItem", xaml)
+        }
+    }
+    
+    static Count() {
+        static counter := 0
+        return ++counter
+    }
+}
+
+XAMLElement.Prototype.DefineProp("DiffViewer", { Call: _DiffViewer })
+_DiffViewer(this, name := "") {
+    return XDiffViewer(this, name)
+}
+
+class XWebView extends XAMLElement {
+    __New(parent, id := "") {
+        if (!XAML_ENABLE_WEBVIEW)
+            throw Error("WebView is disabled. Set XAML_ENABLE_WEBVIEW := true in XAML_Config.ahk to use it.")
+            
+        if (id == "")
+            id := "WebView_" XWebView.Count()
+        super.__New("Grid")
+        this.SetProp("xmlns:wv2", "clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf")
+        this.Name(id)
+        this.id := id
+        this._Parent := parent
+        parent._Children.Push(this)
+        
+        this.Rows("Auto", "*")
+        
+        tb := this.Add("Border").Grid_Row(0).Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,0,1").Padding("10")
+        sp := tb.Add("StackPanel").Orientation("Horizontal")
+        
+        this.btnBackId := this.id "_BtnBack"
+        this.btnBack := sp.Add("Button").Name(this.btnBackId).Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Back")
+        this.btnBack.Add("TextBlock").Text(Chr(0xE72B)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+        
+        this.btnFwdId := this.id "_BtnFwd"
+        this.btnFwd := sp.Add("Button").Name(this.btnFwdId).Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,10,0").ToolTip("Forward")
+        this.btnFwd.Add("TextBlock").Text(Chr(0xE72A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+        
+        this.btnRefreshId := this.id "_BtnRefresh"
+        this.btnRefresh := sp.Add("Button").Name(this.btnRefreshId).Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,10,0").ToolTip("Refresh")
+        this.btnRefresh.Add("TextBlock").Text(Chr(0xE72C)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+        
+        this.txtUrlId := this.id "_TxtUrl"
+        this.txtUrl := sp.Add("TextBox").Name(this.txtUrlId).Width("400").Margin("0,0,10,0").VerticalAlignment("Center").Text("https://google.com/")
+        
+        this.btnGoId := this.id "_BtnGo"
+        this.btnGo := sp.Add("Button").Name(this.btnGoId).Background("{DynamicResource Accent}").Foreground("White").BorderThickness("0").Padding("15,6").Content("Go").Margin("0,0,10,0")
+        
+        this.btnDevToolsId := this.id "_BtnDevTools"
+        this.btnDevTools := sp.Add("Button").Name(this.btnDevToolsId).Background("#10FFFFFF").Foreground("{DynamicResource TextMain}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").Padding("15,6").Content("DevTools").Margin("0,0,10,0")
+        
+        this.btnAddJsBtnId := this.id "_BtnAddJsBtn"
+        this.btnAddJsBtn := sp.Add("Button").Name(this.btnAddJsBtnId).Background("#10FFFFFF").Foreground("{DynamicResource TextMain}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").Padding("15,6").Content("Add JS Button").Margin("0,0,10,0")
+        
+        this.btnInjectId := this.id "_BtnInject"
+        this.btnInject := sp.Add("Button").Name(this.btnInjectId).Background("#10FFFFFF").Foreground("{DynamicResource TextMain}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").Padding("15,6").Content("Inject JS")
+        
+        this.wvName := this.id "_WV"
+        wv := this.Add("wv2:WebView2").Name(this.wvName).Grid_Row(1).SetProp("Source", "https://google.com/")
+        
+        this.OnMessageCallback := ""
+    }
+
+    Bind(ui) {
+        this.ui := ui
+        ui.Track(this.txtUrlId)
+        ui.OnEvent(this.btnGoId, "Click", ObjBindMethod(this, "OnGoClick"))
+        ui.OnEvent(this.btnBackId, "Click", (*) => ui.Update(this.wvName, "GoBack", ""))
+        ui.OnEvent(this.btnFwdId, "Click", (*) => ui.Update(this.wvName, "GoForward", ""))
+        ui.OnEvent(this.btnRefreshId, "Click", (*) => ui.Update(this.wvName, "Refresh", ""))
+        ui.OnEvent(this.btnDevToolsId, "Click", (*) => ui.Update(this.wvName, "OpenDevTools", ""))
+        ui.OnEvent(this.btnAddJsBtnId, "Click", ObjBindMethod(this, "OnAddJsBtnClick"))
+        ui.OnEvent(this.btnInjectId, "Click", ObjBindMethod(this, "OnInjectClick"))
+        
+        ui.OnEvent(this.wvName, "NavigationCompleted", ObjBindMethod(this, "OnNavCompleted"))
+        ui.OnEvent(this.wvName, "WebMessageReceived", ObjBindMethod(this, "OnWebMessage"))
+        
+        ; Enable Return key to trigger Go
+        ui.OnEvent(this.txtUrlId, "KeyDown:Return", ObjBindMethod(this, "OnGoClick"))
+    }
+
+    OnGoClick(state, ctrl, event) {
+        url := state.Has(this.txtUrlId) ? state[this.txtUrlId] : ""
+        if (url != "") {
+            if (!InStr(url, "http://") && !InStr(url, "https://") && !InStr(url, "file://"))
+                url := "https://" url
+            this.Navigate(url)
+        }
+    }
+
+    OnInjectClick(state, ctrl, event) {
+        js := "console.log('Inject JS triggered!'); alert('hello world');"
+        this.ExecuteJS(js)
+    }
+    
+    OnAddJsBtnClick(state, ctrl, event) {
+        js := "let btn = document.createElement('button'); btn.innerText = 'Send Message to AHK'; btn.style.position = 'fixed'; btn.style.top = '20px'; btn.style.right = '20px'; btn.style.zIndex = 999999; btn.style.padding = '15px'; btn.style.fontSize = '16px'; btn.style.background = '#0078D7'; btn.style.color = 'white'; btn.style.border = 'none'; btn.style.borderRadius = '5px'; btn.style.cursor = 'pointer'; btn.onclick = () => window.chrome.webview.postMessage('Button clicked from inside the webpage!'); document.body.appendChild(btn);"
+        this.ExecuteJS(js)
+    }
+
+    OnNavCompleted(state, ctrl, event) {
+        if (state.Has("NavigationCompleted")) {
+            url := state["NavigationCompleted"]
+            if (url != "")
+                this.ui.Update(this.txtUrlId, "Text", url)
+        }
+    }
+
+    OnWebMessage(state, ctrl, event) {
+        if (state.Has("WebMessageReceived")) {
+            msg := state["WebMessageReceived"]
+            if (this.OnMessageCallback != "") {
+                cb := this.OnMessageCallback
+                cb(msg)
+            }
+        }
+    }
+
+    Navigate(url) {
+        if (this.HasProp("ui") && this.ui)
+            this.ui.Update(this.wvName, "Navigate", url)
+    }
+
+    ExecuteJS(js) {
+        if (this.HasProp("ui") && this.ui)
+            this.ui.Update(this.wvName, "ExecuteScript", XAMLHost.Base64Encode(js))
+    }
+
+    PostMessage(msg) {
+        if (this.HasProp("ui") && this.ui)
+            this.ui.Update(this.wvName, "PostWebMessage", msg)
+    }
+    
+    OnMessage(callback) {
+        this.OnMessageCallback := callback
+        return this
+    }
+    
+    static Count() {
+        static counter := 0
+        return ++counter
+    }
+}
+
+XAMLElement.Prototype.DefineProp("WebView", { Call: _WebView })
+_WebView(this, name := "") {
+    return XWebView(this, name)
+}

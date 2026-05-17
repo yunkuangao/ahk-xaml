@@ -10,6 +10,10 @@ using System.Text;
 using System.Xml;
 using System.Reflection;
 using System.Windows.Documents;
+#if ENABLE_WEBVIEW
+using Microsoft.Web.WebView2.Wpf;
+using Microsoft.Web.WebView2.Core;
+#endif
 
 [assembly: AssemblyTitle("ahk-xaml Engine")]
 [assembly: AssemblyDescription("WPF Rendering Engine for AutoHotkey")]
@@ -332,12 +336,36 @@ public class AhkWpfEngine : Application {
         win.LocationChanged += (s, e) => UpdateSnapState(win);
         win.SizeChanged += (s, e) => UpdateSnapState(win);
         
-        win.Loaded += (s, e) => {
+        win.Loaded += async (s, e) => {
             IntPtr hwnd = new WindowInteropHelper(win).Handle;
             HwndSource.FromHwnd(hwnd).AddHook(WndProc);
             SendToAhk("EVENT|" + winId + "|Window|LoadedHwnd|" + hwnd.ToString() + "\n");
             UpdateSnapState(win);
             DumpState("Window", "Loaded");
+            
+#if ENABLE_WEBVIEW
+            var webViews = new System.Collections.Generic.List<WebView2>();
+            WalkVisualTree(win, (obj) => {
+                if (obj is WebView2) {
+                    var wv = (WebView2)obj;
+                    webViews.Add(wv);
+                }
+            });
+            foreach (var wv in webViews) {
+                try {
+                    var env = await CoreWebView2Environment.CreateAsync(null, System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWebView2Data"));
+                    await wv.EnsureCoreWebView2Async(env);
+                    wv.CoreWebView2.WebMessageReceived += (ws, we) => {
+                        SendToAhk("EVENT|" + winId + "|" + wv.Name + "|WebMessageReceived|" + Convert.ToBase64String(Encoding.UTF8.GetBytes(we.TryGetWebMessageAsString())) + "\n");
+                    };
+                    wv.NavigationCompleted += (ws, we) => {
+                        SendToAhk("EVENT|" + winId + "|" + wv.Name + "|NavigationCompleted|" + Convert.ToBase64String(Encoding.UTF8.GetBytes(wv.Source != null ? wv.Source.ToString() : "")) + "\n");
+                    };
+                } catch (Exception ex) {
+                    System.Windows.MessageBox.Show("WebView Init Error:\n" + ex.ToString(), "AHK-XAML WebView Error");
+                }
+            }
+#endif
             
             // Aggressively flush the working set from RAM (WPF caches huge amounts of unused startup structures)
             var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
@@ -733,6 +761,28 @@ public class AhkWpfEngine : Application {
                     } catch (Exception ex) {
                         Console.WriteLine("NavigateToString error: " + ex.Message);
                     }
+#if ENABLE_WEBVIEW
+                } else if (parts[1] == "Navigate" && ctrl is Microsoft.Web.WebView2.Wpf.WebView2) {
+                    try {
+                        ((Microsoft.Web.WebView2.Wpf.WebView2)ctrl).CoreWebView2.Navigate(parts[2]);
+                    } catch { }
+                } else if (parts[1] == "ExecuteScript" && ctrl is Microsoft.Web.WebView2.Wpf.WebView2) {
+                    try {
+                        ((Microsoft.Web.WebView2.Wpf.WebView2)ctrl).CoreWebView2.ExecuteScriptAsync(Encoding.UTF8.GetString(Convert.FromBase64String(parts[2])));
+                    } catch { }
+                } else if (parts[1] == "PostWebMessage" && ctrl is Microsoft.Web.WebView2.Wpf.WebView2) {
+                    try {
+                        ((Microsoft.Web.WebView2.Wpf.WebView2)ctrl).CoreWebView2.PostWebMessageAsString(parts[2]);
+                    } catch { }
+                } else if (parts[1] == "GoBack" && ctrl is Microsoft.Web.WebView2.Wpf.WebView2) {
+                    try { ((Microsoft.Web.WebView2.Wpf.WebView2)ctrl).GoBack(); } catch { }
+                } else if (parts[1] == "GoForward" && ctrl is Microsoft.Web.WebView2.Wpf.WebView2) {
+                    try { ((Microsoft.Web.WebView2.Wpf.WebView2)ctrl).GoForward(); } catch { }
+                } else if (parts[1] == "Refresh" && ctrl is Microsoft.Web.WebView2.Wpf.WebView2) {
+                    try { ((Microsoft.Web.WebView2.Wpf.WebView2)ctrl).Reload(); } catch { }
+                } else if (parts[1] == "OpenDevTools" && ctrl is Microsoft.Web.WebView2.Wpf.WebView2) {
+                    try { ((Microsoft.Web.WebView2.Wpf.WebView2)ctrl).CoreWebView2.OpenDevToolsWindow(); } catch { }
+#endif
                 } else if (parts[1] == "StartPositionTimer" && ctrl is MediaElement) {
                     // Handle all position tracking and seeking in C# to avoid IPC feedback loops
                     var me = (MediaElement)ctrl;

@@ -32,7 +32,9 @@ class XAMLHost {
     OnEvent(controlName, eventName, callback, priority := 0) {
         if !this.events.Has(controlName)
             this.events[controlName] := Map()
-        this.events[controlName][eventName] := { Callback: callback, Priority: priority }
+        if !this.events[controlName].Has(eventName)
+            this.events[controlName][eventName] := []
+        this.events[controlName][eventName].Push({ Callback: callback, Priority: priority })
     }
 
     Track(controlName) {
@@ -138,7 +140,7 @@ class XAMLHost {
     Export(filePath) {
         eventBindings := ""
         for ctrlName, events in this.events {
-            for eventName, evtObj in events {
+            for eventName, evtList in events {
                 eventBindings .= ctrlName ":" eventName ","
             }
         }
@@ -193,7 +195,14 @@ class XAMLHost {
         SplitPath(cscPath, , &cscDir)
         wpfDir := cscDir "\WPF"
 
-        cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' sharedExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll "' sourceCs '" > "' this.errLog '" 2>&1"'
+        wvRefs := ""
+        wvDef := ""
+        if (XAML_ENABLE_WEBVIEW) {
+            wvRefs := ' /reference:"' libDir '\WebView2\Microsoft.Web.WebView2.Core.dll" /reference:"' libDir '\WebView2\Microsoft.Web.WebView2.Wpf.dll"'
+            wvDef := ' /define:ENABLE_WEBVIEW'
+        }
+
+        cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' sharedExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll' wvRefs wvDef ' "' sourceCs '" > "' this.errLog '" 2>&1"'
         RunWait(cmd, "", "Hide")
 
         if !FileExist(sharedExe) {
@@ -246,6 +255,16 @@ class XAMLHost {
             ; Copy generic engine to Temp for isolated execution if missing
             if !FileExist(targetExe)
                 FileCopy(sharedExe, targetExe, 1)
+                
+            ; Copy WebView2 dependencies to Temp directory alongside engine
+            if (XAML_ENABLE_WEBVIEW) {
+                SplitPath(targetExe, , &targetDir)
+                if FileExist(libDir "\WebView2\WebView2Loader.dll") {
+                    try FileCopy(libDir "\WebView2\WebView2Loader.dll", targetDir "\WebView2Loader.dll", 1)
+                    try FileCopy(libDir "\WebView2\Microsoft.Web.WebView2.Core.dll", targetDir "\Microsoft.Web.WebView2.Core.dll", 1)
+                    try FileCopy(libDir "\WebView2\Microsoft.Web.WebView2.Wpf.dll", targetDir "\Microsoft.Web.WebView2.Wpf.dll", 1)
+                }
+            }
         } else {
             ; Production Mode: Extract the embedded, pre-compiled generic engine directly.
             ; No C# compiler or source code is required on the user's machine.
@@ -287,7 +306,7 @@ class XAMLHost {
             
             eventBindings := ""
             for cName, events in instance.events {
-                for eName, evtObj in events {
+                for eName, evtList in events {
                     eventBindings .= cName ":" eName ","
                 }
             }
@@ -356,14 +375,16 @@ class XAMLHost {
                     str .= k "=" v ", "
                 FileAppend("OnCopyData SelectionBox: " str "`n", A_ScriptDir "\debug.log")
             }
-            evtObj := instance.events[ctrlName][baseEventName]
-            cb := evtObj.Callback
-            
-            ; Handle optional event key args without breaking older 3-param callbacks
-            if (extraArg != "")
-                SetTimer(() => cb(stateMap, ctrlName, {Key: extraArg}), -1, evtObj.Priority)
-            else
-                SetTimer(() => cb(stateMap, ctrlName, baseEventName), -1, evtObj.Priority)
+            evtList := instance.events[ctrlName][baseEventName]
+            for evtObj in evtList {
+                cb := evtObj.Callback
+                
+                ; Handle optional event key args without breaking older 3-param callbacks
+                if (extraArg != "")
+                    SetTimer(cb.Bind(stateMap, ctrlName, {Key: extraArg}), -1, evtObj.Priority)
+                else
+                    SetTimer(cb.Bind(stateMap, ctrlName, baseEventName), -1, evtObj.Priority)
+            }
         }
         return 1
     }

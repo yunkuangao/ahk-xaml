@@ -237,13 +237,72 @@ editorPage._Parent := app.X
 editorPage.Rows("Auto", "*")
 
 editorHeader := editorPage.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,20")
-editorHeader.Add("TextBlock").Text("Syntax Engine").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,20,0").VerticalAlignment("Center")
-editorHeader.Add("TextBlock").Text("Zero-latency IPC text rendering").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
+editorHeader.Add("TextBlock").Text("IDE").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,20,0").VerticalAlignment("Center")
+editorHeader.Add("TextBlock").Text("Work in progress...").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
 
 codeGrid := editorPage.Add("Grid").Grid_Row(1)
 myEditor := codeGrid.CodeEditor("function init() {`n    // System ready`n    let count = 42;`n    return true;`n}")
 
 nav.AddPage("Code", Chr(0xE81E), editorPage)
+
+; ---------------------------------------------------------
+; PAGE 9: Property Grid
+; ---------------------------------------------------------
+propPage := XAML_Generator("Grid").Margin("0")
+propPage._Parent := app.X
+propPage.Rows("Auto", "*")
+
+propHeader := propPage.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,20")
+propHeader.Add("TextBlock").Text("Settings Inspector").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,20,0").VerticalAlignment("Center")
+propHeader.Add("TextBlock").Text("Auto-generated UI from AHK Objects").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
+
+propGridContainer := propPage.Add("Grid").Grid_Row(1).Margin("0,0,20,0").Width("400").HorizontalAlignment("Left")
+
+testSettings := Map(
+    "General", Map(
+        "AppName", "AHK Studio",
+        "Version", 2.1,
+        "IsPortable", true,
+        "MaxRecentFiles", 10
+    ),
+    "Editor", Map(
+        "FontFamily", "Consolas",
+        "FontSize", 14,
+        "WordWrap", false,
+        "ShowLineNumbers", true,
+        "TabSize", 4
+    ),
+    "Advanced", Map(
+        "EnableTelemetry", false,
+        "DebugLevel", 3,
+        "CustomArgs", "--verbose"
+    )
+)
+
+pg := propGridContainer.PropertyGrid(testSettings, "MySettingsGrid")
+
+nav.AddPage("Inspector", Chr(0xE713), propPage)
+
+; ---------------------------------------------------------
+; PAGE 10: Diff Viewer
+; ---------------------------------------------------------
+diffPage := XAML_Generator("Grid").Margin("0")
+diffPage._Parent := app.X
+diffPage.Rows("Auto", "*")
+
+diffHeader := diffPage.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,20")
+diffHeader.Add("TextBlock").Text("Code Comparison").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,20,0").VerticalAlignment("Center")
+diffHeader.Add("TextBlock").Text("Inline and Side-by-Side Diffing").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
+
+diffBdr := diffPage.Add("Border").Grid_Row(1).Margin("0,0,20,0")
+dv := diffBdr.DiffViewer("MyDiff")
+
+oldText := "function calculateTotal(items) {`n    let total = 0;`n    for (let i = 0; i < items.length; i++) {`n        total += items[i].price;`n    }`n    return total;`n}"
+newText := "function calculateTotal(items) {`n    // Optimized array reduce`n    return items.reduce((total, item) => total + item.price, 0);`n}"
+dv.SetDiff(oldText, newText)
+
+nav.AddPage("Diff Tool", Chr(0xE81C), diffPage)
+
 
 ; ---------------------------------------------------------
 ; START APP
@@ -265,6 +324,8 @@ ic.Bind(ui)
 
 digitalClock.Bind(ui)
 myEditor.Bind(ui)
+pg.Bind(ui)
+dv.Bind(ui)
 
 ui.OnEvent("BtnClockLive", "Checked", (s, c, e) => SwitchClockMode("Live", s, digitalClock, ui))
 ui.OnEvent("BtnClockEdit", "Checked", (s, c, e) => SwitchClockMode("Edit", s, digitalClock, ui))
@@ -277,9 +338,9 @@ SwitchClockMode(mode, state, clockRef, uiRef) {
     static currentMode := ""
     if (mode == currentMode)
         return
-        
+
     currentMode := mode
-    
+
     if (mode == "Live") {
         uiRef.Update("BtnClockLive", "IsChecked", "True")
         uiRef.Update("BtnClockEdit", "IsChecked", "False")
@@ -364,7 +425,7 @@ ChangeSvgBgColor(state, ctrl, event) {
         Modal: true,
         Theme: themeName
     })
-    
+
     if (res.Status == "OK") {
         baseColor := "#1E1E1E"
         try {
