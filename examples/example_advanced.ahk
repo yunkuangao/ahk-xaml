@@ -165,10 +165,32 @@ vidGrid.Rows("Auto", "*")
 mp := vidGrid.MediaPlayerEx("", "VidPlayer")
 mp.grid.Grid_Row(1)
 
-nav.AddPage("Media", Chr(0xE8B9), mediaGrid)
+nav.AddPage("Media", Chr(0xE1D3), mediaGrid)
 
 ; ---------------------------------------------------------
-; PAGE 5: Image Cropper
+; PAGE 5: SVG Viewer
+; ---------------------------------------------------------
+svgGrid := XAML_Generator("Grid").Margin("0")
+svgGrid._Parent := app.X
+svgGrid.Rows("Auto", "*")
+
+svgHeader := svgGrid.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,10")
+svgHeader.Add("TextBlock").Text("SVG Viewer").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").Margin("0,0,20,0")
+
+svgHeader.Add("Button").Name("BtnSvgBgColor").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Change Background Color").Add("TextBlock").Text(Chr(0xE790)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+svgHeader.Add("Button").Name("BtnSvgGridDark").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Dark Grid").Add("TextBlock").Text(Chr(0xE80A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+svgHeader.Add("Button").Name("BtnSvgGridLight").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Light Grid").Add("TextBlock").Text(Chr(0xE80A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).Foreground("{DynamicResource TextSub}").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+svgHeader.Add("Button").Name("BtnSvgGridNone").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,15,0").ToolTip("No Grid").Add("TextBlock").Text(Chr(0xE814)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).Foreground("#FF453A").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+
+svgHeader.Add("Button").Name("BtnSvgReplace").Content("Replace SVG").Background("Transparent").Foreground("{DynamicResource Accent}").BorderThickness("0").Margin("15,0,0,0").VerticalAlignment("Center").Visibility("Collapsed").Cursor("Hand")
+
+svgViewer := svgGrid.SvgViewer("MySvgViewer")
+svgViewer.grid.Grid_Row(1)
+
+nav.AddPage("SVG Viewer", Chr(0xEB9F), svgGrid)
+
+; ---------------------------------------------------------
+; PAGE 6: Image Cropper
 ; ---------------------------------------------------------
 cropGrid := XAML_Generator("Grid").Margin("0")
 cropGrid._Parent := app.X
@@ -185,6 +207,45 @@ ic.grid.Grid_Row(1)
 nav.AddPage("Image", Chr(0xE91B), cropGrid)
 
 ; ---------------------------------------------------------
+; PAGE 7: Animated Clock
+; ---------------------------------------------------------
+clockPage := XAML_Generator("Grid").Margin("0")
+clockPage._Parent := app.X
+clockPage.Rows("Auto", "*")
+
+clockHeader := clockPage.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,20")
+clockHeader.Add("TextBlock").Text("Dynamic Clock").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,20,0").VerticalAlignment("Center")
+
+liveSp := clockHeader.Add("StackPanel").Orientation("Horizontal").Margin("0,0,15,0")
+liveSp.Add("CheckBox").Name("BtnClockLive").Style("{StaticResource ToggleSwitch}").IsChecked("True").Margin("0,0,10,0")
+liveSp.Add("TextBlock").Text("Live Mode").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
+
+editSp := clockHeader.Add("StackPanel").Orientation("Horizontal")
+editSp.Add("CheckBox").Name("BtnClockEdit").Style("{StaticResource ToggleSwitch}").Margin("0,0,10,0")
+editSp.Add("TextBlock").Text("Edit Mode").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
+
+cBox := clockPage.Add("Grid").Grid_Row(1)
+digitalClock := cBox.Clock("MyClock")
+
+nav.AddPage("Clock", Chr(0xE823), clockPage)
+
+; ---------------------------------------------------------
+; PAGE 8: Code Editor
+; ---------------------------------------------------------
+editorPage := XAML_Generator("Grid").Margin("0")
+editorPage._Parent := app.X
+editorPage.Rows("Auto", "*")
+
+editorHeader := editorPage.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,20")
+editorHeader.Add("TextBlock").Text("Syntax Engine").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,20,0").VerticalAlignment("Center")
+editorHeader.Add("TextBlock").Text("Zero-latency IPC text rendering").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
+
+codeGrid := editorPage.Add("Grid").Grid_Row(1)
+myEditor := codeGrid.CodeEditor("function init() {`n    // System ready`n    let count = 42;`n    return true;`n}")
+
+nav.AddPage("Code", Chr(0xE81E), editorPage)
+
+; ---------------------------------------------------------
 ; START APP
 ; ---------------------------------------------------------
 ui := app.Compile()
@@ -194,7 +255,62 @@ nav.Bind(ui)
 kb.Bind(ui)
 ng.Bind(ui)
 mp.Bind(ui)
+svgViewer.Bind(ui)
+ui.OnEvent("BtnSvgReplace", "Click", ObjBindMethod(svgViewer, "OnClick"))
+ui.OnEvent("BtnSvgBgColor", "Click", ChangeSvgBgColor)
+ui.OnEvent("BtnSvgGridDark", "Click", (state, ctrl, event) => svgViewer.SetGrid("Dark"))
+ui.OnEvent("BtnSvgGridLight", "Click", (state, ctrl, event) => svgViewer.SetGrid("Light"))
+ui.OnEvent("BtnSvgGridNone", "Click", (state, ctrl, event) => svgViewer.SetGrid("None"))
 ic.Bind(ui)
+
+digitalClock.Bind(ui)
+myEditor.Bind(ui)
+
+ui.OnEvent("BtnClockLive", "Checked", (s, c, e) => SwitchClockMode("Live", s, digitalClock, ui))
+ui.OnEvent("BtnClockEdit", "Checked", (s, c, e) => SwitchClockMode("Edit", s, digitalClock, ui))
+ui.OnEvent("BtnClockLive", "Unchecked", (s, c, e) => SwitchClockMode("Edit", s, digitalClock, ui))
+ui.OnEvent("BtnClockEdit", "Unchecked", (s, c, e) => SwitchClockMode("Live", s, digitalClock, ui))
+
+SwitchClockMode("Live", Map(), digitalClock, ui) ; Force initialize state
+
+SwitchClockMode(mode, state, clockRef, uiRef) {
+    static currentMode := ""
+    if (mode == currentMode)
+        return
+        
+    currentMode := mode
+    
+    if (mode == "Live") {
+        uiRef.Update("BtnClockLive", "IsChecked", "True")
+        uiRef.Update("BtnClockEdit", "IsChecked", "False")
+        clockRef.SetEditMode(false, state)
+    } else {
+        uiRef.Update("BtnClockLive", "IsChecked", "False")
+        uiRef.Update("BtnClockEdit", "IsChecked", "True")
+        clockRef.SetEditMode(true, state)
+    }
+}
+
+ui.OnEvent("ComboTheme", "SelectionChanged", UpdateSvgThemeBase)
+
+UpdateSvgThemeBase(state, ctrl, event) {
+    app.ThemeChanged(state, ctrl, event)
+    if !state.Has("ComboTheme")
+        return
+    themeName := state["ComboTheme"]
+    baseColor := "#1E1E1E"
+    try {
+        themeData := IniRead("themes.ini", themeName)
+        Loop Parse, themeData, "`n", "`r" {
+            parts := StrSplit(A_LoopField, "=", " `t", 2)
+            if (parts.Length == 2 && parts[1] == "Resource_DropdownBg") {
+                baseColor := parts[2]
+                break
+            }
+        }
+    }
+    svgViewer.SetBackground(svgViewer.bgColor, baseColor)
+}
 
 ; Kanban move buttons
 ui.OnEvent("KbMoveLeft", "Click", (*) => (kb.HasProp("selectedColIdx") && kb.selectedColIdx > 1) ? kb.MoveSelectedTo(kb.selectedColIdx - 1) : "")
@@ -202,6 +318,7 @@ ui.OnEvent("KbMoveRight", "Click", (*) => (kb.HasProp("selectedColIdx") && kb.se
 
 ; Track markdown editor for state
 ui.Track("MdEditor")
+ui.Track("ComboTheme")
 
 ui.OnEvent("BtnToggleMd", "Checked", (*) => (ui.Update("MdViewSv", "Visibility", "Collapsed"), ui.Update("MdEditor", "Visibility", "Visible")))
 ui.OnEvent("BtnToggleMd", "Unchecked", ObjBindMethod(app, "RebuildMarkdown"))
@@ -236,6 +353,32 @@ _RebuildMarkdown(this, state, ctrl, event) {
 
     ui.Update("MdViewSv", "Visibility", "Visible")
     ui.Update("MdEditor", "Visibility", "Collapsed")
+}
+
+ChangeSvgBgColor(state, ctrl, event) {
+    themeName := state.Has("ComboTheme") ? state["ComboTheme"] : "Dark Mica (Win 11)"
+    res := XColorPicker.Show({
+        Title: "SVG Background Color",
+        DefaultColor: "#1E1E1E",
+        Owner: ui.wpfHwnd,
+        Modal: true,
+        Theme: themeName
+    })
+    
+    if (res.Status == "OK") {
+        baseColor := "#1E1E1E"
+        try {
+            themeData := IniRead("themes.ini", themeName)
+            Loop Parse, themeData, "`n", "`r" {
+                parts := StrSplit(A_LoopField, "=", " `t", 2)
+                if (parts.Length == 2 && parts[1] == "Resource_DropdownBg") {
+                    baseColor := parts[2]
+                    break
+                }
+            }
+        }
+        svgViewer.SetBackground(res.Color, baseColor)
+    }
 }
 
 ui.OnEvent("BtnSave", "Click", (*) => ng.SaveState("node_state.ini"))

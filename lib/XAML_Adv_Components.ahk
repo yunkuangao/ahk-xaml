@@ -1072,3 +1072,571 @@ XAMLElement.Prototype.DefineProp("ImageCropper", { Call: _ImageCropper })
 _ImageCropper(this, imageUri := "", name := "") {
     return XImageCropper(this, imageUri, name)
 }
+
+; ==============================================================================
+; SVG VIEWER
+; ==============================================================================
+
+class XSvgViewer {
+    __New(parentXAML, name := "") {
+        this.id := name != "" ? name : "SvgViewer_" XSvgViewer.Count()
+
+        this.bgColor := "transparent"
+        this.gridType := "None"
+        this.currentFile := ""
+
+        this.grid := parentXAML.Add("Grid").ClipToBounds("True")
+
+        this.bdr := this.grid.Add("Border").Background("{DynamicResource DropdownBg}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").CornerRadius("8").ClipToBounds("True")
+
+        this.innerGrid := this.bdr.Add("Grid")
+
+        this.browser := this.innerGrid.Add("WebBrowser").Name(this.id).Visibility("Collapsed")
+
+        this.dropZone := this.innerGrid.Add("Border").Name(this.id "_Drop").Background("Transparent").AllowDrop("True").Cursor("Hand")
+
+        this.sp := this.dropZone.Add("StackPanel").VerticalAlignment("Center").HorizontalAlignment("Center").IsHitTestVisible("False")
+        this.sp.Add("TextBlock").Text(Chr(0xEB9F)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("48").Foreground("{DynamicResource Accent}").HorizontalAlignment("Center").Margin("0,0,0,10")
+        this.sp.Add("TextBlock").Name(this.id "_DropText").Text("Drag & Drop or Click to Load SVG").Foreground("{DynamicResource TextSub}").FontSize("14").HorizontalAlignment("Center")
+
+        this.fileCache := Map()
+    }
+
+    Bind(ui) {
+        this.ui := ui
+        ui.OnEvent(this.id "_Drop", "Drop", ObjBindMethod(this, "OnDrop"))
+        ui.OnEvent(this.id "_Drop", "MouseLeftButtonDown", ObjBindMethod(this, "OnClick"))
+    }
+
+    OnClick(state, ctrl, event) {
+        file := FileSelect(3, "", "Select SVG", "SVG Files (*.svg)")
+        if (file) {
+            this.LoadSvg(file)
+        }
+    }
+
+    _B64Decode(str) {
+        DllCall("crypt32\CryptStringToBinary", "str", str, "uint", 0, "uint", 1, "ptr", 0, "uint*", &size := 0, "ptr", 0, "ptr", 0)
+        buf := Buffer(size)
+        DllCall("crypt32\CryptStringToBinary", "str", str, "uint", 0, "uint", 1, "ptr", buf, "uint*", &size, "ptr", 0, "ptr", 0)
+        return StrGet(buf, "UTF-8")
+    }
+
+    _B64Encode(str) {
+        buf := Buffer(StrPut(str, "UTF-8"))
+        StrPut(str, buf, "UTF-8")
+        size := buf.Size - 1 ; exclude null terminator
+        DllCall("crypt32\CryptBinaryToString", "ptr", buf, "uint", size, "uint", 0x40000001, "ptr", 0, "uint*", &req := 0) ; CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF
+        strBuf := Buffer(req * 2)
+        DllCall("crypt32\CryptBinaryToString", "ptr", buf, "uint", size, "uint", 0x40000001, "ptr", strBuf, "uint*", &req)
+        return StrGet(strBuf, "UTF-16")
+    }
+
+    OnDrop(state, ctrl, event) {
+        if !state.Has("Drop")
+            return
+
+        fileList := this._B64Decode(state["Drop"])
+        files := StrSplit(fileList, "|")
+        if (files.Length == 0)
+            return
+
+        file := files[1]
+        SplitPath(file, , , &ext)
+        if (StrLower(ext) != "svg") {
+            MsgBox("Please drop a valid SVG file.", "Invalid File", "Iconx")
+            return
+        }
+
+        this.LoadSvg(file)
+    }
+
+    LoadSvg(file) {
+        this.currentFile := file
+        if (!this.fileCache.Has(file)) {
+            svgContent := FileRead(file, "UTF-8")
+            this.fileCache[file] := svgContent
+        }
+
+        this.ui.Update(this.id "_Drop", "Visibility", "Collapsed")
+        this.ui.Update(this.id, "Visibility", "Visible")
+        this.ui.Update("BtnSvgReplace", "Visibility", "Visible")
+
+        this.Render()
+    }
+
+    SetBackground(color, baseColor := "") {
+        cssColor := color
+        if (StrLen(color) == 9) {
+            a := Format("{:i}", "0x" SubStr(color, 2, 2)) / 255
+            r := Format("{:i}", "0x" SubStr(color, 4, 2))
+            g := Format("{:i}", "0x" SubStr(color, 6, 2))
+            b := Format("{:i}", "0x" SubStr(color, 8, 2))
+            cssColor := "rgba(" r "," g "," b "," a ")"
+        }
+        this.bgColor := cssColor
+        if (baseColor != "")
+            this.baseColor := baseColor
+        if (this.currentFile != "")
+            this.Render()
+    }
+
+    SetGrid(type) {
+        this.gridType := type
+        if (this.currentFile != "")
+            this.Render()
+    }
+
+    Render() {
+        if (this.currentFile == "")
+            return
+
+        svgContent := this.fileCache[this.currentFile]
+
+        bgBase := this.HasProp("baseColor") && this.baseColor != "" ? this.baseColor : "#1E1E1E"
+        bgStyle := "background-color: " bgBase ";"
+
+        bgImg := ""
+        bgSize := ""
+
+        if (this.gridType == "Light") {
+            bgImg .= "linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px), "
+            bgSize .= "20px 20px, 20px 20px, "
+        } else if (this.gridType == "Dark") {
+            bgImg .= "linear-gradient(to right, rgba(255,255,255,0.15) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.15) 1px, transparent 1px), "
+            bgSize .= "20px 20px, 20px 20px, "
+        }
+
+        bgImg .= "linear-gradient(" this.bgColor ", " this.bgColor ")"
+        bgSize .= "auto"
+
+        bgStyle .= " background-image: " bgImg "; background-size: " bgSize ";"
+
+        html := "<!DOCTYPE html><html><head><meta http-equiv='X-UA-Compatible' content='IE=edge'/><style>body { margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; " bgStyle " } svg { max-width: 100%; max-height: 100%; }</style></head><body>" svgContent "</body></html>"
+
+        b64Html := this._B64Encode(html)
+        this.ui.Update(this.id, "NavigateToString", b64Html)
+    }
+
+    static Count() {
+        static counter := 0
+        return ++counter
+    }
+}
+
+XAMLElement.Prototype.DefineProp("SvgViewer", { Call: _SvgViewer })
+_SvgViewer(this, name := "") {
+    return XSvgViewer(this, name)
+}
+
+; ==============================================================================
+; XClock Component
+; ==============================================================================
+
+class XClock {
+    __New(parentXAML, id) {
+        this.parent := parentXAML
+        this.id := id
+
+        this.isEditMode := false
+        this.timerFn := ObjBindMethod(this, "Tick")
+
+        ; Main glassmorphic container
+        this.grid := parentXAML.Add("Grid").Name(this.id "_Grid").Margin("0")
+        this.grid.ClipToBounds("True")
+
+        ; Background glow effect
+        glowCanvas := this.grid.Add("Canvas")
+        glowCanvas.Add("Ellipse").Width("300").Height("300").Fill("{DynamicResource Accent}").Opacity("0.1").Margin("-50,-50,0,0").Add("Ellipse.Effect").Add("BlurEffect").Radius("80")
+
+        ; Main Card
+        card := this.grid.Add("Border").Use("CardPanel").Padding("30").Background("#10FFFFFF")
+
+        this.contentGrid := card.Add("Grid")
+
+        ; Live Mode UI
+        this.liveUi := this.contentGrid.Add("StackPanel").Name(this.id "_LiveUI").Orientation("Horizontal").HorizontalAlignment("Center").VerticalAlignment("Center")
+
+        this.hourTxt := this.liveUi.Add("TextBlock").Name(this.id "_Hour").Text("00").FontSize("72").FontWeight("Light").Foreground("{DynamicResource TextMain}")
+        this.liveUi.Add("TextBlock").Text(":").FontSize("72").FontWeight("Light").Foreground("{DynamicResource Accent}").Margin("5,-5,5,0")
+        this.minTxt := this.liveUi.Add("TextBlock").Name(this.id "_Min").Text("00").FontSize("72").FontWeight("Light").Foreground("{DynamicResource TextMain}")
+        this.liveUi.Add("TextBlock").Text(":").FontSize("72").FontWeight("Light").Foreground("{DynamicResource Accent}").Margin("5,-5,5,0").Opacity("0.5")
+        this.secTxt := this.liveUi.Add("TextBlock").Name(this.id "_Sec").Text("00").FontSize("72").FontWeight("Light").Foreground("{DynamicResource TextSub}")
+
+        this.amPmTxt := this.liveUi.Add("TextBlock").Name(this.id "_AmPm").Text("AM").FontSize("24").FontWeight("Bold").Foreground("{DynamicResource TextSub}").VerticalAlignment("Bottom").Margin("15,0,0,15")
+
+        ; Edit Mode UI
+        this.editUi := this.contentGrid.Add("Grid").Name(this.id "_EditUI").Visibility("Collapsed").HorizontalAlignment("Center").VerticalAlignment("Center")
+        this.editUi.Cols("Auto", "Auto", "Auto", "Auto", "Auto", "Auto", "Auto")
+
+        this.hourCombo := this.editUi.Add("ComboBox").Name(this.id "_HourEdit").Width("80").Height("60").FontSize("32").Grid_Column(0).VerticalAlignment("Center")
+        Loop 12
+            this.hourCombo.Add("ComboBoxItem").Content(Format("{:02}", A_Index))
+
+        this.editUi.Add("TextBlock").Text(":").FontSize("48").FontWeight("Light").Foreground("{DynamicResource TextSub}").Margin("10,0,10,0").Grid_Column(1).VerticalAlignment("Center")
+
+        this.minCombo := this.editUi.Add("ComboBox").Name(this.id "_MinEdit").Width("80").Height("60").FontSize("32").Grid_Column(2).VerticalAlignment("Center")
+        Loop 60
+            this.minCombo.Add("ComboBoxItem").Content(Format("{:02}", A_Index - 1))
+
+        this.editUi.Add("TextBlock").Text(":").FontSize("48").FontWeight("Light").Foreground("{DynamicResource TextSub}").Margin("10,0,10,0").Grid_Column(3).VerticalAlignment("Center")
+
+        this.secCombo := this.editUi.Add("ComboBox").Name(this.id "_SecEdit").Width("80").Height("60").FontSize("32").Grid_Column(4).VerticalAlignment("Center")
+        Loop 60
+            this.secCombo.Add("ComboBoxItem").Content(Format("{:02}", A_Index - 1))
+
+        this.amPmCombo := this.editUi.Add("ComboBox").Name(this.id "_AmPmEdit").Width("80").Height("60").FontSize("24").Margin("20,0,0,0").Grid_Column(5).VerticalAlignment("Center")
+        this.amPmCombo.Add("ComboBoxItem").Content("AM")
+        this.amPmCombo.Add("ComboBoxItem").Content("PM")
+    }
+
+    Bind(ui) {
+        this.ui := ui
+        ui.Track(this.id "_HourEdit")
+        ui.Track(this.id "_MinEdit")
+        ui.Track(this.id "_SecEdit")
+        ui.Track(this.id "_AmPmEdit")
+    }
+
+    Start() {
+        SetTimer(this.timerFn, 1000)
+        this.Tick()
+    }
+
+    Stop() {
+        SetTimer(this.timerFn, 0)
+    }
+
+    Tick() {
+        if (this.isEditMode)
+            return
+
+        timeStr := ""
+        if (this.HasProp("baseTime") && this.baseTime != "") {
+            this.baseTime := DateAdd(this.baseTime, 1, "Seconds")
+            timeStr := FormatTime(this.baseTime, "h:mm:ss:tt")
+        } else {
+            timeStr := FormatTime(, "h:mm:ss:tt")
+        }
+        
+        parts := StrSplit(timeStr, ":")
+
+        this.ui.Update(this.id "_Hour", "Text", Format("{:02}", parts[1]))
+        this.ui.Update(this.id "_Min", "Text", parts[2])
+        this.ui.Update(this.id "_Sec", "Text", parts[3])
+        this.ui.Update(this.id "_AmPm", "Text", parts[4])
+    }
+
+    SetEditMode(enable, state := "") {
+        this.isEditMode := enable
+        if (enable) {
+            this.Stop()
+            this.ui.Update(this.id "_LiveUI", "Visibility", "Collapsed")
+            this.ui.Update(this.id "_EditUI", "Visibility", "Visible")
+
+            timeStr := ""
+            if (this.HasProp("baseTime") && this.baseTime != "")
+                timeStr := FormatTime(this.baseTime, "h:mm:ss:tt")
+            else
+                timeStr := FormatTime(, "h:mm:ss:tt")
+                
+            parts := StrSplit(timeStr, ":")
+            this.ui.Update(this.id "_HourEdit", "SelectedIndex", String(parts[1] - 1))
+            this.ui.Update(this.id "_MinEdit", "SelectedIndex", String(parts[2]))
+            this.ui.Update(this.id "_SecEdit", "SelectedIndex", String(parts[3]))
+            this.ui.Update(this.id "_AmPmEdit", "SelectedIndex", parts[4] == "AM" ? "0" : "1")
+        } else {
+            if (state != "" && state.Has(this.id "_HourEdit")) {
+                hStr := state[this.id "_HourEdit"]
+                mStr := state[this.id "_MinEdit"]
+                sStr := state[this.id "_SecEdit"]
+                ap := state[this.id "_AmPmEdit"]
+                
+                if (hStr != "" && mStr != "" && sStr != "" && ap != "") {
+                    h := Integer(hStr)
+                    m := Integer(mStr)
+                    s := Integer(sStr)
+                    
+                    ; Convert to 24h format for AHK timestamp
+                    h24 := h
+                    if (ap == "PM" && h24 < 12)
+                        h24 += 12
+                    if (ap == "AM" && h24 == 12)
+                        h24 := 0
+                        
+                    curDate := FormatTime(, "yyyyMMdd")
+                    this.baseTime := curDate Format("{:02}{:02}{:02}", h24, m, s)
+                }
+            }
+            
+            this.ui.Update(this.id "_EditUI", "Visibility", "Collapsed")
+            this.ui.Update(this.id "_LiveUI", "Visibility", "Visible")
+            this.Start()
+        }
+    }
+}
+
+XAMLElement.Prototype.DefineProp("Clock", { Call: _Clock })
+_Clock(this, name := "") {
+    return XClock(this, name)
+}
+
+; ==============================================================================
+; CODE EDITOR (Layered Syntax Highlighter)
+; ==============================================================================
+
+class XCodeEditor {
+    static Count := 0
+
+    __New(parentXAML, initialCode := "") {
+        XCodeEditor.Count++
+        this.id := "CodeEditor_" XCodeEditor.Count
+        this.parent := parentXAML
+        
+        ; Main container
+        this.bdr := parentXAML.Add("Border").Name(this.id "_Bdr").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Background("{DynamicResource ControlBg}")
+        
+        ; Layer grid
+        this.grid := this.bdr.Add("Grid").Margin("0")
+        
+        ; Inner grid to handle universal padding, bypassing template discrepancies
+        this.gridInner := this.grid.Add("Grid").Margin("15")
+        
+        ; Background layer: RichTextBox for syntax highlighting (Read-Only)
+        this.rtb := this.gridInner.Add("RichTextBox").Name(this.id "_RTB").IsReadOnly("True").Focusable("False")
+            .FontFamily("Consolas").FontSize("14").Background("Transparent").BorderThickness("0").Padding("0").Foreground("{DynamicResource TextMain}")
+            
+        ; Foreground layer: TextBox for typing (Transparent text/bg)
+        this.tb := this.gridInner.Add("TextBox").Name(this.id).AcceptsReturn("True").AcceptsTab("True")
+            .FontFamily("Consolas").FontSize("14").Background("Transparent").Foreground("Transparent").CaretBrush("{DynamicResource Accent}").BorderThickness("0").Padding("0").VerticalContentAlignment("Top")
+            
+        ; Suggestion popup (docked at bottom right)
+        this.suggestBdr := this.grid.Add("Border").Name(this.id "_SuggestUI").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).HorizontalAlignment("Right").VerticalAlignment("Bottom").Margin("20").Visibility("Collapsed").Padding("10,5")
+        sSp := this.suggestBdr.Add("StackPanel").Orientation("Horizontal")
+        sSp.Add("TextBlock").Text("💡").Margin("0,0,8,0").VerticalAlignment("Center")
+        sSp.Add("TextBlock").Name(this.id "_SuggestTxt").Foreground("{DynamicResource TextMain}").FontFamily("Consolas").FontWeight("Bold").VerticalAlignment("Center")
+        sSp.Add("TextBlock").Text("[Tab]").Foreground("{DynamicResource TextSub}").FontSize("11").Margin("15,0,0,0").VerticalAlignment("Center")
+        
+        if (initialCode != "")
+            this.tb.Text(initialCode)
+            
+        this.suggestDict := ["MsgBox", "FormatTime", "StrSplit", "DllCall", "RegExMatch", "SetTimer", "FileSelect", "WinActivate"]
+        this.currentSuggestion := ""
+        this.currentWordLen := 0
+        this.initialCode := initialCode
+        this.isTyping := false
+        
+        this.ui := ""
+        this.parseTimer := ObjBindMethod(this, "ExecuteParse")
+    }
+    
+    Bind(ui) {
+        this.ui := ui
+        ui.Track(this.id)
+        ui.Track(this.id "_CaretIndex") ; Uses the new bridge tracker
+        
+        ui.OnEvent(this.id, "TextChanged", ObjBindMethod(this, "OnTextChanged"))
+        ui.OnEvent(this.id, "PreviewKeyDown", ObjBindMethod(this, "OnKeyDown"))
+        
+        ; Initial parse
+        this.lastRaw := ""
+        this.lastState := Map(this.id, this.initialCode, this.id "_CaretIndex", "0")
+        
+        ; Initial boot timer
+        SetTimer(this.parseTimer, -50)
+    }
+    
+    OnTextChanged(state, ctrl, event) {
+        this.lastState := state
+        
+        if (!this.isTyping) {
+            this.isTyping := true
+            this.ui.Update(this.id, "Foreground", "{DynamicResource TextMain}")
+        }
+        
+        ; Debounce rendering by 250ms to completely eliminate typing lag
+        SetTimer(this.parseTimer, -250)
+    }
+    
+    OnKeyDown(state, ctrl, event) {
+        if (!IsObject(event) || !event.HasProp("Key"))
+            return
+            
+        key := event.Key
+        
+        if (!this.isTyping) {
+            this.isTyping := true
+            this.ui.Update(this.id, "Foreground", "{DynamicResource TextMain}")
+        }
+        
+        ; Delay parsing if they are actively typing keys
+        SetTimer(this.parseTimer, -250)
+    }
+    
+    ExecuteParse() {
+        if (!this.ui || !this.lastState.Has(this.id) || !this.lastState.Has(this.id "_CaretIndex")) {
+            return
+        }
+        
+        ; Asynchronous boot check: WPF initializes asynchronously, so we must wait for the handle.
+        if (!this.ui.HasProp("wpfHwnd") || !this.ui.wpfHwnd) {
+            return
+        }
+            
+        ; Request the latest tracked state synchronously
+        text := this.lastState[this.id]
+        
+        ; Evaluate Auto-Suggest
+        caret := Integer(this.lastState[this.id "_CaretIndex"])
+        leftPart := SubStr(text, 1, caret)
+        if (RegExMatch(leftPart, "([a-zA-Z_]\w*)$", &match)) {
+            word := match[1]
+            found := ""
+            if (StrLen(word) >= 2) {
+                for sugg in this.suggestDict {
+                    if (SubStr(sugg, 1, StrLen(word)) == word && StrLen(sugg) > StrLen(word)) {
+                        found := sugg
+                        break
+                    }
+                }
+            }
+            
+            if (found != "") {
+                this.currentSuggestion := found
+                this.currentWordLen := StrLen(word)
+                this.ui.Update(this.id "_SuggestTxt", "Text", found)
+                this.ui.Update(this.id "_SuggestUI", "Visibility", "Visible")
+            } else {
+                this.HideSuggestion()
+            }
+        } else {
+            this.HideSuggestion()
+        }
+        
+        if (text == this.lastRaw && this.lastRaw != "")
+            return
+            
+        this.lastRaw := text
+        
+        ; Start building FlowDocument
+        doc := "<FlowDocument Foreground=`"#E0E0E0`" xml:space=`"preserve`" xmlns=`"http://schemas.microsoft.com/winfx/2006/xaml/presentation`" PagePadding=`"0`" LineHeight=`"16.296875`">"
+        doc .= "<Paragraph Margin=`"0`">"
+        
+        ; Define basic AHK/JS regex syntax rules
+        pos := 1
+        len := StrLen(text)
+        
+        while (pos <= len) {
+            ; Find next token
+            nextType := ""
+            nextMatch := ""
+            nextPos := len + 1
+            
+            ; Comment //
+            if (RegExMatch(text, "(?m)//.*$", &m, pos) && m.Pos(0) < nextPos) {
+                nextPos := m.Pos(0), nextMatch := m[0], nextType := "Comment"
+            }
+            ; Comment ;
+            if (RegExMatch(text, "(?m);.*$", &m, pos) && m.Pos(0) < nextPos) {
+                nextPos := m.Pos(0), nextMatch := m[0], nextType := "Comment"
+            }
+            ; String "..." or '...'
+            quotePattern := "([" Chr(34) Chr(39) "]).*?\1"
+            if (RegExMatch(text, quotePattern, &m, pos) && m.Pos(0) < nextPos) {
+                nextPos := m.Pos(0), nextMatch := m[0], nextType := "String"
+            }
+            ; Number
+            if (RegExMatch(text, "\b\d+(\.\d+)?\b", &m, pos) && m.Pos(0) < nextPos) {
+                nextPos := m.Pos(0), nextMatch := m[0], nextType := "Number"
+            }
+            ; Keywords
+            if (RegExMatch(text, "\b(if|else|return|function|class|while|for|loop|global|static|var|let|const|true|false)\b", &m, pos) && m.Pos(0) < nextPos) {
+                nextPos := m.Pos(0), nextMatch := m[0], nextType := "Keyword"
+            }
+            ; Functions
+            if (RegExMatch(text, "\b[a-zA-Z_]\w*(?=\()", &m, pos) && m.Pos(0) < nextPos) {
+                nextPos := m.Pos(0), nextMatch := m[0], nextType := "Function"
+            }
+            
+            if (nextPos > pos) {
+                ; Add unformatted text before the match (or the entire remainder if no match)
+                unformatted := SubStr(text, pos, nextPos - pos)
+                doc .= this.EscapeRun(unformatted, "")
+            }
+            
+            if (nextMatch != "") {
+                color := ""
+                fontWeight := "Normal"
+                if (nextType == "Comment")
+                    color := "#40A84F" ; Green
+                else if (nextType == "String")
+                    color := "#FF9F0A" ; Orange
+                else if (nextType == "Number")
+                    color := "#32D74B" ; Light Green
+                else if (nextType == "Keyword") {
+                    color := "#BF5AF2" ; Purple
+                    fontWeight := "Bold"
+                } else if (nextType == "Function") {
+                    color := "#0A84FF" ; Blue
+                }
+                    
+                doc .= this.EscapeRun(nextMatch, color, fontWeight)
+                pos := nextPos + StrLen(nextMatch)
+            } else {
+                ; We already appended the remainder in the (nextPos > pos) block above
+                break
+            }
+        }
+        
+        doc .= "</Paragraph></FlowDocument>"
+        
+        ; Inject the document
+        this.ui.Update(this.id "_RTB", "Document", doc)
+        
+        ; Reveal the syntax highlighting
+        if (this.isTyping) {
+            this.isTyping := false
+            this.ui.Update(this.id, "Foreground", "Transparent")
+        }
+    }
+    
+    HideSuggestion() {
+        this.currentSuggestion := ""
+        this.currentWordLen := 0
+        this.ui.Update(this.id "_SuggestUI", "Visibility", "Collapsed")
+    }
+    
+    EscapeRun(txt, colorBrush, weight := "Normal") {
+        if (txt == "")
+            return ""
+            
+        ; Replace literal newlines with <LineBreak/>
+        txt := StrReplace(txt, "&", "&amp;")
+        txt := StrReplace(txt, "<", "&lt;")
+        txt := StrReplace(txt, ">", "&gt;")
+        
+        parts := StrSplit(txt, "`n", "`r")
+        out := ""
+        Loop parts.Length {
+            if (parts[A_Index] != "") {
+                run := "<Run FontWeight=`"" weight "`""
+                if (colorBrush != "") {
+                    if (SubStr(colorBrush, 1, 1) == "{")
+                        run .= " Foreground=`"" colorBrush "`""
+                    else
+                        run .= " Foreground=`"" colorBrush "`""
+                }
+                run .= ">" parts[A_Index] "</Run>"
+                out .= run
+            }
+            if (A_Index < parts.Length)
+                out .= "<LineBreak/>"
+        }
+        return out
+    }
+}
+
+XAMLElement.Prototype.DefineProp("CodeEditor", { Call: _CodeEditorAdvanced })
+_CodeEditorAdvanced(this, initialCode := "") {
+    return XCodeEditor(this, initialCode)
+}

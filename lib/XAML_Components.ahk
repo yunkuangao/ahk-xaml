@@ -62,27 +62,6 @@ _MetricCard(this, title, mainValue, subValue, subColor := "#32D74B", progressVal
     return card
 }
 
-XAMLElement.Prototype.DefineProp("CodeEditor", { Call: _CodeEditor })
-_CodeEditor(this, filename) {
-    ideBdr := this.Add("Border").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Margin("0,0,0,20")
-    ideGrid := ideBdr.Add("Grid")
-    ideGrid.Rows("30", "*")
-
-    ideHeader := ideGrid.Add("Border").Grid_Row(0).Background("{DynamicResource ControlBorder}").CornerRadius("5,5,0,0")
-    headerInner := ideHeader.Add("Grid")
-    headerInner.Add("TextBlock").Text(filename).Foreground("{DynamicResource TextMain}").FontSize(11).HorizontalAlignment("Left").VerticalAlignment("Center").Margin("15,0,0,0")
-
-    btns := headerInner.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Margin("0,0,10,0")
-    btns.SetDefaults("Button", { Background: "Transparent", BorderThickness: 0, Foreground: "{DynamicResource TextSub}", FontSize: 10, Padding: "8,2", Margin: "2,0", Cursor: "Hand" })
-    btns.Add("Button").Content("Save")
-    btns.Add("Button").Content("Select All")
-    btns.Add("Button").Content("Run").Foreground("{DynamicResource Accent}").FontWeight("Bold")
-
-    editorBorder := ideGrid.Add("Border").Grid_Row(1).Background("{DynamicResource ControlBg}").CornerRadius("0,0,5,5")
-    editor := editorBorder.Add("RichTextBox").FontFamily("Consolas, Courier New").Background("Transparent").BorderThickness(0).Padding("15").Height(130).Foreground("{DynamicResource TextMain}").CaretBrush("{DynamicResource TextMain}")
-
-    return editor
-}
 
 ; ==============================================================================
 ; COMPLEX COMPONENTS (Stateful Classes)
@@ -113,24 +92,51 @@ class XColorPicker {
         }
 
         main := XAML_Generator("Grid").Background("{DynamicResource " bgRes "}")
-        main.Rows("Auto", "10", "*", "15", "Auto")
+        main.Rows("40", "10", "180", "15", "Auto", "15", "Auto", "15", "Auto")
 
-        tb := main.Add("Grid").Grid_Row(0).Background("Transparent").Name("DragArea").Margin("15,15,15,0")
-        tb.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").FontSize(14).FontWeight("Bold").VerticalAlignment("Center")
+        ; Titlebar
+        tb := main.Add("Grid").Grid_Row(0).Background("Transparent").Name("DragArea").Margin("15,10,15,0")
+        tb.Cols("Auto", "*", "Auto")
+        
+        iconChar := options.HasProp("Icon") ? options.Icon : ""
+        iconColor := options.HasProp("IconColor") ? options.IconColor : "{DynamicResource Accent}"
+        
+        if (iconChar != "") {
+            tb.Add("TextBlock").Text(iconChar).Foreground(iconColor).FontSize(16).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").VerticalAlignment("Center").Margin("0,0,10,0").Grid_Column(0)
+            tb.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").FontSize(14).FontWeight("Bold").VerticalAlignment("Center").Grid_Column(1)
+        } else {
+            tb.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").FontSize(14).FontWeight("Bold").VerticalAlignment("Center").Grid_Column(0).Grid_ColumnSpan(2)
+        }
         
         CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
-        closeBtn := tb.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(30).Height(30).HorizontalAlignment("Right").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0)
+        closeBtn := tb.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(30).Height(30).HorizontalAlignment("Right").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Grid_Column(2)
         closeBtn.InjectResources(CloseBtnTemplate)
         closeBtn.Add("TextBlock").Text(Chr(0xE8BB)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
 
-        cpGrid := main.Add("Grid").Grid_Row(2).Margin("15,10,15,0")
-        cpGrid.Cols("Auto", "20", "*")
-        cpGrid.Rows("Auto", "15", "Auto", "15", "Auto")
+        ; 2D Color Canvas
+        canvasGrid := main.Add("Grid").Name("CanvasGrid").Grid_Row(2).Margin("15,0,15,0").ClipToBounds("True")
+        canvasGrid.Add("Border").Name("CanvasBg").Background("#FFFF0000").CornerRadius("6")
+        
+        wGr := canvasGrid.Add("Border").CornerRadius("6").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
+        wGr.Add("GradientStop").Color("#FFFFFFFF").Offset("0")
+        wGr.Add("GradientStop").Color("#00FFFFFF").Offset("1")
+        
+        bGr := canvasGrid.Add("Border").CornerRadius("6").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,1").EndPoint("0,0")
+        bGr.Add("GradientStop").Color("#FF000000").Offset("0")
+        bGr.Add("GradientStop").Color("#00000000").Offset("1")
+        
+        canvasArea := canvasGrid.Add("Grid").Name("CanvasArea").Background("Transparent").Cursor("Cross")
+        canvasArea.Add("Ellipse").Name("CanvasThumb").HorizontalAlignment("Left").VerticalAlignment("Top").Width("14").Height("14").Stroke("White").StrokeThickness("2").Fill("Transparent").Margin("-7,-7,0,0").IsHitTestVisible("False")
 
-        cpGrid.Add("Border").Name("ColorPreview").Grid_Column(0).Grid_RowSpan(5).Width("70").Height("70").CornerRadius("35").Background(defaultColor).BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1")
-
-        hueGrid := cpGrid.Add("Grid").Grid_Column(2).Grid_Row(0)
-        hueBg := hueGrid.Add("Border").Height("8").CornerRadius("4").Margin("0,10,0,0").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
+        ; Sliders Row
+        sliderGrid := main.Add("Grid").Grid_Row(4).Margin("15,0,15,0")
+        sliderGrid.Cols("Auto", "*", "Auto")
+        
+        sliderGrid.Add("Border").Width("36").Height("36").CornerRadius("18").Background("#15FFFFFF").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").Grid_Column(0).Margin("0,0,15,0").Add("TextBlock").Text(Chr(0xE891)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("16").Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").HorizontalAlignment("Center")
+        
+        sliders := sliderGrid.Add("StackPanel").Grid_Column(1).VerticalAlignment("Center").Margin("0,0,15,0")
+        
+        hueBg := sliders.Add("Border").Height("10").CornerRadius("5").Margin("0,0,0,12").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
         hueBg.Add("GradientStop").Color("#FFFF0000").Offset("0")
         hueBg.Add("GradientStop").Color("#FFFFFF00").Offset("0.16")
         hueBg.Add("GradientStop").Color("#FF00FF00").Offset("0.33")
@@ -138,49 +144,73 @@ class XColorPicker {
         hueBg.Add("GradientStop").Color("#FF0000FF").Offset("0.66")
         hueBg.Add("GradientStop").Color("#FFFF00FF").Offset("0.83")
         hueBg.Add("GradientStop").Color("#FFFF0000").Offset("1")
-        hueGrid.Add("Slider").Name("HueSlider").Minimum("0").Maximum("360").Value("210")
-
-        alphaGrid := cpGrid.Add("Grid").Grid_Column(2).Grid_Row(2)
-        alphaBg := alphaGrid.Add("Border").Height("8").CornerRadius("4").Margin("0,10,0,0").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
-        alphaBg.Add("GradientStop").Color("Transparent").Offset("0")
-        alphaBg.Add("GradientStop").Color("White").Offset("1")
-        alphaGrid.Add("Slider").Name("AlphaSlider").Minimum("0").Maximum("255").Value("255")
-
-        rgbGrid := cpGrid.Add("Grid").Grid_Column(2).Grid_Row(4)
-        rgbGrid.Cols("Auto", "5", "40", "10", "Auto", "5", "40", "10", "Auto", "5", "40", "*", "Auto", "5", "70")
-        rgbGrid.Add("TextBlock").Text("R").Grid_Column(0).Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").FontSize(11).FontWeight("Bold")
-        rgbGrid.Add("TextBox").Name("RInput").Text("10").Grid_Column(2).Height("24").Padding("4,2").HorizontalContentAlignment("Center")
-        rgbGrid.Add("TextBlock").Text("G").Grid_Column(4).Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").FontSize(11).FontWeight("Bold")
-        rgbGrid.Add("TextBox").Name("GInput").Text("132").Grid_Column(6).Height("24").Padding("4,2").HorizontalContentAlignment("Center")
-        rgbGrid.Add("TextBlock").Text("B").Grid_Column(8).Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").FontSize(11).FontWeight("Bold")
-        rgbGrid.Add("TextBox").Name("BInput").Text("255").Grid_Column(10).Height("24").Padding("4,2").HorizontalContentAlignment("Center")
-
-        rgbGrid.Add("TextBlock").Text("HEX").Grid_Column(12).Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").FontSize(11).FontWeight("Bold")
-        rgbGrid.Add("TextBox").Name("HexInput").Text(defaultColor).Grid_Column(14).Height("24").Padding("4,2").HorizontalContentAlignment("Center")
-
-        btnSp := main.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Grid_Row(4).Margin("0,0,15,15")
+        sliders.Add("Slider").Name("HueSlider").Minimum("0").Maximum("360").Value("0").Margin("0,-18,0,0")
         
+        alphaBg := sliders.Add("Border").Height("10").CornerRadius("5").Background("Transparent").ClipToBounds("True")
+        
+        ; Dynamic Fill overlay masked by a transparent-to-white gradient
+        alphaFill := alphaBg.Add("Rectangle").Name("AlphaFillRect").Fill("White")
+        mask := alphaFill.Add("Rectangle.OpacityMask").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
+        mask.Add("GradientStop").Color("Transparent").Offset("0")
+        mask.Add("GradientStop").Color("White").Offset("1")
+        sliders.Add("Slider").Name("AlphaSlider").Minimum("0").Maximum("255").Value("255").Margin("0,-14,0,0")
+        
+        sliderGrid.Add("Border").Name("ColorPreview").Grid_Column(2).Width("36").Height("36").CornerRadius("18").Background(defaultColor).BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1")
+
+        ; Inputs Row
+        inGrid := main.Add("Grid").Grid_Row(6).Margin("15,0,15,0")
+        inGrid.Cols("Auto", "15", "Auto")
+        inGrid.Rows("Auto", "5", "Auto", "5", "Auto")
+        
+        inGrid.Add("TextBlock").Text("HEX").Foreground("{DynamicResource TextSub}").FontSize("10").Grid_Row(0).Grid_Column(0)
+        
+        spLbl := inGrid.Add("StackPanel").Grid_Row(0).Grid_Column(2).Orientation("Horizontal")
+        spLbl.Add("TextBlock").Text("RGB").Foreground("{DynamicResource TextSub}").FontSize("10").Margin("0,0,4,0")
+        spLbl.Add("TextBlock").Text(Chr(0xE70D)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Foreground("{DynamicResource TextSub}").FontSize("8").VerticalAlignment("Center")
+        
+        inGrid.Add("TextBox").Name("HexInput").Text(defaultColor).Width("85").Height("28").Padding("8,4").Grid_Row(2).Grid_Column(0)
+        
+        rgbSp := inGrid.Add("StackPanel").Grid_Row(2).Grid_Column(2).Orientation("Horizontal")
+        rgbSp.Add("TextBlock").Text("R:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
+        rgbSp.Add("TextBox").Name("RInput").Text("255").Width("35").Height("28").Padding("2,4").Margin("0,0,8,0").HorizontalContentAlignment("Center")
+        rgbSp.Add("TextBlock").Text("G:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
+        rgbSp.Add("TextBox").Name("GInput").Text("0").Width("35").Height("28").Padding("2,4").Margin("0,0,8,0").HorizontalContentAlignment("Center")
+        rgbSp.Add("TextBlock").Text("B:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
+        rgbSp.Add("TextBox").Name("BInput").Text("0").Width("35").Height("28").Padding("2,4").Margin("0,0,8,0").HorizontalContentAlignment("Center")
+        rgbSp.Add("TextBlock").Text("A:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
+        rgbSp.Add("TextBox").Name("AInput").Text("255").Width("35").Height("28").Padding("2,4").HorizontalContentAlignment("Center")
+        
+        inGrid.Add("TextBlock").Text("Some information about this color").Foreground("{DynamicResource TextSub}").FontSize("11").Grid_Row(4).Grid_ColumnSpan(3).Margin("0,10,0,0")
+
+        btnSp := main.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Grid_Row(8).Margin("0,0,15,15")
         main.InjectResources('<Style x:Key="DialogBtn" TargetType="Button"><Setter Property="Background" Value="#10FFFFFF"/><Setter Property="Foreground" Value="{DynamicResource TextMain}"/><Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style x:Key="DialogPrimaryBtn" TargetType="Button"><Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
         
         btnSp.Add("Button").Name("BtnCancel").Content("Cancel").Style("{StaticResource DialogBtn}").Width("100").Height("32").Cursor("Hand").Margin("0,0,10,0")
         btnSp.Add("Button").Name("BtnConfirm").Content("Confirm").Style("{StaticResource DialogPrimaryBtn}").Width("100").Height("32").Cursor("Hand")
 
         ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", owner)
-        ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Width="450" SizeToContent="Height" ResizeMode="NoResize" Topmost="True"')
+        ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Width="360" SizeToContent="Height" ResizeMode="NoResize" Topmost="True"')
         
-        resultObj := { Color: "", Status: "Cancel", Instance: ui }
+        resultObj := { Color: "", Status: "Cancel", Instance: ui, IsDragging: false, Hue: 0.0, Sat: 1.0, Val: 1.0, Alpha: 255, R: 0, G: 0, B: 0, LastMoveTime: 0 }
         
         if (modal && owner)
             WinSetEnabled(0, "ahk_id " owner)
 
-        ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => XColorPicker.OnLoad(ui, owner, themeName, iniPath, defaultColor))
+        ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => XColorPicker.OnLoad(ui, owner, themeName, iniPath, defaultColor, resultObj))
         ui.OnEvent("Window", "Closing", (state, ctrl, event) => XColorPicker.OnClose(resultObj, owner, modal))
         
-        ui.OnEvent("HueSlider", "ValueChanged", ObjBindMethod(XColorPicker, "UpdateFromSliders", ui))
-        ui.OnEvent("AlphaSlider", "ValueChanged", ObjBindMethod(XColorPicker, "UpdateFromSliders", ui))
-        ui.OnEvent("RInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui))
-        ui.OnEvent("GInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui))
-        ui.OnEvent("BInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui))
+        ui.OnEvent("CanvasArea", "PreviewMouseLeftButtonDown", ObjBindMethod(XColorPicker, "OnCanvasDown", ui, resultObj))
+        ui.OnEvent("CanvasArea", "PreviewMouseLeftButtonUp", ObjBindMethod(XColorPicker, "OnCanvasUp", ui, resultObj))
+        ui.OnEvent("CanvasArea", "PreviewMouseMove", ObjBindMethod(XColorPicker, "OnCanvasMove", ui, resultObj))
+        
+        ui.OnEvent("HueSlider", "ValueChanged", ObjBindMethod(XColorPicker, "OnHueSlider", ui, resultObj))
+        ui.OnEvent("AlphaSlider", "ValueChanged", ObjBindMethod(XColorPicker, "OnAlphaSlider", ui, resultObj))
+        
+        ui.OnEvent("RInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui, resultObj))
+        ui.OnEvent("GInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui, resultObj))
+        ui.OnEvent("BInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui, resultObj))
+        ui.OnEvent("AInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui, resultObj))
+        ui.OnEvent("HexInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromHex", ui, resultObj))
 
         ui.OnEvent("BtnClose", "Click", (state, ctrl, event) => ui.Update("Window", "Close", ""))
         ui.OnEvent("BtnCancel", "Click", (state, ctrl, event) => ui.Update("Window", "Close", ""))
@@ -191,6 +221,7 @@ class XColorPicker {
         ui.Track("RInput")
         ui.Track("GInput")
         ui.Track("BInput")
+        ui.Track("AInput")
         ui.Track("HexInput")
 
         ui.Show()
@@ -205,7 +236,7 @@ class XColorPicker {
         return resultObj
     }
 
-    static OnLoad(ui, owner, themeName, iniPath, defaultColor, state := "", ctrl := "", event := "") {
+    static OnLoad(ui, owner, themeName, iniPath, defaultColor, resultObj, state := "", ctrl := "", event := "") {
         if owner
             ui.Update("Window", "NativeOwner", owner)
         if FileExist(iniPath) {
@@ -224,19 +255,7 @@ class XColorPicker {
                 }
             }
         }
-        
-        ; Parse defaultColor to set RGB and sliders
-        if (RegExMatch(defaultColor, "^#?([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})$", &m)) {
-            ui.Update("AlphaSlider", "Value", String(Integer("0x" m[1])))
-            ui.Update("RInput", "Text", String(Integer("0x" m[2])))
-            ui.Update("GInput", "Text", String(Integer("0x" m[3])))
-            ui.Update("BInput", "Text", String(Integer("0x" m[4])))
-        } else if (RegExMatch(defaultColor, "^#?([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})$", &m)) {
-            ui.Update("AlphaSlider", "Value", "255")
-            ui.Update("RInput", "Text", String(Integer("0x" m[1])))
-            ui.Update("GInput", "Text", String(Integer("0x" m[2])))
-            ui.Update("BInput", "Text", String(Integer("0x" m[3])))
-        }
+        XColorPicker.ParseHex(defaultColor, ui, resultObj)
     }
 
     static OnClose(resultObj, owner, modal, state := "", ctrl := "", event := "") {
@@ -250,57 +269,230 @@ class XColorPicker {
         resultObj.Status := "OK"
         ui.Update("Window", "Close", "")
     }
-
-    static UpdateFromSliders(ui, state, ctrl, event) {
-        hue := state["HueSlider"] != "" ? Float(state["HueSlider"]) : 0
-        alpha := state["AlphaSlider"] != "" ? Integer(state["AlphaSlider"]) : 255
-
-        c := 1.0
-        x := c * (1.0 - Abs(Mod(hue / 60.0, 2) - 1.0))
-        r := 0.0, g := 0.0, b := 0.0
-        if (0 <= hue && hue < 60) {
-            r := c, g := x, b := 0
-        } else if (60 <= hue && hue < 120) {
-            r := x, g := c, b := 0
-        } else if (120 <= hue && hue < 180) {
-            r := 0, g := c, b := x
-        } else if (180 <= hue && hue < 240) {
-            r := 0, g := x, b := c
-        } else if (240 <= hue && hue < 300) {
-            r := x, g := 0, b := c
-        } else if (300 <= hue && hue <= 360) {
-            r := c, g := 0, b := x
-        }
-
-        rInt := Round(r * 255)
-        gInt := Round(g * 255)
-        bInt := Round(b * 255)
-
-        hex := Format("#{:02X}{:02X}{:02X}{:02X}", alpha, rInt, gInt, bInt)
-
-        ui.Update("ColorPreview", "Background", hex)
-        ui.Update("HexInput", "Text", hex)
-        ui.Update("RInput", "Text", String(rInt))
-        ui.Update("GInput", "Text", String(gInt))
-        ui.Update("BInput", "Text", String(bInt))
+    
+    static OnCanvasDown(ui, resultObj, state, ctrl, event) {
+        resultObj.IsDragging := true
+        XColorPicker.ProcessCanvasMouse(ui, resultObj)
     }
-
-    static UpdateFromRGB(ui, state, ctrl, event) {
+    
+    static OnCanvasUp(ui, resultObj, state, ctrl, event) {
+        resultObj.IsDragging := false
+    }
+    
+    static OnCanvasMove(ui, resultObj, state, ctrl, event) {
+        if (resultObj.IsDragging && A_TickCount - resultObj.LastMoveTime >= 16) {
+            resultObj.LastMoveTime := A_TickCount
+            XColorPicker.ProcessCanvasMouse(ui, resultObj)
+        }
+    }
+    
+    static ProcessCanvasMouse(ui, resultObj) {
+        CoordMode("Mouse", "Client")
+        MouseGetPos(&mX, &mY, &mWin)
+        
+        ; If the user dragged far away, we still process relative to the start window
+        ; Canvas is at X=15, Y=50. Width=330, Height=180
+        x := mX - 15
+        y := mY - 50
+        
+        if (x < 0)
+            x := 0
+        if (x > 330)
+            x := 330
+        if (y < 0)
+            y := 0
+        if (y > 180)
+            y := 180
+            
+        resultObj.Sat := x / 330.0
+        resultObj.Val := 1.0 - (y / 180.0)
+        
+        ui.Update("CanvasThumb", "Margin", String(x - 7) "," String(y - 7) ",0,0")
+        
+        XColorPicker.UpdateFromHSV(ui, resultObj)
+    }
+    
+    static OnHueSlider(ui, resultObj, state, ctrl, event) {
+        if state.Has("HueSlider") {
+            newHue := Float(state["HueSlider"])
+            if (Abs(newHue - resultObj.Hue) < 0.1)
+                return
+            resultObj.Hue := newHue
+            
+            ; Update canvas background hue
+            hHex := XColorPicker.HSVtoHEX(resultObj.Hue, 1.0, 1.0)
+            ui.Update("CanvasBg", "Background", hHex)
+            
+            XColorPicker.UpdateFromHSV(ui, resultObj)
+        }
+    }
+    
+    static OnAlphaSlider(ui, resultObj, state, ctrl, event) {
+        if state.Has("AlphaSlider") {
+            a := Integer(state["AlphaSlider"])
+            if (a == resultObj.Alpha)
+                return
+            resultObj.Alpha := a
+            ui.Update("AInput", "Text", String(a))
+            XColorPicker.UpdateFromHSV(ui, resultObj)
+        }
+    }
+    
+    static UpdateFromHex(ui, resultObj, state, ctrl, event) {
+        if !state.Has("HexInput")
+            return
+        hex := state["HexInput"]
+        if (StrLen(hex) == 7 || StrLen(hex) == 9)
+            XColorPicker.ParseHex(hex, ui, resultObj)
+    }
+    
+    static UpdateFromRGB(ui, resultObj, state, ctrl, event) {
         try {
             r := state["RInput"] != "" ? Integer(state["RInput"]) : 0
             g := state["GInput"] != "" ? Integer(state["GInput"]) : 0
             b := state["BInput"] != "" ? Integer(state["BInput"]) : 0
+            a := state["AInput"] != "" ? Integer(state["AInput"]) : 255
 
             r := Min(Max(r, 0), 255)
             g := Min(Max(g, 0), 255)
             b := Min(Max(b, 0), 255)
-
-            alpha := state["AlphaSlider"] != "" ? Integer(state["AlphaSlider"]) : 255
-            hex := Format("#{:02X}{:02X}{:02X}{:02X}", alpha, r, g, b)
-
+            a := Min(Max(a, 0), 255)
+            
+            if (r == resultObj.R && g == resultObj.G && b == resultObj.B && a == resultObj.Alpha)
+                return
+                
+            resultObj.R := r
+            resultObj.G := g
+            resultObj.B := b
+            resultObj.Alpha := a
+            
+            ui.Update("AlphaSlider", "Value", String(a))
+            XColorPicker.RgbToHsv(r, g, b, &h, &s, &v)
+            resultObj.Hue := h
+            resultObj.Sat := s
+            resultObj.Val := v
+            
+            ui.Update("HueSlider", "Value", String(h))
+            ui.Update("CanvasBg", "Background", XColorPicker.HSVtoHEX(h, 1.0, 1.0))
+            
+            x := s * 330.0
+            y := (1.0 - v) * 180.0
+            ui.Update("CanvasThumb", "Margin", String(x - 7) "," String(y - 7) ",0,0")
+            
+            hex := Format("#{:02X}{:02X}{:02X}{:02X}", a, r, g, b)
             ui.Update("HexInput", "Text", hex)
             ui.Update("ColorPreview", "Background", hex)
         }
+    }
+    
+    static ParseHex(hex, ui, resultObj) {
+        if RegExMatch(hex, "^#?([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})$", &m) {
+            resultObj.Alpha := Integer("0x" m[1]), r := Integer("0x" m[2]), g := Integer("0x" m[3]), b := Integer("0x" m[4])
+        } else if RegExMatch(hex, "^#?([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})$", &m) {
+            resultObj.Alpha := 255, r := Integer("0x" m[1]), g := Integer("0x" m[2]), b := Integer("0x" m[3])
+        } else {
+            return
+        }
+        
+        ui.Update("RInput", "Text", String(r))
+        ui.Update("GInput", "Text", String(g))
+        ui.Update("BInput", "Text", String(b))
+        ui.Update("AInput", "Text", String(resultObj.Alpha))
+        ; The UpdateFromRGB hook will naturally fire, but we'll force it here to be safe
+        XColorPicker.UpdateFromRGB(ui, resultObj, Map("RInput", String(r), "GInput", String(g), "BInput", String(b), "AInput", String(resultObj.Alpha)), "", "")
+    }
+
+    static UpdateFromHSV(ui, resultObj) {
+        h := resultObj.Hue
+        s := resultObj.Sat
+        v := resultObj.Val
+        
+        c := v * s
+        x := c * (1.0 - Abs(Mod(h / 60.0, 2) - 1.0))
+        m := v - c
+        
+        r := 0.0, g := 0.0, b := 0.0
+        if (0 <= h && h < 60) {
+            r := c, g := x, b := 0
+        } else if (60 <= h && h < 120) {
+            r := x, g := c, b := 0
+        } else if (120 <= h && h < 180) {
+            r := 0, g := c, b := x
+        } else if (180 <= h && h < 240) {
+            r := 0, g := x, b := c
+        } else if (240 <= h && h < 300) {
+            r := x, g := 0, b := c
+        } else if (300 <= h <= 360) {
+            r := c, g := 0, b := x
+        }
+        
+        rInt := Round((r + m) * 255)
+        gInt := Round((g + m) * 255)
+        bInt := Round((b + m) * 255)
+        
+        alpha := resultObj.Alpha
+        
+        if (rInt == resultObj.R && gInt == resultObj.G && bInt == resultObj.B)
+            return
+            
+        resultObj.R := rInt
+        resultObj.G := gInt
+        resultObj.B := bInt
+        
+        ui.Update("RInput", "Text", String(rInt))
+        ui.Update("GInput", "Text", String(gInt))
+        ui.Update("BInput", "Text", String(bInt))
+        
+        ; Update Alpha slider preview to match current RGB color
+        baseHex := Format("#FF{:02X}{:02X}{:02X}", rInt, gInt, bInt)
+        ui.Update("AlphaFillRect", "Fill", baseHex)
+        
+        hex := Format("#{:02X}{:02X}{:02X}{:02X}", alpha, rInt, gInt, bInt)
+        ui.Update("ColorPreview", "Background", hex)
+        ui.Update("HexInput", "Text", hex)
+    }
+    
+    static HSVtoHEX(h, s, v) {
+        c := v * s
+        x := c * (1.0 - Abs(Mod(h / 60.0, 2) - 1.0))
+        m := v - c
+        r := 0.0, g := 0.0, b := 0.0
+        if (0 <= h && h < 60) {
+            r := c, g := x, b := 0
+        } else if (60 <= h && h < 120) {
+            r := x, g := c, b := 0
+        } else if (120 <= h && h < 180) {
+            r := 0, g := c, b := x
+        } else if (180 <= h && h < 240) {
+            r := 0, g := x, b := c
+        } else if (240 <= h && h < 300) {
+            r := x, g := 0, b := c
+        } else {
+            r := c, g := 0, b := x
+        }
+        return Format("#FF{:02X}{:02X}{:02X}", Round((r + m) * 255), Round((g + m) * 255), Round((b + m) * 255))
+    }
+    
+    static RgbToHsv(r, g, b, &h, &s, &v) {
+        r := r / 255.0, g := g / 255.0, b := b / 255.0
+        cmax := Max(r, g, b)
+        cmin := Min(r, g, b)
+        delta := cmax - cmin
+        
+        if (delta == 0)
+            h := 0
+        else if (cmax == r)
+            h := 60 * Mod((g - b) / delta, 6)
+        else if (cmax == g)
+            h := 60 * (((b - r) / delta) + 2)
+        else
+            h := 60 * (((r - g) / delta) + 4)
+            
+        if (h < 0)
+            h += 360
+            
+        s := cmax == 0 ? 0 : delta / cmax
+        v := cmax
     }
 }
 

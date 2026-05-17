@@ -91,31 +91,44 @@ class XAMLHost {
         ; Add an extra break before the first stack trace line to separate the error message
         details := StrReplace(details, "`r`n   at ", "`r`n`r`n   at ", , &_, 1)
 
-        errGui := Gui("", title)
+        errGui := Gui("+Resize", title)
         errGui.MarginX := 20
         errGui.MarginY := 20
 
         errGui.SetFont("s12 bold cMaroon", "Segoe UI")
-        errGui.Add("Text", "w720", header)
+        errGui.Add("Text", "w860", header)
 
         if (snippet != "") {
             errGui.SetFont("s10 bold cBlack", "Segoe UI")
             errGui.Add("Text", "y+10", "Generated XAML Snippet:")
-            errGui.SetFont("s10 norm cBlack", "Consolas")
-            errGui.Add("Edit", "y+5 w720 h60 ReadOnly +VScroll", snippet)
+            errGui.SetFont("s9 norm cBlack", "Consolas")
+            snipEdit := errGui.Add("Edit", "y+5 w860 h150 ReadOnly +VScroll +HScroll -Wrap", snippet)
 
             errGui.SetFont("s10 bold cBlack", "Segoe UI")
             errGui.Add("Text", "y+15", "Full Exception Trace:")
-            errGui.SetFont("s10 norm cBlack", "Consolas")
-            errGui.Add("Edit", "y+5 w720 h260 ReadOnly +VScroll", details)
+            errGui.SetFont("s9 norm cBlack", "Consolas")
+            errGui.Add("Edit", "y+5 w860 h300 ReadOnly +VScroll +HScroll -Wrap", details)
+            
+            ; Auto scroll to the '>>' marker
+            lines := StrSplit(snippet, "`n", "`r")
+            targetLine := 0
+            for index, line in lines {
+                if InStr(line, ">>") {
+                    targetLine := index
+                    break
+                }
+            }
+            if (targetLine > 0) {
+                ; EM_LINESCROLL message
+                SendMessage(0xB6, 0, targetLine > 3 ? targetLine - 3 : targetLine, snipEdit.Hwnd)
+            }
         } else {
-            errGui.SetFont("s10 norm cBlack", "Consolas")
-            ; Word wrap is enabled by default. +VScroll ensures vertical scrolling.
-            errGui.Add("Edit", "y+15 w720 h380 ReadOnly +VScroll", details)
+            errGui.SetFont("s9 norm cBlack", "Consolas")
+            errGui.Add("Edit", "y+15 w860 h450 ReadOnly +VScroll +HScroll -Wrap", details)
         }
 
         errGui.SetFont("s10 norm cBlack", "Segoe UI")
-        btn := errGui.Add("Button", "w120 x320 y+20 Default", "Close")
+        btn := errGui.Add("Button", "w120 x390 y+20 Default", "Close")
         btn.OnEvent("Click", (*) => errGui.Destroy())
 
         errGui.Show()
@@ -328,16 +341,29 @@ class XAMLHost {
             }
         }
 
-        if (instance.events.Has(ctrlName) && instance.events[ctrlName].Has(eventName)) {
-            if (eventName == "SelectionBox" || eventName == "CtrlSelectionBox") {
+        baseEventName := eventName
+        extraArg := ""
+        if InStr(eventName, ":") {
+            parts := StrSplit(eventName, ":")
+            baseEventName := parts[1]
+            extraArg := parts[2]
+        }
+
+        if (instance.events.Has(ctrlName) && instance.events[ctrlName].Has(baseEventName)) {
+            if (baseEventName == "SelectionBox" || baseEventName == "CtrlSelectionBox") {
                 str := ""
                 for k, v in stateMap
                     str .= k "=" v ", "
                 FileAppend("OnCopyData SelectionBox: " str "`n", A_ScriptDir "\debug.log")
             }
-            evtObj := instance.events[ctrlName][eventName]
+            evtObj := instance.events[ctrlName][baseEventName]
             cb := evtObj.Callback
-            SetTimer(() => cb(stateMap, ctrlName, eventName), -1, evtObj.Priority)
+            
+            ; Handle optional event key args without breaking older 3-param callbacks
+            if (extraArg != "")
+                SetTimer(() => cb(stateMap, ctrlName, {Key: extraArg}), -1, evtObj.Priority)
+            else
+                SetTimer(() => cb(stateMap, ctrlName, baseEventName), -1, evtObj.Priority)
         }
         return 1
     }

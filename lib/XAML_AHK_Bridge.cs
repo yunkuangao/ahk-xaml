@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml;
 using System.Reflection;
+using System.Windows.Documents;
 
 [assembly: AssemblyTitle("ahk-xaml Engine")]
 [assembly: AssemblyDescription("WPF Rendering Engine for AutoHotkey")]
@@ -465,8 +466,18 @@ public class AhkWpfEngine : Application {
             }
             
             var pExprs = parameters.Select(p => System.Linq.Expressions.Expression.Parameter(p.ParameterType, p.Name)).ToArray();
-            var dumpStateMethod = this.GetType().GetMethod("DumpState", BindingFlags.NonPublic | BindingFlags.Instance);
-            var call = System.Linq.Expressions.Expression.Call(System.Linq.Expressions.Expression.Constant(this), dumpStateMethod, System.Linq.Expressions.Expression.Constant(ctrlName), System.Linq.Expressions.Expression.Constant(eventName));
+            System.Linq.Expressions.MethodCallExpression call;
+            
+            if (pExprs.Length >= 2) {
+                var dumpStateWithArgsMethod = this.GetType().GetMethod("DumpStateWithArgs", BindingFlags.NonPublic | BindingFlags.Instance);
+                // Convert pExprs[1] to object to match the method signature
+                var objCast = System.Linq.Expressions.Expression.Convert(pExprs[1], typeof(object));
+                call = System.Linq.Expressions.Expression.Call(System.Linq.Expressions.Expression.Constant(this), dumpStateWithArgsMethod, System.Linq.Expressions.Expression.Constant(ctrlName), System.Linq.Expressions.Expression.Constant(eventName), objCast);
+            } else {
+                var dumpStateMethod = this.GetType().GetMethod("DumpState", BindingFlags.NonPublic | BindingFlags.Instance);
+                call = System.Linq.Expressions.Expression.Call(System.Linq.Expressions.Expression.Constant(this), dumpStateMethod, System.Linq.Expressions.Expression.Constant(ctrlName), System.Linq.Expressions.Expression.Constant(eventName));
+            }
+            
             var lambda = System.Linq.Expressions.Expression.Lambda(evt.EventHandlerType, call, pExprs);
             evt.AddEventHandler(ctrl, lambda.Compile());
         } catch { }
@@ -475,10 +486,18 @@ public class AhkWpfEngine : Application {
     public string CollectState() {
         var sb = new StringBuilder();
         foreach (var t in tracked) {
-            var c = win.FindName(t);
+            string cName = t;
+            bool wantsCaret = false;
+            if (cName.EndsWith("_CaretIndex")) {
+                cName = cName.Substring(0, cName.Length - 11);
+                wantsCaret = true;
+            }
+            
+            var c = win.FindName(cName);
             if (c != null) {
                 string val = "";
-                if (c is TextBox) val = ((TextBox)c).Text;
+                if (wantsCaret && c is TextBox) val = ((TextBox)c).CaretIndex.ToString();
+                else if (c is TextBox) val = ((TextBox)c).Text;
                 else if (c is PasswordBox) val = ((PasswordBox)c).Password;
                 else if (c is ToggleButton) { bool? isChecked = ((ToggleButton)c).IsChecked; val = isChecked.HasValue ? isChecked.Value.ToString() : "False"; }
                 else if (c is RangeBase) val = ((RangeBase)c).Value.ToString();
@@ -504,7 +523,26 @@ public class AhkWpfEngine : Application {
         return sb.ToString();
     }
 
+    private DateTime lastSendMouseMove = DateTime.MinValue;
+
+    private void DumpStateWithArgs(string cName, string eName, object e) {
+        if (e is System.Windows.Input.KeyEventArgs) {
+            eName += ":" + ((System.Windows.Input.KeyEventArgs)e).Key.ToString();
+        }
+        DumpState(cName, eName);
+    }
+
     private void DumpState(string cName, string eName) {
+        var ctrl = win.FindName(cName) as FrameworkElement;
+        if (ctrl != null) {
+            if (eName == "TextChanged" && !ctrl.IsKeyboardFocusWithin) return;
+            if (eName == "ValueChanged" && !ctrl.IsMouseOver && !ctrl.IsKeyboardFocusWithin && !ctrl.IsMouseCaptured) return;
+        }
+
+        if (eName == "MouseMove" || eName == "PreviewMouseMove") {
+            if ((DateTime.Now - lastSendMouseMove).TotalMilliseconds < 16) return;
+            lastSendMouseMove = DateTime.Now;
+        }
         var sb = new StringBuilder("EVENT|" + winId + "|" + cName + "|" + eName + "\n");
         sb.Append(CollectState());
         SendToAhk(sb.ToString());
@@ -629,6 +667,13 @@ public class AhkWpfEngine : Application {
                     } catch (Exception ex) {
                         Console.WriteLine("XamlParse Error: " + ex.Message);
                     }
+                } else if (parts[1] == "Document" && ctrl is RichTextBox) {
+                    try {
+                        FlowDocument doc = (FlowDocument)XamlReader.Parse(parts[2]);
+                        ((RichTextBox)ctrl).Document = doc;
+                    } catch (Exception ex) {
+                        System.IO.File.AppendAllText("xaml_parse_error.log", "Parse Error: " + ex.Message + "\n" + (ex.InnerException != null ? ex.InnerException.Message : "") + "\nString: " + parts[2] + "\n\n");
+                    }
                 } else if (parts[1] == "Background" && ctrl is System.Windows.Controls.Control) {
                     if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Control)ctrl).SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, parts[2].Substring(17, parts[2].Length - 18));
                     else ((System.Windows.Controls.Control)ctrl).Background = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
@@ -679,6 +724,14 @@ public class AhkWpfEngine : Application {
                     double secs;
                     if (double.TryParse(parts[2], out secs)) {
                         ((MediaElement)ctrl).Position = TimeSpan.FromSeconds(secs);
+                    }
+                } else if (parts[1] == "NavigateToString" && ctrl is System.Windows.Controls.WebBrowser) {
+                    try {
+                        byte[] htmlBytes = Convert.FromBase64String(parts[2]);
+                        string html = Encoding.UTF8.GetString(htmlBytes);
+                        ((System.Windows.Controls.WebBrowser)ctrl).NavigateToString(html);
+                    } catch (Exception ex) {
+                        Console.WriteLine("NavigateToString error: " + ex.Message);
                     }
                 } else if (parts[1] == "StartPositionTimer" && ctrl is MediaElement) {
                     // Handle all position tracking and seeking in C# to avoid IPC feedback loops
@@ -747,6 +800,13 @@ public class AhkWpfEngine : Application {
                     var tb = (System.Windows.Controls.TextBox)ctrl;
                     tb.AppendText(parts[2]);
                     tb.ScrollToEnd();
+                } else if (parts[1] == "InsertText" && ctrl is System.Windows.Controls.TextBox) {
+                    var tb = (System.Windows.Controls.TextBox)ctrl;
+                    int idx = tb.CaretIndex;
+                    string pre = tb.Text.Substring(0, idx);
+                    string post = tb.Text.Substring(idx);
+                    tb.Text = pre + parts[2] + post;
+                    tb.CaretIndex = idx + parts[2].Length;
                 } else if (parts[1] == "NativeOwner" && ctrl is Window) {
                     new System.Windows.Interop.WindowInteropHelper((Window)ctrl).Owner = new IntPtr(long.Parse(parts[2]));
                 } else if (parts[1] == "Focus" && ctrl is UIElement) {

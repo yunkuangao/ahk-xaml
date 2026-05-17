@@ -183,34 +183,6 @@ BuildComponentsTab(tab) {
     n1.Add("TreeViewItem").Header("Gateway-Router-01")
     n2 := tv.Add("TreeViewItem").Header("Cloud Infrastructure").IsExpanded("True")
     n2.Add("TreeViewItem").Header("AWS-us-east-1")
-    n2.Add("TreeViewItem").Header("Azure-WestEurope")
-
-    panel.Add("TextBlock").Text("RICH TEXT / CODE EDITOR")
-    editor := panel.CodeEditor("core.js")
-    flow := editor.Add("FlowDocument").LineHeight(20)
-    para := flow.Add("Paragraph").Margin("0")
-
-    cKeyword := "{DynamicResource Accent}"
-    cMethod := "{DynamicResource TextMain}"
-    cString := "{DynamicResource TextSub}"
-    cOperator := "{DynamicResource TextMain}"
-
-    para.Add("Run").Text("function").Foreground(cKeyword).FontWeight("Bold")
-    para.Add("Run").Text(" ").Foreground(cOperator)
-    para.Add("Run").Text("initializeCore").Foreground(cMethod)
-    para.Add("Run").Text("() {").Foreground(cOperator)
-    para.Add("LineBreak")
-    para.Add("Run").Text("    console.").Foreground(cOperator)
-    para.Add("Run").Text("log").Foreground(cMethod)
-    para.Add("Run").Text("(").Foreground(cOperator)
-    para.Add("Run").Text("'System online.'").Foreground(cString)
-    para.Add("Run").Text(");").Foreground(cOperator)
-    para.Add("LineBreak")
-    para.Add("Run").Text("    return ").Foreground(cKeyword).FontWeight("Bold")
-    para.Add("Run").Text("true").Foreground(cKeyword)
-    para.Add("Run").Text(";").Foreground(cOperator)
-    para.Add("LineBreak")
-    para.Add("Run").Text("}").Foreground(cOperator)
 }
 app.AddTab("UI COMPONENTS", BuildComponentsTab)
 
