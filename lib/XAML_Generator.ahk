@@ -161,6 +161,9 @@ class XAMLElement {
             val := StrReplace(val, ">", "&gt;")
             val := StrReplace(val, '"', "&quot;")
             val := StrReplace(val, "'", "&apos;")
+            val := StrReplace(val, "`r`n", "&#10;")
+            val := StrReplace(val, "`n", "&#10;")
+            val := StrReplace(val, "`r", "&#10;")
             attrStr .= ' ' k '="' val '"'
         }
         

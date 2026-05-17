@@ -214,26 +214,8 @@ class XAMLHost {
             xamlFile := assetPath
             eventsFile := "none"
         } else {
-            eventBindings := ""
-            for ctrlName, events in this.events {
-                for eventName, evtObj in events {
-                    eventBindings .= ctrlName ":" eventName ","
-                }
-            }
-            eventBindings := RTrim(eventBindings, ",")
-
-            xamlFile := ""
-            if (this.xaml != "") {
-                xamlFile := A_Temp "\AhkWpf\AhkWpf_" this.id ".xaml"
-                if FileExist(xamlFile)
-                    FileDelete(xamlFile)
-                FileAppend(this.xaml, xamlFile, "UTF-8")
-            }
-
-            eventsFile := A_Temp "\AhkWpf\AhkWpf_" this.id ".events.txt"
-            if FileExist(eventsFile)
-                FileDelete(eventsFile)
-            FileAppend(eventBindings, eventsFile, "UTF-8")
+            xamlFile := "STREAM"
+            eventsFile := "STREAM"
         }
 
         SplitPath(A_LineFile, , &libDir)
@@ -287,6 +269,32 @@ class XAMLHost {
 
         instance := XAMLHost._instances[winId]
 
+        if (ctrlName == "Engine" && eventName == "Ready") {
+            targetHwnd := Integer(parts[5])
+            
+            eventBindings := ""
+            for cName, events in instance.events {
+                for eName, evtObj in events {
+                    eventBindings .= cName ":" eName ","
+                }
+            }
+            eventBindings := RTrim(eventBindings, ",")
+
+            payload := "XAML_PAYLOAD|" instance.xaml "`n---AHK-XAML-EVENTS---`n" eventBindings
+            buf := Buffer(StrPut(payload, "UTF-8"))
+            StrPut(payload, buf, "UTF-8")
+
+            cds := Buffer(A_PtrSize * 3)
+            NumPut("Ptr", 0, cds, 0)
+            NumPut("UInt", buf.Size, cds, A_PtrSize)
+            NumPut("Ptr", buf.Ptr, cds, A_PtrSize * 2)
+
+            DllCall("user32\SendMessageW", "Ptr", targetHwnd, "UInt", 0x004A, "Ptr", 0, "Ptr", cds.Ptr)
+            payload := ""
+            buf := ""
+            return 1
+        }
+
         if (ctrlName == "Window" && eventName == "LoadedHwnd") {
             instance.wpfHwnd := Integer(parts[5])
         }
@@ -295,8 +303,19 @@ class XAMLHost {
         }
 
         stateMap := Map()
-        if (eventName == "Drop" && parts.Length >= 5) {
-            stateMap["DropFiles"] := StrSplit(XAMLHost.Base64Decode(parts[5]), "|")
+        
+        eventData := ""
+        if (parts.Length >= 5) {
+            eventData := XAMLHost.Base64Decode(parts[5])
+            if (eventData != "")
+                stateMap[eventName] := eventData
+        }
+        
+        if (eventName == "Drop" && eventData != "") {
+            stateMap["DropFiles"] := StrSplit(eventData, "|")
+        }
+        if (eventName == "DragMove" && eventData != "") {
+            stateMap["DragCoords"] := eventData
         }
 
         Loop lines.Length {
@@ -310,6 +329,12 @@ class XAMLHost {
         }
 
         if (instance.events.Has(ctrlName) && instance.events[ctrlName].Has(eventName)) {
+            if (eventName == "SelectionBox" || eventName == "CtrlSelectionBox") {
+                str := ""
+                for k, v in stateMap
+                    str .= k "=" v ", "
+                FileAppend("OnCopyData SelectionBox: " str "`n", A_ScriptDir "\debug.log")
+            }
             evtObj := instance.events[ctrlName][eventName]
             cb := evtObj.Callback
             SetTimer(() => cb(stateMap, ctrlName, eventName), -1, evtObj.Priority)

@@ -1,4 +1,8 @@
-test*
+*test*.ahk
 !test_error.ahk
 scratch*
 *.dll
+*.txt
+*.log
+*.bak
+*.exe

@@ -1,0 +1,272 @@
+#Requires AutoHotkey v2.0
+#Include "..\lib\XAML_Host.ahk"
+#Include "..\lib\XAML_Dialog.ahk"
+#Include "..\lib\XAML_Components.ahk"
+#Include "..\lib\XAML_Adv_Components.ahk"
+#Include "..\lib\XAML_GUI.ahk"
+
+; Setup standard UI without the built-in sidebar/tabs, so we can use our new NavigationView
+options := Map("Sidebar", true, "BurgerMenu", true)
+app := XAML_GUI("Advanced Components Showcase", options)
+app.tabs.Visibility("Collapsed")
+
+root := app.main.Add("Grid").Grid_Row(1)
+
+; Command Bar
+cmdBarBorder := root.Add("Border").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,0,0,1").VerticalAlignment("Top").Padding("10").SetProp("Panel.ZIndex", "10")
+cmdBar := cmdBarBorder.CommandBar("TopCmdBar")
+cmdBar.AddButton(Chr(0xE74E), "Save", "BtnSave")
+cmdBar.AddButton(Chr(0xE70F), "Edit", "BtnEdit")
+cmdBar.AddSeparator()
+cmdBar.AddButton(Chr(0xE711), "Close", "BtnCmdClose")
+
+; Content Area below Command Bar
+mainContent := root.Add("Border").Margin("0,55,0,0")
+
+; Navigation View
+nav := mainContent.NavigationView("MainNav")
+
+; ---------------------------------------------------------
+; PAGE 1: Dashboard (Sparklines & Markdown)
+; ---------------------------------------------------------
+dashGrid := XAML_Generator("Grid").Margin("0")
+dashGrid._Parent := app.X
+dashGrid.Rows("Auto", "Auto", "*")
+
+dashGrid.Add("TextBlock").Text("Dashboard Overview").Grid_Row(0).FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,0,20")
+
+metricsSp := dashGrid.Add("StackPanel").Grid_Row(1).Orientation("Horizontal").Margin("0,0,0,20")
+card1 := metricsSp.Add("Border").Use("CardPanel").Padding("15").Width("180").Margin("0,0,15,0")
+c1sp := card1.Add("StackPanel")
+c1sp.Add("TextBlock").Text("SERVER LOAD").Foreground("{DynamicResource TextSub}").FontSize("10").FontWeight("Bold").Margin("0,0,0,10")
+c1sp.Sparkline([12, 15, 20, 18, 25, 40, 35, 60, 50, 45, 65, 80], 150, 40, "#FF3333")
+
+card2 := metricsSp.Add("Border").Use("CardPanel").Padding("15").Width("180").Margin("0,0,15,0")
+c2sp := card2.Add("StackPanel")
+c2sp.Add("TextBlock").Text("USER ACTIVITY").Foreground("{DynamicResource TextSub}").FontSize("10").FontWeight("Bold").Margin("0,0,0,10")
+c2sp.Sparkline([100, 110, 105, 120, 115, 130, 140, 135, 150, 160], 150, 40, "#32D74B", "Area")
+
+card3 := metricsSp.Add("Border").Use("CardPanel").Padding("15").Width("180").Margin("0,0,15,0")
+c3sp := card3.Add("StackPanel")
+c3sp.Add("TextBlock").Text("SYSTEM ERRORS").Foreground("{DynamicResource TextSub}").FontSize("10").FontWeight("Bold").Margin("0,0,0,10")
+c3sp.Sparkline([5, 2, 0, 8, 3, 1, 0, 4, 2, 0, 1, 0], 150, 40, "#FFCC00", "Bar")
+
+docBdr := dashGrid.Add("Border").Grid_Row(2).Use("CardPanel").Padding("20")
+mdText := "
+(
+    # Project Documentation
+    ## Overview
+    This is a demonstration of the dynamic MarkdownRenderer control.
+    
+    ### Features
+    - Native WPF Runs and Blocks
+    - Dynamic style mapping
+    - No HTML rendering overhead
+    - Supports **bold text** dynamically!
+)"
+docSp := docBdr.Add("StackPanel")
+
+headerSp := docSp.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,10")
+headerSp.Add("TextBlock").Text("Markdown Renderer").Foreground("{DynamicResource TextSub}").FontSize("12").FontWeight("Bold").Margin("0,0,10,0")
+headerSp.Add("CheckBox").Name("BtnToggleMd").Content("Edit Raw").Style("{StaticResource ToggleSwitch}")
+
+mdGrid := docSp.Add("Grid")
+mdSv := mdGrid.Add("ScrollViewer").Name("MdViewSv").VerticalScrollBarVisibility("Auto").MaxHeight("200")
+mdRenderer := mdSv.Add("StackPanel").Name("MdView")
+mdRenderer.MarkdownRenderer(mdText)
+
+mdGrid.Add("TextBox").Name("MdEditor").Text(mdText).TextWrapping("Wrap").AcceptsReturn("True").MaxHeight("200").VerticalScrollBarVisibility("Auto").Visibility("Collapsed").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10")
+
+nav.AddPage("Dashboard", Chr(0xEA24), dashGrid)
+
+; ---------------------------------------------------------
+; PAGE 2: Kanban Board
+; ---------------------------------------------------------
+kanbanGrid := XAML_Generator("Grid").Margin("0")
+kanbanGrid._Parent := app.X
+kanbanGrid.Rows("Auto", "Auto", "*")
+kanbanGrid.Add("TextBlock").Text("Task Board").Grid_Row(0).FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10")
+
+; Toolbar
+kbToolbar := kanbanGrid.Add("StackPanel").Grid_Row(1).Orientation("Horizontal").Margin("0,0,0,12")
+btnLeft := kbToolbar.Add("Button").Name("KbMoveLeft").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10,6").Margin("0,0,8,0").Cursor("Hand")
+spL := btnLeft.Add("StackPanel").Orientation("Horizontal")
+spL.Add("TextBlock").Text(Chr(0xE76B)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("12").VerticalAlignment("Center").Margin("0,0,6,0")
+spL.Add("TextBlock").Text("Move Left").FontSize("12").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}")
+btnRight := kbToolbar.Add("Button").Name("KbMoveRight").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10,6").Cursor("Hand")
+spR := btnRight.Add("StackPanel").Orientation("Horizontal")
+spR.Add("TextBlock").Text("Move Right").FontSize("12").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}")
+spR.Add("TextBlock").Text(Chr(0xE76C)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("12").VerticalAlignment("Center").Margin("6,0,0,0")
+
+kb := kanbanGrid.KanbanBoard("ProjectKanban")
+kb.sv.Grid_Row(2)
+kb.AddColumn("To Do", "#FF3333")
+kb.AddColumn("In Progress", "#FFCC00")
+kb.AddColumn("Done", "#32D74B")
+
+kb.AddCard(1, "Design mockups")
+kb.AddCard(1, "Fix memory leak")
+kb.AddCard(2, "Implement CommandBar")
+kb.AddCard(2, "Refactor XAML Engine")
+kb.AddCard(3, "Write unit tests")
+
+nav.AddPage("Kanban", Chr(0xE8D4), kanbanGrid)
+
+; ---------------------------------------------------------
+; PAGE 3: Node Graph
+; ---------------------------------------------------------
+nodesGrid := XAML_Generator("Grid").Margin("0")
+nodesGrid._Parent := app.X
+nodesGrid.Rows("Auto", "Auto", "*")
+nodesGrid.Add("TextBlock").Text("Visual Scripting").Grid_Row(0).FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,0,8")
+
+nodesHeader := nodesGrid.Add("Grid").Grid_Row(1).Margin("0,0,0,12")
+nodesHeader.Cols("*", "Auto")
+nodesHeader.Add("TextBlock").Text("Right-click: context menu  |  Scroll: zoom  |  Mid-drag: pan  |  Left-drag: select/move").FontSize("11").Foreground("#666").VerticalAlignment("Center")
+
+tb := nodesHeader.Add("StackPanel").Grid_Column(1).Orientation("Horizontal")
+
+btnPan := tb.Add("RadioButton").Name("BtnPanMode").Content("Pan Mode").IsChecked("True").Margin("0,0,10,0")
+btnSel := tb.Add("RadioButton").Name("BtnSelectMode").Content("Select Mode").Margin("0,0,10,0")
+btnKnife := tb.Add("RadioButton").Name("BtnKnifeMode").Content("Knife Tool").Margin("0,0,20,0")
+
+chkSnap := tb.Add("CheckBox").Name("ChkGridSnap").Content("Grid Snap").IsChecked("True").VerticalAlignment("Center").Margin("0,0,20,0")
+
+btnZoomOut := tb.Add("Button").Name("BtnZoomOut").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("8,4").Cursor("Hand").Margin("0,0,4,0")
+btnZoomOut.Add("TextBlock").Text("-").FontSize("14").FontWeight("Bold").VerticalAlignment("Center").Margin("0,-2,0,0")
+
+btnZoomIn := tb.Add("Button").Name("BtnZoomIn").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("8,4").Cursor("Hand").Margin("0,0,4,0")
+btnZoomIn.Add("TextBlock").Text("+").FontSize("14").FontWeight("Bold").VerticalAlignment("Center").Margin("0,-2,0,0")
+
+btnZoom := tb.Add("Button").Name("BtnZoomAll").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10,4").Cursor("Hand")
+spZ := btnZoom.Add("StackPanel").Orientation("Horizontal")
+spZ.Add("TextBlock").Text(Chr(0xE8A3)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("12").VerticalAlignment("Center").Margin("0,0,6,0")
+spZ.Add("TextBlock").Text("Zoom Fit").FontSize("12").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}")
+
+ng := nodesGrid.NodeGraph("WorkflowGraph")
+ng.bdr.Grid_Row(2)
+ng.AddNode("Input1", "REST API Source", 40, 60, "Input")
+ng.AddNode("Input2", "Database Polling", 40, 200, "Input")
+ng.AddNode("Filter", "Filter Records", 240, 40, "Process")
+ng.AddNode("Transform", "Transform Data", 240, 160, "Process")
+ng.AddNode("Merge", "Merge Results", 460, 100, "Process")
+ng.AddNode("Output", "Export JSON", 680, 100, "Output")
+
+ng.AddConnection("Input1", "Filter")
+ng.AddConnection("Input2", "Transform")
+ng.AddConnection("Filter", "Merge")
+ng.AddConnection("Transform", "Merge")
+ng.AddConnection("Merge", "Output")
+
+nav.AddPage("Node Graph", Chr(0xE9D5), nodesGrid)
+
+; ---------------------------------------------------------
+; PAGE 4: Media Player
+; ---------------------------------------------------------
+mediaGrid := XAML_Generator("Grid").Margin("0")
+mediaGrid._Parent := app.X
+mediaGrid.Rows("Auto", "*")
+mediaGrid.Add("TextBlock").Text("Media Tools").Grid_Row(0).FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,0,20")
+
+vidBdr := mediaGrid.Add("Border").Use("CardPanel").Padding("15").Margin("0,0,20,0").Grid_Row(1)
+vidGrid := vidBdr.Add("Grid")
+vidGrid.Rows("Auto", "*")
+mp := vidGrid.MediaPlayerEx("", "VidPlayer")
+mp.grid.Grid_Row(1)
+
+nav.AddPage("Media", Chr(0xE8B9), mediaGrid)
+
+; ---------------------------------------------------------
+; PAGE 5: Image Cropper
+; ---------------------------------------------------------
+cropGrid := XAML_Generator("Grid").Margin("0")
+cropGrid._Parent := app.X
+cropGrid.Rows("Auto", "*")
+cropGrid.Add("TextBlock").Text("Image Editor").Grid_Row(0).FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,0,20")
+
+imgBdr := cropGrid.Add("Border").Use("CardPanel").Padding("15").Margin("0,0,20,0").Grid_Row(1)
+imgGrid := imgBdr.Add("Grid")
+imgGrid.Rows("Auto", "*")
+imgGrid.Add("TextBlock").Text("Image Cropper").Grid_Row(0).Foreground("{DynamicResource TextSub}").FontSize("12").FontWeight("Bold").Margin("0,0,0,10")
+ic := imgGrid.ImageCropper("", "ImgCrop")
+ic.grid.Grid_Row(1)
+
+nav.AddPage("Image", Chr(0xE91B), cropGrid)
+
+; ---------------------------------------------------------
+; START APP
+; ---------------------------------------------------------
+ui := app.Compile()
+
+; Bindings
+nav.Bind(ui)
+kb.Bind(ui)
+ng.Bind(ui)
+mp.Bind(ui)
+ic.Bind(ui)
+
+; Kanban move buttons
+ui.OnEvent("KbMoveLeft", "Click", (*) => (kb.HasProp("selectedColIdx") && kb.selectedColIdx > 1) ? kb.MoveSelectedTo(kb.selectedColIdx - 1) : "")
+ui.OnEvent("KbMoveRight", "Click", (*) => (kb.HasProp("selectedColIdx") && kb.selectedColIdx > 0 && kb.selectedColIdx < kb.columns.Length) ? kb.MoveSelectedTo(kb.selectedColIdx + 1) : "")
+
+; Track markdown editor for state
+ui.Track("MdEditor")
+
+ui.OnEvent("BtnToggleMd", "Checked", (*) => (ui.Update("MdViewSv", "Visibility", "Collapsed"), ui.Update("MdEditor", "Visibility", "Visible")))
+ui.OnEvent("BtnToggleMd", "Unchecked", ObjBindMethod(app, "RebuildMarkdown"))
+
+; Extend app to handle the dynamic rebuild
+app.DefineProp("RebuildMarkdown", { Call: _RebuildMarkdown })
+_RebuildMarkdown(this, state, ctrl, event) {
+    if !state.Has("MdEditor")
+        return
+    rawText := state["MdEditor"]
+    
+    ; Normalize line endings
+    rawText := StrReplace(rawText, "`r`n", "`n")
+    
+    ; Build markdown elements
+    temp := XAML_Generator("StackPanel")
+    temp._Parent := this.X
+    temp.MarkdownRenderer(rawText)
+    
+    ; Collect child XAML - the MarkdownRenderer adds a StackPanel with children
+    innerXaml := ""
+    for child in temp._Children {
+        for innerChild in child._Children
+            innerXaml .= innerChild.ToString()
+    }
+    
+    ; Wrap in a StackPanel with xmlns for XamlReader.Parse
+    xamlStr := '<StackPanel xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">' innerXaml '</StackPanel>'
+        
+    ui.Update("MdView", "ClearItems", "")
+    ui.Update("MdView", "AddXamlItem", xamlStr)
+    
+    ui.Update("MdViewSv", "Visibility", "Visible")
+    ui.Update("MdEditor", "Visibility", "Collapsed")
+}
+
+ui.OnEvent("BtnCmdClose", "Click", (*) => ExitApp())
+ui.OnEvent("BtnZoomAll", "Click", (*) => ui.Update(ng.id, "ZoomAll", ""))
+ui.OnEvent("BtnZoomIn", "Click", (*) => ui.Update(ng.id, "Zoom", "1.2"))
+ui.OnEvent("BtnZoomOut", "Click", (*) => ui.Update(ng.id, "Zoom", "0.8"))
+ui.OnEvent("BtnPanMode", "Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Pan"))
+ui.OnEvent("BtnSelectMode", "Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Select"))
+ui.OnEvent("BtnKnifeMode", "Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Knife"))
+ui.OnEvent("ChkGridSnap", "Checked", (*) => ng.SetGridSnap(ui, true))
+ui.OnEvent("ChkGridSnap", "Unchecked", (*) => ng.SetGridSnap(ui, false))
+
+HotIfWinActive "ahk_pid " DllCall("GetCurrentProcessId")
+Hotkey("Delete", (*) => ng.DeleteSelectedConnections())
+HotIfWinActive
+
+; Enable C#-side drag on nodes and cropper after Window loads
+SetTimer(_EnableDragComponents, -500)
+_EnableDragComponents() {
+    kb.EnableDrag(ui)
+    ng.EnableDrag(ui)
+    ic.EnableDrag(ui)
+}
+
+app.Show()

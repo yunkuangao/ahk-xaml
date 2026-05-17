@@ -32,6 +32,9 @@ public class AhkWpfEngine : Application {
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
     
+    [DllImport("psapi.dll")]
+    public static extern int EmptyWorkingSet(IntPtr hwProc);
+    
     [StructLayout(LayoutKind.Sequential)]
     public struct MINMAXINFO { public POINT ptReserved; public POINT ptMaxSize; public POINT ptMaxPosition; public POINT ptMinTrackSize; public POINT ptMaxTrackSize; }
     [StructLayout(LayoutKind.Sequential)]
@@ -46,6 +49,11 @@ public class AhkWpfEngine : Application {
     public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
     string winId; IntPtr ahkHwnd; string[] tracked; Window win;
+    System.Collections.Generic.Dictionary<string, string> canvasModes = new System.Collections.Generic.Dictionary<string, string>();
+    System.Windows.Shapes.Rectangle selectionBox = null;
+    Point selectionStart;
+    System.Windows.Shapes.Path tempConnection = null;
+    FrameworkElement connectionSourcePort = null;
 
     static AhkWpfEngine() {
         EventManager.RegisterClassHandler(typeof(TreeView), UIElement.PreviewMouseWheelEvent, new System.Windows.Input.MouseWheelEventHandler(OnPreviewMouseWheel), false);
@@ -139,7 +147,47 @@ public class AhkWpfEngine : Application {
         string eventsContent = "";
         bool isBin = !string.IsNullOrEmpty(xamlFilePath) && xamlFilePath.EndsWith(".bin", StringComparison.OrdinalIgnoreCase);
 
-        if (!string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
+        if (xamlFilePath == "STREAM") {
+            HwndSourceParameters parameters = new HwndSourceParameters("MessageReceiver", 0, 0);
+            parameters.WindowStyle = 0;
+            HwndSource msgWindow = new HwndSource(parameters);
+            
+            bool received = false;
+            msgWindow.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) => {
+                if (msg == 0x004A) {
+                    try {
+                        var cds = (COPYDATASTRUCT)Marshal.PtrToStructure(lParam, typeof(COPYDATASTRUCT));
+                        byte[] bytes = new byte[cds.cbData];
+                        Marshal.Copy(cds.lpData, bytes, 0, cds.cbData);
+                        string text = Encoding.UTF8.GetString(bytes).TrimEnd('\0');
+                        if (text.StartsWith("XAML_PAYLOAD|")) {
+                            string payload = text.Substring(13);
+                            string[] p = payload.Split(new[] { "\n---AHK-XAML-EVENTS---\n" }, 2, StringSplitOptions.None);
+                            xamlContent = p[0];
+                            if (p.Length > 1) {
+                                eventsContent = p[1];
+                            }
+                            received = true;
+                        }
+                    } catch { }
+                    handled = true;
+                }
+                return IntPtr.Zero;
+            });
+            
+            SendToAhk("EVENT|" + winId + "|Engine|Ready|" + msgWindow.Handle.ToString() + "\n");
+            
+            DateTime startWait = DateTime.Now;
+            while (!received && (DateTime.Now - startWait).TotalSeconds < 10) {
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Background, new Action(delegate { }));
+                System.Threading.Thread.Sleep(10);
+            }
+            msgWindow.Dispose();
+            
+            if (!received) {
+                throw new Exception("Timed out waiting for XAML payload stream from AHK.");
+            }
+        } else if (!string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
             if (isBin) {
                 byte[] compressed = System.IO.File.ReadAllBytes(xamlFilePath);
                 string payload = "";
@@ -173,7 +221,7 @@ public class AhkWpfEngine : Application {
             } catch { }
         }
         
-        if (!isBin && !string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
+        if (!isBin && xamlFilePath != "STREAM" && !string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
             try { System.IO.File.Delete(xamlFilePath); } catch { }
         }
         
@@ -191,6 +239,9 @@ public class AhkWpfEngine : Application {
             foreach (System.Collections.DictionaryEntry entry in win.Resources) {
                 Application.Current.Resources[entry.Key] = entry.Value;
             }
+            xamlContent = null;
+            xamlBytes = null;
+            GC.Collect();
         } catch (XamlParseException ex) {
             string[] xamlLines = Encoding.UTF8.GetString(xamlBytes).Replace("\r\n", "\n").Split('\n');
             string snippet = "Unknown";
@@ -286,6 +337,21 @@ public class AhkWpfEngine : Application {
             SendToAhk("EVENT|" + winId + "|Window|LoadedHwnd|" + hwnd.ToString() + "\n");
             UpdateSnapState(win);
             DumpState("Window", "Loaded");
+            
+            // Aggressively flush the working set from RAM (WPF caches huge amounts of unused startup structures)
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+            timer.Tick += (sender, args) => {
+                timer.Stop();
+                win.Topmost = true;
+                win.Topmost = false;
+                win.Activate();
+                try { System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce; } catch { }
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                try { EmptyWorkingSet(System.Diagnostics.Process.GetCurrentProcess().Handle); } catch { }
+            };
+            timer.Start();
         };
         win.Closing += (s, e) => { 
             var ownerHwnd = new System.Windows.Interop.WindowInteropHelper(win).Owner;
@@ -297,7 +363,7 @@ public class AhkWpfEngine : Application {
         };
         win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
 
-        if (isBin) {
+        if (isBin || xamlFilePath == "STREAM") {
             if (!string.IsNullOrEmpty(eventsContent)) {
                 string[] pairs = eventsContent.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (string p in pairs) {
@@ -323,6 +389,9 @@ public class AhkWpfEngine : Application {
                 }
             } catch { }
         }
+        
+        eventsContent = null;
+        
         win.ShowDialog();
     }
 
@@ -532,15 +601,139 @@ public class AhkWpfEngine : Application {
                         lb.SelectedIndex = lb.Items.Count - 1;
                         lb.ScrollIntoView(lb.SelectedItem);
                     }
-                } else if (parts[1] == "AddXamlItem" && ctrl is ItemsControl) {
+                } else if (parts[1] == "AddXamlItem") {
                     try {
                         object element = XamlReader.Parse(parts[2]);
-                        ((ItemsControl)ctrl).Items.Add(element);
+                        
+                        // Register names in the current window's NameScope so FindName works for dynamic elements
+                        Action<DependencyObject> registerNames = null;
+                        registerNames = new Action<DependencyObject>((DependencyObject d) => {
+                            if (d is FrameworkElement) {
+                                var fe = (FrameworkElement)d;
+                                if (!string.IsNullOrEmpty(fe.Name)) {
+                                    try { win.RegisterName(fe.Name, fe); } catch { }
+                                }
+                            }
+                            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(d);
+                            for (int i = 0; i < count; i++) {
+                                registerNames(System.Windows.Media.VisualTreeHelper.GetChild(d, i));
+                            }
+                        });
+                        registerNames((DependencyObject)element);
+
+                        if (ctrl is ItemsControl) {
+                            ((ItemsControl)ctrl).Items.Add(element);
+                        } else if (ctrl is System.Windows.Controls.Panel) {
+                            ((System.Windows.Controls.Panel)ctrl).Children.Add((UIElement)element);
+                        }
                     } catch (Exception ex) {
                         Console.WriteLine("XamlParse Error: " + ex.Message);
                     }
-                } else if (parts[1] == "ClearItems" && ctrl is ItemsControl) {
-                    ((ItemsControl)ctrl).Items.Clear();
+                } else if (parts[1] == "Background" && ctrl is System.Windows.Controls.Control) {
+                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
+                    ((System.Windows.Controls.Control)ctrl).Background = brush;
+                } else if (parts[1] == "Foreground" && ctrl is System.Windows.Controls.Control) {
+                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
+                    ((System.Windows.Controls.Control)ctrl).Foreground = brush;
+                } else if (parts[1] == "BorderBrush" && ctrl is Border) {
+                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
+                    ((Border)ctrl).BorderBrush = brush;
+                } else if (parts[1] == "Stroke" && ctrl is System.Windows.Shapes.Shape) {
+                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
+                    ((System.Windows.Shapes.Shape)ctrl).Stroke = brush;
+                } else if (parts[1] == "StrokeThickness" && ctrl is System.Windows.Shapes.Shape) {
+                    ((System.Windows.Shapes.Shape)ctrl).StrokeThickness = double.Parse(parts[2]);
+                } else if (parts[1] == "RemoveItem" && ctrl is ItemsControl) {
+                    var itemsControl = (ItemsControl)ctrl;
+                    object toRemove = null;
+                    foreach (var item in itemsControl.Items) {
+                        bool match = item.ToString() == parts[2];
+                        if (!match && item is System.Windows.Controls.ListBoxItem) {
+                            var lbi = (System.Windows.Controls.ListBoxItem)item;
+                            match = (lbi.Content != null && lbi.Content.ToString() == parts[2]);
+                        }
+                        if (match) {
+                            toRemove = item;
+                            break;
+                        }
+                    }
+                    if (toRemove != null) {
+                        itemsControl.Items.Remove(toRemove);
+                    }
+                } else if (parts[1] == "ClearItems") {
+                    if (ctrl is ItemsControl) {
+                        ((ItemsControl)ctrl).Items.Clear();
+                    } else if (ctrl is System.Windows.Controls.Panel) {
+                        ((System.Windows.Controls.Panel)ctrl).Children.Clear();
+                    }
+                } else if (parts[1] == "Play" && ctrl is MediaElement) {
+                    ((MediaElement)ctrl).Play();
+                } else if (parts[1] == "Pause" && ctrl is MediaElement) {
+                    ((MediaElement)ctrl).Pause();
+                } else if (parts[1] == "Stop" && ctrl is MediaElement) {
+                    ((MediaElement)ctrl).Stop();
+                } else if (parts[1] == "Seek" && ctrl is MediaElement) {
+                    double secs;
+                    if (double.TryParse(parts[2], out secs)) {
+                        ((MediaElement)ctrl).Position = TimeSpan.FromSeconds(secs);
+                    }
+                } else if (parts[1] == "StartPositionTimer" && ctrl is MediaElement) {
+                    // Handle all position tracking and seeking in C# to avoid IPC feedback loops
+                    var me = (MediaElement)ctrl;
+                    string sliderName = parts.Length > 2 ? parts[2] : "";
+                    if (!string.IsNullOrEmpty(sliderName)) {
+                        var slider = win.FindName(sliderName) as Slider;
+                        if (slider != null) {
+                            bool isSeeking = false;
+                            bool isUpdating = false;
+                            
+                            // Detect user drag start/end via Thumb routed events
+                            slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler((ds, de) => {
+                                isSeeking = true;
+                            }));
+                            slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler((dc, dce) => {
+                                me.Position = TimeSpan.FromSeconds(slider.Value);
+                                isSeeking = false;
+                            }));
+                            
+                            // Also handle click-on-track seeking
+                            slider.PreviewMouseLeftButtonUp += (mu, mue) => {
+                                if (!isSeeking) {
+                                    me.Position = TimeSpan.FromSeconds(slider.Value);
+                                }
+                            };
+                            
+                            // Timer syncs slider position (only when user isn't seeking)
+                            var posTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                            posTimer.Tick += (s, e) => {
+                                if (me.NaturalDuration.HasTimeSpan && !isSeeking) {
+                                    isUpdating = true;
+                                    slider.Maximum = me.NaturalDuration.TimeSpan.TotalSeconds;
+                                    slider.Value = me.Position.TotalSeconds;
+                                    isUpdating = false;
+                                }
+                            };
+                            posTimer.Start();
+                        }
+                    }
+                } else if (parts[1] == "SetPosition" && ctrl is UIElement) {
+                    var coords = parts[2].Split(',');
+                    if (coords.Length >= 2) {
+                        Canvas.SetLeft((UIElement)ctrl, double.Parse(coords[0]));
+                        Canvas.SetTop((UIElement)ctrl, double.Parse(coords[1]));
+                    }
+                } else if (parts[1] == "SetCanvasMode" && ctrl is Canvas) {
+                    canvasModes[parts[0]] = parts[2];
+                } else if (parts[1] == "EnableZoomPan" && ctrl is Canvas) {
+                    EnableCanvasZoomPan((Canvas)ctrl);
+                } else if (parts[1] == "ZoomAll" && ctrl is Canvas) {
+                    ZoomAllCanvas((Canvas)ctrl);
+                } else if (parts[1] == "Zoom" && ctrl is Canvas) {
+                    ZoomCanvas((Canvas)ctrl, double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture));
+                } else if (parts[1] == "EnableDrag" && ctrl is FrameworkElement) {
+                    EnableCanvasDrag((FrameworkElement)ctrl, parts[0], parts.Length > 2 ? parts[2] : "");
+                } else if (parts[1] == "EnableListBoxDragDrop" && ctrl is ListBox) {
+                    EnableListBoxDragDrop((ListBox)ctrl, parts[0]);
                 } else if (parts[1] == "Close" && ctrl is Window) {
                     var ownerHwnd = new System.Windows.Interop.WindowInteropHelper((Window)ctrl).Owner;
                     if (ownerHwnd != IntPtr.Zero) {
@@ -597,6 +790,9 @@ public class AhkWpfEngine : Application {
                         }
                         else if (pt == "GridLength") val = new System.Windows.GridLengthConverter().ConvertFromString(parts[2]);
                         else if (pt == "Object" || pt == "String") val = parts[2];
+                        else if (pt == "Uri") val = new Uri(parts[2], UriKind.RelativeOrAbsolute);
+                        else if (pt == "Rect") val = System.Windows.Rect.Parse(parts[2]);
+                        else if (pt == "Geometry") val = System.Windows.Media.Geometry.Parse(parts[2]);
                         else val = Convert.ChangeType(parts[2], prop.PropertyType);
                         prop.SetValue(ctrl, val, null);
                     }
@@ -612,5 +808,598 @@ public class AhkWpfEngine : Application {
             callback(child);
             WalkVisualTree(child, callback);
         }
+    }
+
+    // Canvas drag infrastructure: enables real-time C#-side mouse tracking that sends events to AHK
+    private System.Collections.Generic.Dictionary<string, double> nodeGridSizes = new System.Collections.Generic.Dictionary<string, double>();
+    private System.Collections.Generic.Dictionary<FrameworkElement, bool> dragEnabled = new System.Collections.Generic.Dictionary<FrameworkElement, bool>();
+    
+    private void EnableCanvasDrag(FrameworkElement ctrl, string ctrlName, string mode) {
+        if (mode == "crop") {
+            EnableCropDrag(ctrl, ctrlName);
+            return;
+        }
+        
+        double gridSize = 1;
+        if (mode.StartsWith("grid=")) double.TryParse(mode.Substring(5), out gridSize);
+        if (gridSize < 1) gridSize = 1;
+        
+        nodeGridSizes[ctrlName] = gridSize;
+        if (dragEnabled.ContainsKey(ctrl) && dragEnabled[ctrl]) return;
+        dragEnabled[ctrl] = true;
+        
+        bool isDragging = false;
+        Point dragStart = new Point();
+        double startLeft = 0, startTop = 0;
+        DateTime lastSend = DateTime.MinValue;
+        
+        ctrl.MouseLeftButtonDown += (s, e) => {
+            isDragging = true;
+            dragStart = e.GetPosition((UIElement)ctrl.Parent);
+            startLeft = Canvas.GetLeft(ctrl);
+            startTop = Canvas.GetTop(ctrl);
+            if (double.IsNaN(startLeft)) startLeft = 0;
+            if (double.IsNaN(startTop)) startTop = 0;
+            System.Windows.Controls.Panel.SetZIndex(ctrl, 999);
+            
+            bool isCtrl = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
+            string evName = isCtrl ? "CtrlSelectNode" : "SelectNode";
+            SendToAhk("EVENT|" + winId + "|" + ctrlName + "|" + evName + "|\n");
+            
+            ctrl.CaptureMouse();
+            e.Handled = true;
+        };
+        ctrl.MouseMove += (s, e) => {
+            if (!isDragging) return;
+            var pos = e.GetPosition((UIElement)ctrl.Parent);
+            double dx = pos.X - dragStart.X;
+            double dy = pos.Y - dragStart.Y;
+            double newLeft = startLeft + dx;
+            double newTop = startTop + dy;
+            
+            double currentGridSize = nodeGridSizes.ContainsKey(ctrlName) ? nodeGridSizes[ctrlName] : 1;
+            if (currentGridSize > 1) {
+                newLeft = Math.Round(newLeft / currentGridSize) * currentGridSize;
+                newTop = Math.Round(newTop / currentGridSize) * currentGridSize;
+            }
+            
+            Canvas.SetLeft(ctrl, newLeft);
+            Canvas.SetTop(ctrl, newTop);
+            // Throttle event sends to every 50ms
+            if ((DateTime.Now - lastSend).TotalMilliseconds > 50) {
+                lastSend = DateTime.Now;
+                SendToAhk("EVENT|" + winId + "|" + ctrlName + "|DragMove|" + 
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(newLeft.ToString("F0") + "," + newTop.ToString("F0"))) + "\n");
+            }
+            e.Handled = true;
+        };
+        ctrl.MouseLeftButtonUp += (s, e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            System.Windows.Controls.Panel.SetZIndex(ctrl, 0);
+            ctrl.ReleaseMouseCapture();
+            // Send final position
+            double finalLeft = Canvas.GetLeft(ctrl);
+            double finalTop = Canvas.GetTop(ctrl);
+            SendToAhk("EVENT|" + winId + "|" + ctrlName + "|DragMove|" + 
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(finalLeft.ToString("F0") + "," + finalTop.ToString("F0"))) + "\n");
+            DumpState(ctrlName, "DragEnd");
+            e.Handled = true;
+        };
+    }
+    
+    private void EnableCropDrag(FrameworkElement box, string boxName) {
+        // Box drag (move the crop area)
+        bool boxDragging = false;
+        Point boxDragStart = new Point();
+        double boxStartLeft = 0, boxStartTop = 0;
+        
+        box.MouseLeftButtonDown += (s, e) => {
+            boxDragging = true;
+            boxDragStart = e.GetPosition((UIElement)box.Parent);
+            boxStartLeft = Canvas.GetLeft(box);
+            boxStartTop = Canvas.GetTop(box);
+            if (double.IsNaN(boxStartLeft)) boxStartLeft = 0;
+            if (double.IsNaN(boxStartTop)) boxStartTop = 0;
+            box.CaptureMouse();
+            e.Handled = true;
+        };
+        box.MouseMove += (s, e) => {
+            if (!boxDragging) return;
+            var pos = e.GetPosition((UIElement)box.Parent);
+            Canvas.SetLeft(box, boxStartLeft + (pos.X - boxDragStart.X));
+            Canvas.SetTop(box, boxStartTop + (pos.Y - boxDragStart.Y));
+            e.Handled = true;
+        };
+        box.MouseLeftButtonUp += (s, e) => {
+            if (!boxDragging) return;
+            boxDragging = false;
+            box.ReleaseMouseCapture();
+            e.Handled = true;
+        };
+        
+        // Find handles inside the box by name convention
+        string baseName = boxName.Replace("_Box", "");
+        var hSE = win.FindName(baseName + "_HSE") as FrameworkElement;
+        if (hSE != null) {
+            bool seResizing = false;
+            Point seStart = new Point();
+            double seStartW = 0, seStartH = 0;
+            
+            hSE.MouseLeftButtonDown += (s, e) => {
+                seResizing = true;
+                seStart = e.GetPosition((UIElement)box.Parent);
+                seStartW = box.Width;
+                seStartH = box.Height;
+                if (double.IsNaN(seStartW)) seStartW = 100;
+                if (double.IsNaN(seStartH)) seStartH = 100;
+                hSE.CaptureMouse();
+                e.Handled = true;
+            };
+            hSE.MouseMove += (s, e) => {
+                if (!seResizing) return;
+                var pos = e.GetPosition((UIElement)box.Parent);
+                double nw = Math.Max(50, seStartW + (pos.X - seStart.X));
+                double nh = Math.Max(50, seStartH + (pos.Y - seStart.Y));
+                box.Width = nw;
+                box.Height = nh;
+                e.Handled = true;
+            };
+            hSE.MouseLeftButtonUp += (s, e) => {
+                if (!seResizing) return;
+                seResizing = false;
+                hSE.ReleaseMouseCapture();
+                e.Handled = true;
+            };
+        }
+        
+        var hNW = win.FindName(baseName + "_HNW") as FrameworkElement;
+        if (hNW != null) {
+            bool nwResizing = false;
+            Point nwStart = new Point();
+            double nwStartL = 0, nwStartT = 0, nwStartW = 0, nwStartH = 0;
+            
+            hNW.MouseLeftButtonDown += (s, e) => {
+                nwResizing = true;
+                nwStart = e.GetPosition((UIElement)box.Parent);
+                nwStartL = Canvas.GetLeft(box);
+                nwStartT = Canvas.GetTop(box);
+                nwStartW = box.Width;
+                nwStartH = box.Height;
+                if (double.IsNaN(nwStartL)) nwStartL = 0;
+                if (double.IsNaN(nwStartT)) nwStartT = 0;
+                if (double.IsNaN(nwStartW)) nwStartW = 100;
+                if (double.IsNaN(nwStartH)) nwStartH = 100;
+                hNW.CaptureMouse();
+                e.Handled = true;
+            };
+            hNW.MouseMove += (s, e) => {
+                if (!nwResizing) return;
+                var pos = e.GetPosition((UIElement)box.Parent);
+                double dx = pos.X - nwStart.X;
+                double dy = pos.Y - nwStart.Y;
+                double nw = Math.Max(50, nwStartW - dx);
+                double nh = Math.Max(50, nwStartH - dy);
+                if (nw > 50) { Canvas.SetLeft(box, nwStartL + dx); box.Width = nw; }
+                if (nh > 50) { Canvas.SetTop(box, nwStartT + dy); box.Height = nh; }
+                e.Handled = true;
+            };
+            hNW.MouseLeftButtonUp += (s, e) => {
+                if (!nwResizing) return;
+                nwResizing = false;
+                hNW.ReleaseMouseCapture();
+                e.Handled = true;
+            };
+        }
+    }
+    
+    private void EnableCanvasZoomPan(Canvas canvas) {
+        // Apply a TransformGroup to the canvas for zoom + pan
+        var scaleTransform = new System.Windows.Media.ScaleTransform(1, 1);
+        var translateTransform = new System.Windows.Media.TranslateTransform(0, 0);
+        var tg = new System.Windows.Media.TransformGroup();
+        tg.Children.Add(scaleTransform);
+        tg.Children.Add(translateTransform);
+        canvas.RenderTransform = tg;
+        canvas.RenderTransformOrigin = new Point(0, 0);
+        
+        // Zoom via mouse wheel
+        var parent = canvas.Parent as FrameworkElement;
+        if (parent != null) {
+            parent.PreviewMouseWheel += (s, e) => {
+                double zoom = e.Delta > 0 ? 1.1 : 0.9;
+                double newScale = scaleTransform.ScaleX * zoom;
+                if (newScale < 0.2) newScale = 0.2;
+                if (newScale > 5.0) newScale = 5.0;
+                
+                // Zoom toward mouse position
+                var pos = e.GetPosition(canvas);
+                scaleTransform.CenterX = pos.X;
+                scaleTransform.CenterY = pos.Y;
+                scaleTransform.ScaleX = newScale;
+                scaleTransform.ScaleY = newScale;
+                e.Handled = true;
+            };
+            
+            // Pan via middle-click drag
+            bool isPanning = false;
+            Point panStart = new Point();
+            double panStartTX = 0, panStartTY = 0;
+            
+            bool isKnifing = false;
+            System.Windows.Shapes.Path tempKnife = null;
+            Point knifeStart = new Point();
+            Point lastKnifePos = new Point();
+            string lastSelectionSet = "";
+            
+            parent.MouseDown += (s, e) => {
+                if (e.ChangedButton == System.Windows.Input.MouseButton.Middle) {
+                    isPanning = true;
+                    panStart = e.GetPosition(parent);
+                    panStartTX = translateTransform.X;
+                    panStartTY = translateTransform.Y;
+                    parent.CaptureMouse();
+                    parent.Cursor = System.Windows.Input.Cursors.Hand;
+                    e.Handled = true;
+                }
+            };
+            
+            // Mode logic: Left click on empty space (Canvas) triggers Pan or Select
+            parent.MouseLeftButtonDown += (s, e) => {
+                var el = e.OriginalSource as FrameworkElement;
+                if (el != null && el.Name != null && el.Name.StartsWith("Port_")) {
+                    connectionSourcePort = el;
+                    if (tempConnection == null) {
+                        tempConnection = new System.Windows.Shapes.Path {
+                            Stroke = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(96, 160, 255)),
+                            StrokeThickness = 2.5,
+                            Opacity = 0.8,
+                            IsHitTestVisible = false
+                        };
+                        System.Windows.Controls.Panel.SetZIndex(tempConnection, -1);
+                        canvas.Children.Add(tempConnection);
+                    }
+                    tempConnection.Visibility = Visibility.Visible;
+                    parent.CaptureMouse();
+                    e.Handled = true;
+                    return;
+                }
+                
+                string mode = "Pan";
+                if (canvasModes.ContainsKey(canvas.Name)) mode = canvasModes[canvas.Name];
+                
+                if (mode == "Pan") {
+                    isPanning = true;
+                    panStart = e.GetPosition(parent);
+                    panStartTX = translateTransform.X;
+                    panStartTY = translateTransform.Y;
+                    parent.CaptureMouse();
+                    parent.Cursor = System.Windows.Input.Cursors.Hand;
+                    e.Handled = true;
+                } else if (mode == "Select") {
+                    selectionStart = e.GetPosition(canvas);
+                    if (selectionBox == null) {
+                        selectionBox = new System.Windows.Shapes.Rectangle {
+                            Stroke = System.Windows.Media.Brushes.DodgerBlue,
+                            StrokeThickness = 1,
+                            Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(50, 30, 144, 255)),
+                            IsHitTestVisible = false
+                        };
+                        System.Windows.Controls.Panel.SetZIndex(selectionBox, 9999);
+                        canvas.Children.Add(selectionBox);
+                    }
+                    Canvas.SetLeft(selectionBox, selectionStart.X);
+                    Canvas.SetTop(selectionBox, selectionStart.Y);
+                    selectionBox.Width = 0;
+                    selectionBox.Height = 0;
+                    selectionBox.Visibility = Visibility.Visible;
+                    lastSelectionSet = "";
+                    parent.CaptureMouse();
+                    e.Handled = true;
+                } else if (mode == "Knife") {
+                    isKnifing = true;
+                    knifeStart = e.GetPosition(canvas);
+                    lastKnifePos = knifeStart;
+                    if (tempKnife == null) {
+                        tempKnife = new System.Windows.Shapes.Path {
+                            Stroke = System.Windows.Media.Brushes.Red,
+                            StrokeThickness = 2,
+                            StrokeDashArray = new System.Windows.Media.DoubleCollection(new double[] { 4, 4 }),
+                            IsHitTestVisible = false
+                        };
+                        System.Windows.Controls.Panel.SetZIndex(tempKnife, 9999);
+                        canvas.Children.Add(tempKnife);
+                    }
+                    tempKnife.Visibility = Visibility.Visible;
+                    parent.CaptureMouse();
+                    e.Handled = true;
+                }
+            };
+            parent.MouseMove += (s, e) => {
+                if (isPanning) {
+                    var pos = e.GetPosition(parent);
+                    translateTransform.X = panStartTX + (pos.X - panStart.X);
+                    translateTransform.Y = panStartTY + (pos.Y - panStart.Y);
+                    e.Handled = true;
+                } else if (selectionBox != null && selectionBox.Visibility == Visibility.Visible) {
+                    var pos = e.GetPosition(canvas);
+                    double x = Math.Min(pos.X, selectionStart.X);
+                    double y = Math.Min(pos.Y, selectionStart.Y);
+                    double w = Math.Abs(pos.X - selectionStart.X);
+                    double h = Math.Abs(pos.Y - selectionStart.Y);
+                    Canvas.SetLeft(selectionBox, x);
+                    Canvas.SetTop(selectionBox, y);
+                    selectionBox.Width = w;
+                    selectionBox.Height = h;
+                    
+                    var currentSelected = new System.Collections.Generic.List<string>();
+                    foreach (UIElement child in canvas.Children) {
+                        var fe = child as FrameworkElement;
+                        if (fe != null && fe.Name != null && fe.Name.StartsWith("Node_")) {
+                            double nx = Canvas.GetLeft(fe);
+                            double ny = Canvas.GetTop(fe);
+                            if (double.IsNaN(nx)) nx = 0;
+                            if (double.IsNaN(ny)) ny = 0;
+                            if (nx < x + w && nx + fe.Width > x && ny < y + h && ny + fe.Height > y) {
+                                currentSelected.Add(fe.Name.Substring(5));
+                            }
+                        }
+                    }
+                    string newSet = string.Join(",", currentSelected);
+                    if (newSet != lastSelectionSet) {
+                        lastSelectionSet = newSet;
+                        bool isCtrl = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
+                        string evName = isCtrl ? "CtrlSelectionBox" : "SelectionBox";
+                        SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|" + evName + "|" + 
+                            Convert.ToBase64String(Encoding.UTF8.GetBytes(newSet)) + "\n");
+                    }
+                    e.Handled = true;
+                } else if (connectionSourcePort != null && tempConnection != null && tempConnection.Visibility == Visibility.Visible) {
+                    var pos = e.GetPosition(canvas);
+                    double startX = Canvas.GetLeft(connectionSourcePort) + connectionSourcePort.Width / 2;
+                    double startY = Canvas.GetTop(connectionSourcePort) + connectionSourcePort.Height / 2;
+                    if (double.IsNaN(startX)) startX = 0;
+                    if (double.IsNaN(startY)) startY = 0;
+                    double endX = pos.X;
+                    double endY = pos.Y;
+                    
+                    // Allow dragging from out port to in port
+                    double dx = Math.Max(40, Math.Abs(endX - startX) * 0.5);
+                    double c1X = startX + dx;
+                    double c2X = endX - dx;
+                    if (connectionSourcePort.Name.StartsWith("Port_In")) {
+                        c1X = startX - dx;
+                        c2X = endX + dx;
+                    }
+                    
+                    string geom = string.Format(System.Globalization.CultureInfo.InvariantCulture, "M{0},{1} C{2},{3} {4},{5} {6},{7}", startX, startY, c1X, startY, c2X, endY, endX, endY);
+                    try { tempConnection.Data = System.Windows.Media.Geometry.Parse(geom); } catch { }
+                    e.Handled = true;
+                } else if (isKnifing && tempKnife != null && tempKnife.Visibility == Visibility.Visible) {
+                    var pos = e.GetPosition(canvas);
+                    string geom = string.Format(System.Globalization.CultureInfo.InvariantCulture, "M{0},{1} L{2},{3}", knifeStart.X, knifeStart.Y, pos.X, pos.Y);
+                    try { tempKnife.Data = System.Windows.Media.Geometry.Parse(geom); } catch { }
+                    
+                    System.Windows.Media.VisualTreeHelper.HitTest(canvas, null,
+                        new System.Windows.Media.HitTestResultCallback((result) => {
+                            var hitEl = result.VisualHit as FrameworkElement;
+                            if (hitEl != null && hitEl.Name != null && hitEl.Name.Contains("_Path_") && hitEl.Visibility == Visibility.Visible) {
+                                hitEl.Visibility = Visibility.Collapsed;
+                                SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|DeleteConnection|" + 
+                                    Convert.ToBase64String(Encoding.UTF8.GetBytes(hitEl.Name)) + "\n");
+                            }
+                            return System.Windows.Media.HitTestResultBehavior.Continue;
+                        }),
+                        new System.Windows.Media.GeometryHitTestParameters(new System.Windows.Media.LineGeometry(lastKnifePos, pos))
+                    );
+                    lastKnifePos = pos;
+                    e.Handled = true;
+                }
+            };
+            parent.MouseUp += (s, e) => {
+                if (e.ChangedButton == System.Windows.Input.MouseButton.Middle && isPanning) {
+                    isPanning = false;
+                    parent.ReleaseMouseCapture();
+                    parent.Cursor = System.Windows.Input.Cursors.Arrow;
+                    e.Handled = true;
+                }
+            };
+            parent.MouseLeftButtonUp += (s, e) => {
+                if (isPanning) {
+                    isPanning = false;
+                    parent.ReleaseMouseCapture();
+                    parent.Cursor = System.Windows.Input.Cursors.Arrow;
+                    e.Handled = true;
+                } else if (selectionBox != null && selectionBox.Visibility == Visibility.Visible) {
+                    selectionBox.Visibility = Visibility.Collapsed;
+                    parent.ReleaseMouseCapture();
+                    lastSelectionSet = "";
+                    e.Handled = true;
+                } else if (connectionSourcePort != null && tempConnection != null && tempConnection.Visibility == Visibility.Visible) {
+                    tempConnection.Visibility = Visibility.Collapsed;
+                    parent.ReleaseMouseCapture();
+                    Point dropPos = e.GetPosition(canvas);
+                    
+                    // Magnetic search for closest port
+                    FrameworkElement closestPort = null;
+                    double minDistance = 625; // 25^2
+                    
+                    foreach (UIElement child in canvas.Children) {
+                        var fe = child as FrameworkElement;
+                        if (fe != null && fe.Name != null && fe.Name.StartsWith("Port_") && fe != connectionSourcePort) {
+                            double px = Canvas.GetLeft(fe) + fe.Width / 2;
+                            double py = Canvas.GetTop(fe) + fe.Height / 2;
+                            if (double.IsNaN(px) || double.IsNaN(py)) continue;
+                            
+                            double distSq = (dropPos.X - px) * (dropPos.X - px) + (dropPos.Y - py) * (dropPos.Y - py);
+                            if (distSq < minDistance) {
+                                minDistance = distSq;
+                                closestPort = fe;
+                            }
+                        }
+                    }
+                    
+                    if (closestPort != null) {
+                        SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ConnectPorts|" + 
+                            Convert.ToBase64String(Encoding.UTF8.GetBytes(connectionSourcePort.Name + "," + closestPort.Name)) + "\n");
+                    }
+                    connectionSourcePort = null;
+                    e.Handled = true;
+                } else if (isKnifing && tempKnife != null && tempKnife.Visibility == Visibility.Visible) {
+                    tempKnife.Visibility = Visibility.Collapsed;
+                    isKnifing = false;
+                    parent.ReleaseMouseCapture();
+                    e.Handled = true;
+                } else {
+                    // Clicked empty space
+                    SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ClearSelection|\n");
+                }
+            };
+        }
+    }
+        
+    private void ZoomAllCanvas(Canvas canvas) {
+        var tg = canvas.RenderTransform as System.Windows.Media.TransformGroup;
+        if (tg != null && tg.Children.Count >= 2) {
+            var scaleTransform = tg.Children[0] as System.Windows.Media.ScaleTransform;
+            var translateTransform = tg.Children[1] as System.Windows.Media.TranslateTransform;
+            
+            if (scaleTransform != null && translateTransform != null) {
+                double minX = double.MaxValue, minY = double.MaxValue;
+                double maxX = double.MinValue, maxY = double.MinValue;
+                
+                foreach (UIElement child in canvas.Children) {
+                    if (child is System.Windows.Shapes.Path) continue;
+                    double left = Canvas.GetLeft(child);
+                    double top = Canvas.GetTop(child);
+                    if (double.IsNaN(left)) left = 0;
+                    if (double.IsNaN(top)) top = 0;
+                    
+                    var fe = child as FrameworkElement;
+                    if (fe != null && !double.IsNaN(fe.Width) && !double.IsNaN(fe.Height) && fe.Width > 0) {
+                        minX = Math.Min(minX, left);
+                        minY = Math.Min(minY, top);
+                        maxX = Math.Max(maxX, left + fe.Width);
+                        maxY = Math.Max(maxY, top + fe.Height);
+                    }
+                }
+                
+                if (minX <= maxX && minY <= maxY) {
+                    double contentWidth = maxX - minX;
+                    double contentHeight = maxY - minY;
+                    
+                    var parent = canvas.Parent as FrameworkElement;
+                    if (parent != null && parent.ActualWidth > 0 && parent.ActualHeight > 0) {
+                        double viewportWidth = parent.ActualWidth;
+                        double viewportHeight = parent.ActualHeight;
+                        
+                        // Add 250px total padding (125px per side)
+                        double scaleX = viewportWidth / (contentWidth + 250);
+                        double scaleY = viewportHeight / (contentHeight + 250);
+                        double scale = Math.Min(scaleX, scaleY);
+                        if (scale > 2.0) scale = 2.0;
+                        if (scale < 0.2) scale = 0.2;
+                        
+                        scaleTransform.CenterX = 0;
+                        scaleTransform.CenterY = 0;
+                        scaleTransform.ScaleX = scale;
+                        scaleTransform.ScaleY = scale;
+                        
+                        translateTransform.X = (viewportWidth - contentWidth * scale) / 2 - minX * scale;
+                        translateTransform.Y = (viewportHeight - contentHeight * scale) / 2 - minY * scale;
+                    }
+                }
+            }
+        }
+    }
+    
+    private void ZoomCanvas(Canvas canvas, double zoomFactor) {
+        var tg = canvas.RenderTransform as System.Windows.Media.TransformGroup;
+        if (tg != null && tg.Children.Count >= 2) {
+            var scaleTransform = tg.Children[0] as System.Windows.Media.ScaleTransform;
+            var translateTransform = tg.Children[1] as System.Windows.Media.TranslateTransform;
+            
+            if (scaleTransform != null && translateTransform != null) {
+                var parent = canvas.Parent as FrameworkElement;
+                if (parent != null) {
+                    double centerX = parent.ActualWidth / 2;
+                    double centerY = parent.ActualHeight / 2;
+                    
+                    double newScale = scaleTransform.ScaleX * zoomFactor;
+                    if (newScale > 5.0) newScale = 5.0;
+                    if (newScale < 0.1) newScale = 0.1;
+                    
+                    double finalFactor = newScale / scaleTransform.ScaleX;
+                    
+                    translateTransform.X = centerX - (centerX - translateTransform.X) * finalFactor;
+                    translateTransform.Y = centerY - (centerY - translateTransform.Y) * finalFactor;
+                    
+                    scaleTransform.ScaleX = newScale;
+                    scaleTransform.ScaleY = newScale;
+                }
+            }
+        }
+    }
+    
+    private void EnableListBoxDragDrop(ListBox listBox, string ctrlName) {
+        listBox.AllowDrop = true;
+        Point dragStart = new Point();
+        bool isDragging = false;
+
+        listBox.PreviewMouseLeftButtonDown += (s, e) => {
+            dragStart = e.GetPosition(null);
+            isDragging = true;
+        };
+
+        listBox.PreviewMouseMove += (s, e) => {
+            if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed && isDragging) {
+                Point pos = e.GetPosition(null);
+                if (Math.Abs(pos.X - dragStart.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                    Math.Abs(pos.Y - dragStart.Y) > SystemParameters.MinimumVerticalDragDistance) {
+                    
+                    var item = GetListBoxItemUnderMouse(listBox, e.GetPosition(listBox));
+                    if (item != null) {
+                        string content = "";
+                        if (item.Content is string) {
+                            content = (string)item.Content;
+                        } else if (item.Content is System.Windows.Controls.TextBlock) {
+                            content = ((System.Windows.Controls.TextBlock)item.Content).Text;
+                        } else {
+                            content = item.Content != null ? item.Content.ToString() : "";
+                        }
+                        
+                        DataObject dragData = new DataObject("KanbanItem", content);
+                        dragData.SetData("SourceBox", ctrlName);
+                        
+                        DragDrop.DoDragDrop(listBox, dragData, DragDropEffects.Move);
+                    }
+                    isDragging = false;
+                }
+            }
+        };
+
+        listBox.Drop += (s, e) => {
+            if (e.Data.GetDataPresent("KanbanItem")) {
+                string content = (string)e.Data.GetData("KanbanItem");
+                string sourceBox = (string)e.Data.GetData("SourceBox");
+                
+                if (sourceBox != ctrlName) {
+                    SendToAhk("EVENT|" + winId + "|" + ctrlName + "|ItemDropped|" + 
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes(sourceBox + "|" + content)) + "\n");
+                }
+            }
+        };
+    }
+
+    private ListBoxItem GetListBoxItemUnderMouse(ListBox lb, Point p) {
+        System.Windows.Media.HitTestResult hit = System.Windows.Media.VisualTreeHelper.HitTest(lb, p);
+        if (hit != null) {
+            DependencyObject depObj = hit.VisualHit;
+            while (depObj != null && !(depObj is ListBoxItem)) {
+                depObj = System.Windows.Media.VisualTreeHelper.GetParent(depObj);
+            }
+            return depObj as ListBoxItem;
+        }
+        return null;
     }
 }
