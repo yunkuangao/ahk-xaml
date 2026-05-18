@@ -85,7 +85,7 @@ consoleSp.Add("TextBlock").Text("> Ready.").Foreground("#00FF00").FontFamily("Co
 
 ; 5. Global Overlay (Covers the entire app including original sidebar/tabs)
 flyGlobal := XFlyout("GlobalMenu", "Left", "Overlay", 350, true)
-flyGlobal.Build(app.overlay).Margin("0,50,0,0") 
+flyGlobal.Build(app.overlay).Margin("0,50,0,0")
 globalGrid := flyGlobal.container.Add("Grid").Margin("20")
 globalGrid.Rows("Auto", "*")
 headerGrid := globalGrid.Add("Grid").Grid_Row(0).Margin("0,0,0,30")

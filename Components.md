@@ -305,6 +305,108 @@ cmdBar.AddButton(Chr(0xE8C8), "Copy", "BtnCopy", "Copy (Ctrl+C)")
 cmdBar.AddButton(Chr(0xE77F), "Paste", "BtnPaste", "Paste (Ctrl+V)")
 ```
 
+### XCommandPalette
+
+A robust, VS Code-style command palette with real-time search, keyboard navigation, mode switching, and extensible architecture.
+
+**Constructor:**
+
+```ahk
+cmdPalette := XCommandPalette(app.overlay, "CmdPal")
+```
+
+**Registering Commands:**
+
+```ahk
+; Simple command
+cmdPalette.AddCommand("reload", "Developer: Reload Window")
+
+; Rich command with icon, shortcut, category, and per-command callback
+cmdPalette.AddCommand("settings", "Preferences: Open Settings", {
+    Icon: Chr(0xE713),
+    Shortcut: "Ctrl+,",
+    Category: "Preferences",
+    Callback: (id) => OpenSettings()
+})
+```
+
+**Command Options:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `Icon` | String | `""` | Segoe Fluent Icons character for the result item |
+| `Shortcut` | String | `""` | Keyboard shortcut badge displayed on the right |
+| `Category` | String | `""` | Grouping category (for future filtering) |
+| `Callback` | Func | `""` | Per-command callback `fn(id)`. If set, fires instead of `OnCommandSelected` |
+
+**Home Screen & Recent History:**
+
+```ahk
+; Set which commands appear on the home screen (when input is empty)
+cmdPalette.SetHomeCommands(["settings", "terminal", "reload"])
+
+; Recent commands auto-populate the home screen after execution
+; (up to 5 most recent, replacing the default home list)
+```
+
+**Mode System (Prefix Routing):**
+
+| Prefix | Mode | Description |
+|---|---|---|
+| *(empty)* | Home | Shows recently used / home commands |
+| `>` | Commands | Filters across all registered commands |
+| `?` | Help | Shows built-in navigation help items |
+| *(custom)* | Custom | Register via `AddMode(prefix, label, filterFn)` |
+
+```ahk
+; Custom mode: search files with @ prefix
+cmdPalette.AddMode("@", "Files", (query) => SearchFiles(query))
+```
+
+**Custom Data Source:**
+
+```ahk
+; Append results from external source to any query
+cmdPalette.SetDataSource((query) => FetchFromAPI(query))
+```
+
+**Binding & Hotkey:**
+
+```ahk
+ui := app.Compile()
+cmdPalette.Bind(ui, "^+P")  ; Ctrl+Shift+P to open
+```
+
+**Global Callback:**
+
+```ahk
+cmdPalette.DefineProp("OnCommandSelected", { Call: HandleCommand })
+HandleCommand(this, id) {
+    if (id == "settings")
+        OpenSettings()
+    else
+        XDialog.Show({ Title: "Executed", Message: id, Buttons: ["OK"] })
+}
+```
+
+**Keyboard Navigation:**
+
+| Key | Action |
+|---|---|
+| `↑` / `↓` | Navigate results (wraps around) |
+| `Enter` | Execute highlighted command (or first result) |
+| `Escape` | Close the palette |
+| `Home` / `End` | Jump to first / last result |
+
+**Features:**
+- Real-time search with case-insensitive substring matching
+- Dynamically injected XAML result items with icon, label, and shortcut badge
+- Automatic caret-to-end on every keystroke (unless explicitly repositioned)
+- Click-away dismiss via the scrim overlay
+- Recent command history (last 5 executed commands auto-populate home screen)
+- Theme-aware: all colors use `{DynamicResource ...}` tokens
+- Drop shadow and rounded corners for premium appearance
+
 ### NavigationView
 
 A sidebar router with page-switching navigation, styled like Win11 Settings.

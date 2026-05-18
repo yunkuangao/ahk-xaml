@@ -107,7 +107,67 @@ class XAMLElement {
         propName := StrReplace(name, "_", ".")
         
         if (params.Length == 1) {
-            this._Props[propName] := params[1]
+            val := params[1]
+            
+            ; Auto-detect mixed Icon and Text to prevent square rendering
+            if ((name == "Text" || name == "Content") && Type(val) == "String") {
+                hasIcon := false
+                hasText := false
+                Loop Parse, val {
+                    code := Ord(A_LoopField)
+                    if (code >= 0xE000 && code <= 0xF8FF)
+                        hasIcon := true
+                    else if (code > 32)
+                        hasText := true
+                }
+                
+                if (hasIcon && hasText) {
+                    runs := ""
+                    currentType := -1 ; 0 = text, 1 = icon
+                    currentStr := ""
+                    
+                    Flush := () => (
+                        currentStr != "" ? (
+                            safeStr := StrReplace(currentStr, "&", "&amp;"),
+                            safeStr := StrReplace(safeStr, "<", "&lt;"),
+                            safeStr := StrReplace(safeStr, ">", "&gt;"),
+                            safeStr := StrReplace(safeStr, '"', "&quot;"),
+                            safeStr := StrReplace(safeStr, "'", "&apos;"),
+                            runs .= (currentType == 1) ? '<Run FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="' safeStr '"/>' : '<Run FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" Text="' safeStr '"/>',
+                            currentStr := ""
+                        ) : ""
+                    )
+                    
+                    Loop Parse, val {
+                        code := Ord(A_LoopField)
+                        isIcon := (code >= 0xE000 && code <= 0xF8FF)
+                        
+                        if (code == 32) {
+                            currentStr .= A_LoopField
+                            continue
+                        }
+                        
+                        if (currentType == -1)
+                            currentType := isIcon
+                            
+                        if (isIcon != currentType) {
+                            Flush()
+                            currentType := isIcon
+                        }
+                        currentStr .= A_LoopField
+                    }
+                    Flush()
+                    
+                    if (this._Tag != "TextBlock") {
+                        this._TextContent := '<TextBlock VerticalAlignment="Center" HorizontalAlignment="Center">' runs '</TextBlock>'
+                    } else {
+                        this._TextContent := runs
+                    }
+                    return this
+                }
+            }
+            
+            this._Props[propName] := val
             return this
         } else if (params.Length == 0) {
             ; For booleans without parameters, default to "True"

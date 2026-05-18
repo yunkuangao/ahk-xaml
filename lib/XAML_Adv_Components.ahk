@@ -2271,13 +2271,13 @@ class XFlyout {
                 ; Base Transform
                 transform := style.Add("Style.Resources").Add("TranslateTransform").SetProp("x:Key", "SlideTransform")
                 if (this.side == "Left")
-                    transform.X(String(-this.size))
+                    transform.X(String(-(this.size + 50)))
                 else if (this.side == "Right")
-                    transform.X(String(this.size))
+                    transform.X(String(this.size + 50))
                 else if (this.side == "Top")
-                    transform.Y(String(-this.size))
+                    transform.Y(String(-(this.size + 50)))
                 else if (this.side == "Bottom")
-                    transform.Y(String(this.size))
+                    transform.Y(String(this.size + 50))
 
                 style.Add("Setter").Property("RenderTransform").Value("{StaticResource SlideTransform}")
                 
@@ -2334,13 +2334,13 @@ class XFlyout {
         exitActions := dt.Add("DataTrigger.ExitActions").Add("BeginStoryboard").Add("Storyboard")
         toVal := ""
         if (this.side == "Left")
-            toVal := String(-this.size)
+            toVal := String(-(this.size + 50))
         else if (this.side == "Right")
-            toVal := String(this.size)
+            toVal := String(this.size + 50)
         else if (this.side == "Top")
-            toVal := String(-this.size)
+            toVal := String(-(this.size + 50))
         else if (this.side == "Bottom")
-            toVal := String(this.size)
+            toVal := String(this.size + 50)
             
         exitActions.Add("DoubleAnimation").Storyboard_TargetProperty("RenderTransform.(TranslateTransform." propName ")").To(toVal).Duration("0:0:0.2").DecelerationRatio("0.8")
     }
@@ -2412,9 +2412,8 @@ class XCommandPalette {
         this.listTitle := mainGrid.Add("TextBlock").Name(this.id "_Title").Grid_Row(1).Text("recently used").Foreground("{DynamicResource TextSub}").FontSize(10).FontWeight("SemiBold").Margin("14,8,14,4").Opacity("0.7")
 
         ; Scrollable results area
-        this.resultsList := mainGrid.Add("ListBox").Name(this.id "_Results").Grid_Row(2).MaxHeight("300")
-        this.resultsList.Background("Transparent").BorderThickness("0").Margin("6,0,6,6").ScrollViewer_HorizontalScrollBarVisibility("Disabled")
-        this.resultsList.ItemContainerStyle('<Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,0,2"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger></Style.Triggers></Style>')
+        scroll := mainGrid.Add("ScrollViewer").Grid_Row(2).VerticalScrollBarVisibility("Auto").MaxHeight("300")
+        this.resultsSp := scroll.Add("StackPanel").Name(this.id "_Results").Margin("6,0,6,6")
 
         ; --- Register built-in help mode ---
         this.AddMode("?", "Help", ObjBindMethod(this, "GetHelpItems"))
@@ -2458,7 +2457,7 @@ class XCommandPalette {
 
     Bind(uiObj, hotkeyStr := "") {
         this.ui := uiObj
-        this.flyout.Bind(uiObj, "")
+        this.flyout.Bind(uiObj, "")  ; Don't use flyout's hotkey — we manage our own
 
         ; Track the flyout state toggle to detect open/close
         uiObj.OnEvent(this.flyout.stateName, "Click", ObjBindMethod(this, "OnFlyoutStateChanged"))
@@ -2466,13 +2465,6 @@ class XCommandPalette {
 
         ; Text changes drive filtering
         uiObj.OnEvent(this.id "_Search", "TextChanged", ObjBindMethod(this, "OnSearchChanged"))
-
-        ; Keyboard Navigation via WPF PreviewKeyDown
-        uiObj.OnEvent(this.id "_Search", "PreviewKeyDown", ObjBindMethod(this, "OnPreviewKeyDown"))
-        
-        ; Clicks via ListBox SelectionChanged
-        uiObj.Track(this.id "_Results")
-        uiObj.OnEvent(this.id "_Results", "SelectionChanged", ObjBindMethod(this, "OnListSelection"))
 
         ; Register the global hotkey to open
         if (hotkeyStr != "") {
@@ -2488,25 +2480,55 @@ class XCommandPalette {
     Open() {
         if (!this.ui)
             return
-
-        ; Re-populate the home screen before opening
-        this.ui.Update(this.id "_Search", "Text", "")
-        this.FilterList("")
-
-        this.flyout.Toggle()
-        this.ui.Update(this.id "_Search", "Focus", "True")
+        if (this.isOpen) {
+            this.Close()
+            return
+        }
         this.isOpen := true
+        this.selectedIndex := -1
+
+        ; Open the flyout
+        this.flyout.Toggle()
+
+        ; Focus the search box and show home screen
+        SetTimer(ObjBindMethod(this, "PostOpen"), -50)
+    }
+
+    PostOpen() {
+        this.ui.Update(this.id "_Search", "Text", "")
+        this.ui.Update(this.id "_Search", "Focus", "True")
+        this.ShowHome()
+        this.BindKeyboardNav()
     }
 
     Close() {
-        this.flyout.Toggle()
+        if (!this.isOpen || !this.ui)
+            return
         this.isOpen := false
+        this.selectedIndex := -1
+
+        ; Close flyout
+        this.flyout.Toggle()
+
+        ; Reset
+        this.ui.Update(this.id "_Search", "Text", "")
+        this.UnbindKeyboardNav()
     }
 
     OnFlyoutStateChanged(state, ctrl, event) {
-        this.isOpen := (state[this.flyout.stateName] == "True")
-        if (this.isOpen) {
-            this.ui.Update(this.id "_Search", "Focus", "True")
+        if (!state.Has(this.flyout.stateName))
+            return
+        nowOpen := state[this.flyout.stateName] == "True"
+        if (nowOpen && !this.isOpen) {
+            ; Opened via scrim click-through or external toggle
+            this.isOpen := true
+            SetTimer(ObjBindMethod(this, "PostOpen"), -50)
+        } else if (!nowOpen && this.isOpen) {
+            ; Closed via scrim click
+            this.isOpen := false
+            this.selectedIndex := -1
+            this.ui.Update(this.id "_Search", "Text", "")
+            this.UnbindKeyboardNav()
         }
     }
 
@@ -2514,41 +2536,56 @@ class XCommandPalette {
     ; KEYBOARD NAVIGATION
     ; =========================================================================
 
-
-        try {
-            HotIf (*) => this.isOpen && WinActive("ahk_id " this.ui.wpfHwnd)
-            Hotkey "Escape", "Off"
-            Hotkey "Up", "Off"
-            Hotkey "Down", "Off"
-            Hotkey "Enter", "Off"
-            Hotkey "Home", "Off"
-            Hotkey "End", "Off"
-            HotIf
-        }
+    CheckHotkeyContext(*) {
+        return this.isOpen && WinActive("ahk_id " this.ui.wpfHwnd)
     }
 
-    OnListSelection(state, ctrl, ev) {
-        if (!this.isOpen)
+    BindKeyboardNav() {
+        if (this.navHotkeyBound)
             return
-        if (!state.Has(this.id "_Results"))
+        this.navHotkeyBound := true
+
+        if (!this.HasProp("hotkeyContextFn"))
+            this.hotkeyContextFn := ObjBindMethod(this, "CheckHotkeyContext")
+
+        HotIf this.hotkeyContextFn
+        Hotkey "Escape", ObjBindMethod(this, "OnEscape"), "On"
+        Hotkey "Up", ObjBindMethod(this, "OnArrowUp"), "On"
+        Hotkey "Down", ObjBindMethod(this, "OnArrowDown"), "On"
+        Hotkey "Enter", ObjBindMethod(this, "OnEnter"), "On"
+        Hotkey "Home", ObjBindMethod(this, "OnHomeKey"), "On"
+        Hotkey "End", ObjBindMethod(this, "OnEndKey"), "On"
+        HotIf
+    }
+
+    UnbindKeyboardNav() {
+        if (!this.navHotkeyBound)
             return
-        idxStr := state[this.id "_Results"]
-        if (idxStr == "" || idxStr == "-1")
-            return
-        
-        idx := Integer(idxStr)
-        if (idx >= 0 && idx < this.currentResults.Length) {
-            cmdId := this.currentResults[idx + 1].id
-            ; Deselect so subsequent clicks on the same item fire again
-            this.ui.Update(this.id "_Results", "SelectedIndex", "-1")
-            this.ExecuteCommand(cmdId)
+        this.navHotkeyBound := false
+
+        if (this.HasProp("hotkeyContextFn")) {
+            try {
+                HotIf this.hotkeyContextFn
+                Hotkey "Escape", "Off"
+                Hotkey "Up", "Off"
+                Hotkey "Down", "Off"
+                Hotkey "Enter", "Off"
+                Hotkey "Home", "Off"
+                Hotkey "End", "Off"
+                HotIf
+            }
         }
     }
 
     OnEscape(*) {
         if (!this.isOpen)
             return
-        this.Close()
+        ; If there's text, clear it first (goes back to home)
+        currentText := ""
+        try {
+            ; We can't read state synchronously, so just close
+            this.Close()
+        }
     }
 
     OnArrowUp(*) {
@@ -2559,6 +2596,8 @@ class XCommandPalette {
         else
             this.selectedIndex--
         this.HighlightSelected()
+        ; Keep focus on search box
+        this.ui.Update(this.id "_Search", "Focus", "True")
     }
 
     OnArrowDown(*) {
@@ -2569,6 +2608,8 @@ class XCommandPalette {
         else
             this.selectedIndex++
         this.HighlightSelected()
+        ; Keep focus on search box
+        this.ui.Update(this.id "_Search", "Focus", "True")
     }
 
     OnEnter(*) {
@@ -2589,6 +2630,7 @@ class XCommandPalette {
             return
         this.selectedIndex := 0
         this.HighlightSelected()
+        this.ui.Update(this.id "_Search", "Focus", "True")
     }
 
     OnEndKey(*) {
@@ -2596,6 +2638,7 @@ class XCommandPalette {
             return
         this.selectedIndex := this.currentResults.Length - 1
         this.HighlightSelected()
+        this.ui.Update(this.id "_Search", "Focus", "True")
     }
 
     ; =========================================================================
@@ -2738,32 +2781,59 @@ class XCommandPalette {
             this.currentResults.Push(item)
         }
 
-        ; Dynamically inject result grids into the ListBox
+        if (!this.HasProp("renderCount"))
+            this.renderCount := 0
+        this.renderCount++
+
+        ; Dynamically inject result buttons
+        idx := 0
         for item in this.currentResults {
-            iconText := item.icon != "" ? item.icon : Chr(0xE756)
+            idx++
+            btnId := this.id "_Btn_" this.renderCount "_" idx
+            isHighlighted := (idx - 1 == this.selectedIndex)
+
+            ; Build icon text
+            iconText := item.icon != "" ? item.icon : Chr(0xE756)  ; Default: command icon
             shortcutText := item.HasProp("shortcut") ? item.shortcut : ""
             if (!IsObject(shortcutText))
                 shortcutText := String(shortcutText)
 
+            ; Build XAML for the result item
+            highlightBg := isHighlighted ? "{DynamicResource SolidBorder}" : "Transparent"
+
             shortcutBlock := ""
             if (shortcutText != "") {
-                shortcutBlock := '<Border Background="{DynamicResource SolidControl}" CornerRadius="3" Padding="6,2" VerticalAlignment="Center" Grid.Column="2"><TextBlock Text="' shortcutText '" Foreground="{DynamicResource TextSub}" FontSize="11" FontFamily="Consolas, Segoe UI"/></Border>'
+                shortcutBlock := '<Border Background="{DynamicResource SolidControl}" CornerRadius="3" Padding="6,2" VerticalAlignment="Center"><TextBlock Text="' shortcutText '" Foreground="{DynamicResource TextSub}" FontSize="11" FontFamily="Consolas, Segoe UI"/></Border>'
             }
 
-            xamlStr := '<Border CornerRadius="4" Padding="10,7" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Cursor="Hand"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Grid.Column="0" Text="' iconText '" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' item.label '" Foreground="{DynamicResource TextMain}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>' shortcutBlock '</Grid></Border>'
+            xamlStr := '<Button xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Name="' btnId '" Background="' highlightBg '" BorderThickness="0" HorizontalContentAlignment="Stretch" Cursor="Hand" Margin="0,1"><Button.Template><ControlTemplate TargetType="Button"><Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="4" Padding="10,7"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bg" Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Grid.Column="0" Text="' iconText '" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' item.label '" Foreground="{DynamicResource TextMain}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>' shortcutBlock '</Grid></Button>'
 
             this.ui.Update(this.id "_Results", "AddXamlItem", xamlStr)
-        }
 
-        this.HighlightSelected()
+            ; Bind click event for this button
+            this.ui.Update(btnId, "BindEvent", "Click")
+            boundId := item.id
+            this.ui.OnEvent(btnId, "Click", ((cmdId, *) => this.ExecuteCommand(cmdId)).Bind(boundId))
+        }
     }
 
     HighlightSelected() {
         if (!this.ui || this.currentResults.Length == 0)
             return
 
-        ; Update the native ListBox selection
-        this.ui.Update(this.id "_Results", "SelectedIndex", String(this.selectedIndex))
+        ; Update backgrounds: selected gets highlight, others transparent
+        idx := 0
+        for item in this.currentResults {
+            idx++
+            btnId := this.id "_Btn_" this.renderCount "_" idx
+            isHighlighted := (idx - 1 == this.selectedIndex)
+            bg := isHighlighted ? "{DynamicResource SolidBorder}" : "Transparent"
+            this.ui.Update(btnId, "Background", bg)
+
+            ; Scroll the highlighted item into view
+            if (isHighlighted)
+                this.ui.Update(btnId, "BringIntoView", "")
+        }
     }
 
     ; =========================================================================

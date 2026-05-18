@@ -1,9 +1,10 @@
 #Requires AutoHotkey v2.0
-#Include "..\lib\XAML_Host.ahk"
-#Include "..\lib\XAML_Dialog.ahk"
-#Include "..\lib\XAML_Components.ahk"
-#Include "..\lib\XAML_Adv_Components.ahk"
-#Include "..\lib\XAML_GUI.ahk"
+global XAML_ENABLE_WEBVIEW := true
+#Include "..\..\lib\XAML_Host.ahk"
+#Include "..\..\lib\XAML_Dialog.ahk"
+#Include "..\..\lib\XAML_Components.ahk"
+#Include "..\..\lib\XAML_Adv_Components.ahk"
+#Include "..\..\lib\XAML_GUI.ahk"
 
 global XAML_ENABLE_WEBVIEW := true
 

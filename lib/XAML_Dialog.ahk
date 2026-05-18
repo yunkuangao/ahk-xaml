@@ -21,7 +21,7 @@ class XDialog {
         alwaysOnTop := options.HasProp("AlwaysOnTop") ? options.AlwaysOnTop : false
         waitForResponse := options.HasProp("WaitForResponse") ? options.WaitForResponse : true
         themeName := options.HasProp("Theme") ? options.Theme : "Dark Mica (Win 11)"
-        iniPath := options.HasProp("IniPath") ? options.IniPath : "themes.ini"
+        iniPath := options.HasProp("IniPath") ? options.IniPath : (FileExist("themes.ini") ? "themes.ini" : "../themes.ini")
         soundFx := options.HasProp("Sound") ? options.Sound : ""
         disableAltF4 := options.HasProp("DisableAltF4") ? options.DisableAltF4 : false
         movable := options.HasProp("Movable") ? options.Movable : true
@@ -130,7 +130,7 @@ class XDialog {
         overlayGui := ""
         if (modal && owner) {
             WinSetEnabled(0, "ahk_id " owner)
-            
+
             if (darkenOwner) {
                 try {
                     WinGetPos(&ox, &oy, &ow, &oh, "ahk_id " owner)
@@ -147,7 +147,8 @@ class XDialog {
         if (exePath != "" && FileExist(exePath)) {
             ui := XAMLHost("", exePath, actualOwner)
         } else {
-            ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), exePath, actualOwner)
+            tmp := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", "30")
+            ui := XAMLHost(StrReplace(tmp, "%app%", main.ToString()), exePath, actualOwner)
         }
 
         ; Replace some default xaml.ahk window stuff to match the dialog needs
@@ -157,7 +158,16 @@ class XDialog {
         ; Auto Focus Logic
         focusAttr := inputText != "" ? 'FocusManager.FocusedElement="{Binding ElementName=DialogInput}"' : 'FocusManager.FocusedElement="{Binding ElementName=Btn1}"'
 
-        ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Width="' width '" ' heightAttr ' ' resizeAttr ' ' focusAttr (alwaysOnTop ? ' Topmost="True"' : ''))
+        ; Clean title and fetch default icon for the OS Window frame
+        safeTitle := StrReplace(title, "&", "&amp;")
+        safeTitle := StrReplace(safeTitle, "<", "&lt;")
+        safeTitle := StrReplace(safeTitle, ">", "&gt;")
+        safeTitle := StrReplace(safeTitle, '"', "&quot;")
+
+        hIcon := ""
+        try hIcon := LoadPicture("shell32.dll", "Icon26", &ImageType := 1)
+
+        ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Title="' safeTitle '" Width="' width '" ' heightAttr ' ' resizeAttr ' ' focusAttr (alwaysOnTop ? ' Topmost="True"' : ''))
 
         resultObj := { Button: "", Input: "", Instance: ui }
 
@@ -167,7 +177,7 @@ class XDialog {
         }
 
         ; Callbacks
-        ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => XDialog.OnDialogLoad(ui, actualOwner, modal, themeName, iniPath, buttons, resultObj), 255)
+        ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => XDialog.OnDialogLoad(ui, actualOwner, modal, themeName, iniPath, buttons, resultObj, hIcon), 255)
         ui.OnEvent("Window", "Closing", (state, ctrl, event) => XDialog.OnDialogClose(ui, resultObj, owner, modal, overlayGui), 255)
 
         for index, btnText in buttons {
@@ -215,9 +225,12 @@ class XDialog {
         }
     }
 
-    static OnDialogLoad(ui, owner, modal, themeName, iniPath, buttons, resultObj, state := "", ctrl := "", event := "") {
+    static OnDialogLoad(ui, owner, modal, themeName, iniPath, buttons, resultObj, hIcon := "", state := "", ctrl := "", event := "") {
         if (owner) {
             ui.Update("Window", "NativeOwner", owner)
+        }
+        if (hIcon != "") {
+            ui.Update("Window", "Icon", "HICON:" hIcon)
         }
         XDialog.ApplyTheme(ui, themeName, iniPath)
     }

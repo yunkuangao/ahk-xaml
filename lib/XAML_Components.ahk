@@ -74,7 +74,7 @@ class XColorPicker {
         owner := options.HasProp("Owner") ? options.Owner : 0
         modal := options.HasProp("Modal") ? options.Modal : false
         themeName := options.HasProp("Theme") ? options.Theme : "Dark Mica (Win 11)"
-        iniPath := options.HasProp("IniPath") ? options.IniPath : "themes.ini"
+        iniPath := options.HasProp("IniPath") ? options.IniPath : (FileExist("themes.ini") ? "themes.ini" : "../themes.ini")
 
         bgRes := "DropdownBg"
         if FileExist(iniPath) {
@@ -97,17 +97,17 @@ class XColorPicker {
         ; Titlebar
         tb := main.Add("Grid").Grid_Row(0).Background("Transparent").Name("DragArea").Margin("15,10,15,0")
         tb.Cols("Auto", "*", "Auto")
-        
+
         iconChar := options.HasProp("Icon") ? options.Icon : ""
         iconColor := options.HasProp("IconColor") ? options.IconColor : "{DynamicResource Accent}"
-        
+
         if (iconChar != "") {
             tb.Add("TextBlock").Text(iconChar).Foreground(iconColor).FontSize(16).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").VerticalAlignment("Center").Margin("0,0,10,0").Grid_Column(0)
             tb.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").FontSize(14).FontWeight("Bold").VerticalAlignment("Center").Grid_Column(1)
         } else {
             tb.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").FontSize(14).FontWeight("Bold").VerticalAlignment("Center").Grid_Column(0).Grid_ColumnSpan(2)
         }
-        
+
         CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
         closeBtn := tb.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(30).Height(30).HorizontalAlignment("Right").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Grid_Column(2)
         closeBtn.InjectResources(CloseBtnTemplate)
@@ -116,26 +116,26 @@ class XColorPicker {
         ; 2D Color Canvas
         canvasGrid := main.Add("Grid").Name("CanvasGrid").Grid_Row(2).Margin("15,0,15,0").ClipToBounds("True")
         canvasGrid.Add("Border").Name("CanvasBg").Background("#FFFF0000").CornerRadius("6")
-        
+
         wGr := canvasGrid.Add("Border").CornerRadius("6").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
         wGr.Add("GradientStop").Color("#FFFFFFFF").Offset("0")
         wGr.Add("GradientStop").Color("#00FFFFFF").Offset("1")
-        
+
         bGr := canvasGrid.Add("Border").CornerRadius("6").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,1").EndPoint("0,0")
         bGr.Add("GradientStop").Color("#FF000000").Offset("0")
         bGr.Add("GradientStop").Color("#00000000").Offset("1")
-        
+
         canvasArea := canvasGrid.Add("Grid").Name("CanvasArea").Background("Transparent").Cursor("Cross")
         canvasArea.Add("Ellipse").Name("CanvasThumb").HorizontalAlignment("Left").VerticalAlignment("Top").Width("14").Height("14").Stroke("White").StrokeThickness("2").Fill("Transparent").Margin("-7,-7,0,0").IsHitTestVisible("False")
 
         ; Sliders Row
         sliderGrid := main.Add("Grid").Grid_Row(4).Margin("15,0,15,0")
         sliderGrid.Cols("Auto", "*", "Auto")
-        
+
         sliderGrid.Add("Border").Width("36").Height("36").CornerRadius("18").Background("#15FFFFFF").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").Grid_Column(0).Margin("0,0,15,0").Add("TextBlock").Text(Chr(0xE891)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("16").Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").HorizontalAlignment("Center")
-        
+
         sliders := sliderGrid.Add("StackPanel").Grid_Column(1).VerticalAlignment("Center").Margin("0,0,15,0")
-        
+
         hueBg := sliders.Add("Border").Height("10").CornerRadius("5").Margin("0,0,0,12").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
         hueBg.Add("GradientStop").Color("#FFFF0000").Offset("0")
         hueBg.Add("GradientStop").Color("#FFFFFF00").Offset("0.16")
@@ -145,31 +145,31 @@ class XColorPicker {
         hueBg.Add("GradientStop").Color("#FFFF00FF").Offset("0.83")
         hueBg.Add("GradientStop").Color("#FFFF0000").Offset("1")
         sliders.Add("Slider").Name("HueSlider").Minimum("0").Maximum("360").Value("0").Margin("0,-18,0,0")
-        
+
         alphaBg := sliders.Add("Border").Height("10").CornerRadius("5").Background("Transparent").ClipToBounds("True")
-        
+
         ; Dynamic Fill overlay masked by a transparent-to-white gradient
         alphaFill := alphaBg.Add("Rectangle").Name("AlphaFillRect").Fill("White")
         mask := alphaFill.Add("Rectangle.OpacityMask").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
         mask.Add("GradientStop").Color("Transparent").Offset("0")
         mask.Add("GradientStop").Color("White").Offset("1")
         sliders.Add("Slider").Name("AlphaSlider").Minimum("0").Maximum("255").Value("255").Margin("0,-14,0,0")
-        
+
         sliderGrid.Add("Border").Name("ColorPreview").Grid_Column(2).Width("36").Height("36").CornerRadius("18").Background(defaultColor).BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1")
 
         ; Inputs Row
         inGrid := main.Add("Grid").Grid_Row(6).Margin("15,0,15,0")
         inGrid.Cols("Auto", "15", "Auto")
         inGrid.Rows("Auto", "5", "Auto", "5", "Auto")
-        
+
         inGrid.Add("TextBlock").Text("HEX").Foreground("{DynamicResource TextSub}").FontSize("10").Grid_Row(0).Grid_Column(0)
-        
+
         spLbl := inGrid.Add("StackPanel").Grid_Row(0).Grid_Column(2).Orientation("Horizontal")
         spLbl.Add("TextBlock").Text("RGB").Foreground("{DynamicResource TextSub}").FontSize("10").Margin("0,0,4,0")
         spLbl.Add("TextBlock").Text(Chr(0xE70D)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Foreground("{DynamicResource TextSub}").FontSize("8").VerticalAlignment("Center")
-        
+
         inGrid.Add("TextBox").Name("HexInput").Text(defaultColor).Width("85").Height("28").Padding("8,4").Grid_Row(2).Grid_Column(0)
-        
+
         rgbSp := inGrid.Add("StackPanel").Grid_Row(2).Grid_Column(2).Orientation("Horizontal")
         rgbSp.Add("TextBlock").Text("R:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
         rgbSp.Add("TextBox").Name("RInput").Text("255").Width("35").Height("28").Padding("2,4").Margin("0,0,8,0").HorizontalContentAlignment("Center")
@@ -179,33 +179,34 @@ class XColorPicker {
         rgbSp.Add("TextBox").Name("BInput").Text("0").Width("35").Height("28").Padding("2,4").Margin("0,0,8,0").HorizontalContentAlignment("Center")
         rgbSp.Add("TextBlock").Text("A:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
         rgbSp.Add("TextBox").Name("AInput").Text("255").Width("35").Height("28").Padding("2,4").HorizontalContentAlignment("Center")
-        
+
         inGrid.Add("TextBlock").Text("Some information about this color").Foreground("{DynamicResource TextSub}").FontSize("11").Grid_Row(4).Grid_ColumnSpan(3).Margin("0,10,0,0")
 
         btnSp := main.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Grid_Row(8).Margin("0,0,15,15")
         main.InjectResources('<Style x:Key="DialogBtn" TargetType="Button"><Setter Property="Background" Value="#10FFFFFF"/><Setter Property="Foreground" Value="{DynamicResource TextMain}"/><Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style x:Key="DialogPrimaryBtn" TargetType="Button"><Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
-        
+
         btnSp.Add("Button").Name("BtnCancel").Content("Cancel").Style("{StaticResource DialogBtn}").Width("100").Height("32").Cursor("Hand").Margin("0,0,10,0")
         btnSp.Add("Button").Name("BtnConfirm").Content("Confirm").Style("{StaticResource DialogPrimaryBtn}").Width("100").Height("32").Cursor("Hand")
 
-        ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", owner)
+        tmp := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", "30")
+        ui := XAMLHost(StrReplace(tmp, "%app%", main.ToString()), "", owner)
         ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Width="360" SizeToContent="Height" ResizeMode="NoResize" Topmost="True"')
-        
+
         resultObj := { Color: "", Status: "Cancel", Instance: ui, IsDragging: false, Hue: 0.0, Sat: 1.0, Val: 1.0, Alpha: 255, R: 0, G: 0, B: 0, LastMoveTime: 0 }
-        
+
         if (modal && owner)
             WinSetEnabled(0, "ahk_id " owner)
 
         ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => XColorPicker.OnLoad(ui, owner, themeName, iniPath, defaultColor, resultObj))
         ui.OnEvent("Window", "Closing", (state, ctrl, event) => XColorPicker.OnClose(resultObj, owner, modal))
-        
+
         ui.OnEvent("CanvasArea", "PreviewMouseLeftButtonDown", ObjBindMethod(XColorPicker, "OnCanvasDown", ui, resultObj))
         ui.OnEvent("CanvasArea", "PreviewMouseLeftButtonUp", ObjBindMethod(XColorPicker, "OnCanvasUp", ui, resultObj))
         ui.OnEvent("CanvasArea", "PreviewMouseMove", ObjBindMethod(XColorPicker, "OnCanvasMove", ui, resultObj))
-        
+
         ui.OnEvent("HueSlider", "ValueChanged", ObjBindMethod(XColorPicker, "OnHueSlider", ui, resultObj))
         ui.OnEvent("AlphaSlider", "ValueChanged", ObjBindMethod(XColorPicker, "OnAlphaSlider", ui, resultObj))
-        
+
         ui.OnEvent("RInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui, resultObj))
         ui.OnEvent("GInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui, resultObj))
         ui.OnEvent("BInput", "TextChanged", ObjBindMethod(XColorPicker, "UpdateFromRGB", ui, resultObj))
@@ -229,7 +230,7 @@ class XColorPicker {
         while (resultObj.Status == "Cancel" && ProcessExist(ui.pid)) {
             Sleep(50)
         }
-        
+
         if (modal && owner)
             WinSetEnabled(1, "ahk_id " owner)
 
@@ -269,32 +270,32 @@ class XColorPicker {
         resultObj.Status := "OK"
         ui.Update("Window", "Close", "")
     }
-    
+
     static OnCanvasDown(ui, resultObj, state, ctrl, event) {
         resultObj.IsDragging := true
         XColorPicker.ProcessCanvasMouse(ui, resultObj)
     }
-    
+
     static OnCanvasUp(ui, resultObj, state, ctrl, event) {
         resultObj.IsDragging := false
     }
-    
+
     static OnCanvasMove(ui, resultObj, state, ctrl, event) {
         if (resultObj.IsDragging && A_TickCount - resultObj.LastMoveTime >= 16) {
             resultObj.LastMoveTime := A_TickCount
             XColorPicker.ProcessCanvasMouse(ui, resultObj)
         }
     }
-    
+
     static ProcessCanvasMouse(ui, resultObj) {
         CoordMode("Mouse", "Client")
         MouseGetPos(&mX, &mY, &mWin)
-        
+
         ; If the user dragged far away, we still process relative to the start window
         ; Canvas is at X=15, Y=50. Width=330, Height=180
         x := mX - 15
         y := mY - 50
-        
+
         if (x < 0)
             x := 0
         if (x > 330)
@@ -303,30 +304,30 @@ class XColorPicker {
             y := 0
         if (y > 180)
             y := 180
-            
+
         resultObj.Sat := x / 330.0
         resultObj.Val := 1.0 - (y / 180.0)
-        
+
         ui.Update("CanvasThumb", "Margin", String(x - 7) "," String(y - 7) ",0,0")
-        
+
         XColorPicker.UpdateFromHSV(ui, resultObj)
     }
-    
+
     static OnHueSlider(ui, resultObj, state, ctrl, event) {
         if state.Has("HueSlider") {
             newHue := Float(state["HueSlider"])
             if (Abs(newHue - resultObj.Hue) < 0.1)
                 return
             resultObj.Hue := newHue
-            
+
             ; Update canvas background hue
             hHex := XColorPicker.HSVtoHEX(resultObj.Hue, 1.0, 1.0)
             ui.Update("CanvasBg", "Background", hHex)
-            
+
             XColorPicker.UpdateFromHSV(ui, resultObj)
         }
     }
-    
+
     static OnAlphaSlider(ui, resultObj, state, ctrl, event) {
         if state.Has("AlphaSlider") {
             a := Integer(state["AlphaSlider"])
@@ -337,7 +338,7 @@ class XColorPicker {
             XColorPicker.UpdateFromHSV(ui, resultObj)
         }
     }
-    
+
     static UpdateFromHex(ui, resultObj, state, ctrl, event) {
         if !state.Has("HexInput")
             return
@@ -345,7 +346,7 @@ class XColorPicker {
         if (StrLen(hex) == 7 || StrLen(hex) == 9)
             XColorPicker.ParseHex(hex, ui, resultObj)
     }
-    
+
     static UpdateFromRGB(ui, resultObj, state, ctrl, event) {
         try {
             r := state["RInput"] != "" ? Integer(state["RInput"]) : 0
@@ -357,34 +358,34 @@ class XColorPicker {
             g := Min(Max(g, 0), 255)
             b := Min(Max(b, 0), 255)
             a := Min(Max(a, 0), 255)
-            
+
             if (r == resultObj.R && g == resultObj.G && b == resultObj.B && a == resultObj.Alpha)
                 return
-                
+
             resultObj.R := r
             resultObj.G := g
             resultObj.B := b
             resultObj.Alpha := a
-            
+
             ui.Update("AlphaSlider", "Value", String(a))
             XColorPicker.RgbToHsv(r, g, b, &h, &s, &v)
             resultObj.Hue := h
             resultObj.Sat := s
             resultObj.Val := v
-            
+
             ui.Update("HueSlider", "Value", String(h))
             ui.Update("CanvasBg", "Background", XColorPicker.HSVtoHEX(h, 1.0, 1.0))
-            
+
             x := s * 330.0
             y := (1.0 - v) * 180.0
             ui.Update("CanvasThumb", "Margin", String(x - 7) "," String(y - 7) ",0,0")
-            
+
             hex := Format("#{:02X}{:02X}{:02X}{:02X}", a, r, g, b)
             ui.Update("HexInput", "Text", hex)
             ui.Update("ColorPreview", "Background", hex)
         }
     }
-    
+
     static ParseHex(hex, ui, resultObj) {
         if RegExMatch(hex, "^#?([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})$", &m) {
             resultObj.Alpha := Integer("0x" m[1]), r := Integer("0x" m[2]), g := Integer("0x" m[3]), b := Integer("0x" m[4])
@@ -393,7 +394,7 @@ class XColorPicker {
         } else {
             return
         }
-        
+
         ui.Update("RInput", "Text", String(r))
         ui.Update("GInput", "Text", String(g))
         ui.Update("BInput", "Text", String(b))
@@ -406,11 +407,11 @@ class XColorPicker {
         h := resultObj.Hue
         s := resultObj.Sat
         v := resultObj.Val
-        
+
         c := v * s
         x := c * (1.0 - Abs(Mod(h / 60.0, 2) - 1.0))
         m := v - c
-        
+
         r := 0.0, g := 0.0, b := 0.0
         if (0 <= h && h < 60) {
             r := c, g := x, b := 0
@@ -425,33 +426,33 @@ class XColorPicker {
         } else if (300 <= h <= 360) {
             r := c, g := 0, b := x
         }
-        
+
         rInt := Round((r + m) * 255)
         gInt := Round((g + m) * 255)
         bInt := Round((b + m) * 255)
-        
+
         alpha := resultObj.Alpha
-        
+
         if (rInt == resultObj.R && gInt == resultObj.G && bInt == resultObj.B)
             return
-            
+
         resultObj.R := rInt
         resultObj.G := gInt
         resultObj.B := bInt
-        
+
         ui.Update("RInput", "Text", String(rInt))
         ui.Update("GInput", "Text", String(gInt))
         ui.Update("BInput", "Text", String(bInt))
-        
+
         ; Update Alpha slider preview to match current RGB color
         baseHex := Format("#FF{:02X}{:02X}{:02X}", rInt, gInt, bInt)
         ui.Update("AlphaFillRect", "Fill", baseHex)
-        
+
         hex := Format("#{:02X}{:02X}{:02X}{:02X}", alpha, rInt, gInt, bInt)
         ui.Update("ColorPreview", "Background", hex)
         ui.Update("HexInput", "Text", hex)
     }
-    
+
     static HSVtoHEX(h, s, v) {
         c := v * s
         x := c * (1.0 - Abs(Mod(h / 60.0, 2) - 1.0))
@@ -472,13 +473,13 @@ class XColorPicker {
         }
         return Format("#FF{:02X}{:02X}{:02X}", Round((r + m) * 255), Round((g + m) * 255), Round((b + m) * 255))
     }
-    
+
     static RgbToHsv(r, g, b, &h, &s, &v) {
         r := r / 255.0, g := g / 255.0, b := b / 255.0
         cmax := Max(r, g, b)
         cmin := Min(r, g, b)
         delta := cmax - cmin
-        
+
         if (delta == 0)
             h := 0
         else if (cmax == r)
@@ -487,10 +488,10 @@ class XColorPicker {
             h := 60 * (((b - r) / delta) + 2)
         else
             h := 60 * (((r - g) / delta) + 4)
-            
+
         if (h < 0)
             h += 360
-            
+
         s := cmax == 0 ? 0 : delta / cmax
         v := cmax
     }
@@ -501,7 +502,7 @@ class XTokenizer {
         this.ui := ui
         this.tags := options.HasProp("InitialTags") ? options.InitialTags : []
         this.logOutput := options.HasProp("LogTarget") ? options.LogTarget : ""
-        
+
         id := XTokenizer.Count() + 1
         this.wpName := "TokenWrapPanel_" id
         this.inputName := "TxtTokenInput_" id
@@ -527,7 +528,7 @@ class XTokenizer {
             tagName := "TagBorder_" this.baseId "_" A_Index
             tagTxtName := "TagText_" this.baseId "_" A_Index
             tagBtnName := "BtnDeleteTag_" this.baseId "_" A_Index
-            
+
             tag := tokWp.Add("Border").Name(tagName).Style("{StaticResource TagToken}").Visibility("Collapsed")
             tagSp := tag.Add("StackPanel").Orientation("Horizontal")
             tagSp.Add("TextBlock").Name(tagTxtName).Text("").Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").FontSize(12)
@@ -552,7 +553,7 @@ class XTokenizer {
 
         this.RenderTags()
 
-        ; Note: Enter validation is handled by keyboard hook in XAML_GUI for simplicity 
+        ; Note: Enter validation is handled by keyboard hook in XAML_GUI for simplicity
         ; due to lack of direct KeyDown events in XAMLHost right now.
     }
 
@@ -573,7 +574,7 @@ class XTokenizer {
     OnTextChanged(state, ctrl, event) {
         if (!state.Has(this.inputName) || !state.Has(this.comboName))
             return
-            
+
         this.currentText := state[this.inputName]
         text := state[this.inputName]
         splitMode := state[this.comboName]
@@ -626,7 +627,7 @@ class XTokenizer {
     OnTagDoubleClick(state, ctrl, event) {
         parts := StrSplit(ctrl, "_")
         idx := Integer(parts[parts.Length])
-        
+
         now := A_TickCount
         if (this.lastClickIdx == idx && (now - this.lastClickTime) < 400) {
             ; Double click detected
@@ -672,7 +673,7 @@ class XNumericUpDown {
         this.isDecimal := isDecimal
         this.val := options.HasProp("Default") ? options.Default : (isDecimal ? 3.14 : 42)
         this.id := "NumInput_" XNumericUpDown.Count()
-        
+
         parentXAML.Add("TextBox").Name(this.id).Style("{StaticResource NumericUpDown}").Text(String(this.val)).HorizontalContentAlignment("Center")
     }
 
@@ -812,11 +813,11 @@ class XRibbonTab {
         border := this.panel.Add("Border").Style("{StaticResource RibbonGroupBorder}")
         grid := border.Add("Grid")
         grid.Rows("*", "Auto")
-        
+
         contentPanel := grid.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,2")
-        
+
         titleTxt := grid.Add("TextBlock").Grid_Row(1).Text(title).Style("{StaticResource RibbonGroupTitle}")
-        
+
         return XRibbonGroup(contentPanel)
     }
 }
@@ -852,16 +853,16 @@ XAMLElement.Prototype.DefineProp("FileDropZone", { Call: _FileDropZone })
 _FileDropZone(this, name, promptTxt, allowedExts) {
     bdr := this.Add("Border").Name(name).BorderThickness("2").CornerRadius("8").Padding("20").Cursor("Hand").AllowDrop("True").Background("Transparent")
     bdr.BorderBrush("{DynamicResource ControlBorder}")
-    
+
     sp := bdr.Add("StackPanel").VerticalAlignment("Center").HorizontalAlignment("Center").IsHitTestVisible("False")
     sp.Add("TextBlock").Name(name "_Icon").Text(Chr(0xE8B5)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(32).Foreground("{DynamicResource Accent}").HorizontalAlignment("Center").Margin("0,0,0,10")
     sp.Add("TextBlock").Name(name "_Text").Text(promptTxt).Foreground("{DynamicResource TextMain}").FontSize(14).FontWeight("SemiBold").HorizontalAlignment("Center")
-    
+
     extsStr := ""
     for ext in allowedExts
         extsStr .= ext " "
     sp.Add("TextBlock").Text("Allowed: " extsStr).Foreground("{DynamicResource TextSub}").FontSize(11).HorizontalAlignment("Center").Margin("0,5,0,0")
-    
+
     return bdr
 }
 
@@ -870,29 +871,29 @@ _SliderRange(this, title, minVal, maxVal, defaultStart, defaultEnd) {
     grid := this.Add("Grid").Margin("0,0,0,15")
     grid.Rows("Auto", "Auto", "Auto")
     grid.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").Margin("0,0,0,10").FontWeight("Bold").Grid_Row(0)
-    
+
     sliderGrid := grid.Add("Grid").Grid_Row(1).Margin("10,0")
-    
+
     minName := StrReplace(title, " ", "") "_SliderMin"
     maxName := StrReplace(title, " ", "") "_SliderMax"
-    
+
     ; Bottom Slider (Max Value + Selection Track)
     ; Minimum is clamped to minVal (static), clamping against min-thumb is done via events
     sMax := sliderGrid.Add("Slider").Minimum(minVal).Maximum(maxVal).Value(defaultEnd).Name(maxName)
     sMax.IsSelectionRangeEnabled("True").SelectionStart("{Binding Value, ElementName=" minName "}").SelectionEnd("{Binding Value, ElementName=" maxName "}")
     sMax.InjectResources('<Style TargetType="Slider"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid VerticalAlignment="Center"><Border Background="{DynamicResource ControlBorder}" Height="4" CornerRadius="2" Margin="8,0" /><Canvas Margin="8,0" Height="4" VerticalAlignment="Center"><Rectangle x:Name="PART_SelectionRange" Fill="{DynamicResource Accent}" Height="4" /></Canvas><Track x:Name="PART_Track"><Track.DecreaseRepeatButton><RepeatButton Background="Transparent" BorderThickness="0" IsHitTestVisible="False"/></Track.DecreaseRepeatButton><Track.IncreaseRepeatButton><RepeatButton Background="Transparent" BorderThickness="0" IsHitTestVisible="False"/></Track.IncreaseRepeatButton><Track.Thumb><Thumb Width="16" Height="16"><Thumb.Template><ControlTemplate TargetType="Thumb"><Ellipse Fill="{DynamicResource Accent}" /></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>')
-    
+
     sMin := sliderGrid.Add("Slider").Minimum(minVal).Maximum(maxVal).Value(defaultStart).Name(minName)
     sMin.InjectResources('<Style TargetType="Slider"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid VerticalAlignment="Center"><Track x:Name="PART_Track"><Track.DecreaseRepeatButton><RepeatButton Background="Transparent" BorderThickness="0" IsHitTestVisible="False"/></Track.DecreaseRepeatButton><Track.IncreaseRepeatButton><RepeatButton Background="Transparent" BorderThickness="0" IsHitTestVisible="False"/></Track.IncreaseRepeatButton><Track.Thumb><Thumb Width="16" Height="16"><Thumb.Template><ControlTemplate TargetType="Thumb"><Ellipse Fill="{DynamicResource Accent}" /></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></Grid></ControlTemplate></Setter.Value></Setter></Style>')
-    
+
     tbGrid := grid.Add("Grid").Grid_Row(2).Margin("0,10,0,0")
     tbGrid.Cols("*", "Auto", "*")
-    
+
     bdrMin := tbGrid.Add("Border").Use("CardPanel").Padding("10,5").Grid_Column(0)
     bdrMin.Add("TextBlock").Text("{Binding Value, ElementName=" minName ", StringFormat={}{0:0}}").Background("Transparent").Foreground("{DynamicResource TextSub}").HorizontalAlignment("Center")
-    
+
     tbGrid.Add("TextBlock").Text("-").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").Margin("10,0").Grid_Column(1).HorizontalAlignment("Center")
-    
+
     bdrMax := tbGrid.Add("Border").Use("CardPanel").Padding("10,5").Grid_Column(2)
     bdrMax.Add("TextBlock").Text("{Binding Value, ElementName=" maxName ", StringFormat={}{0:0}}").Background("Transparent").Foreground("{DynamicResource TextSub}").HorizontalAlignment("Center")
 }
@@ -909,79 +910,79 @@ class DateRangePickerEx {
         this.viewMonth := SubStr(this.startStr, 5, 2)
         this.startMode := true ; true = waiting for start date, false = waiting for end date
     }
-    
+
     Build(parent) {
         btn := parent.Add("ToggleButton").Name(this.id "_Btn").Background("Transparent").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").Cursor("Hand").Padding("15,5").Height(35)
         btn.InjectResources('<Style TargetType="ToggleButton"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
         sp := btn.Add("StackPanel").Orientation("Horizontal")
         sp.Add("TextBlock").Text(Chr(0xE787)).FontFamily("Segoe Fluent Icons").Margin("0,0,10,0").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}")
         sp.Add("TextBlock").Name(this.id "_Display").Text(FormatTime(this.startStr, "yyyy-MM-dd") "  -  " FormatTime(this.endStr, "yyyy-MM-dd")).VerticalAlignment("Center").FontWeight("SemiBold").Foreground("{DynamicResource TextMain}")
-        
+
         pop := btn.AddRichPopover()
-        
+
         mainGrid := pop.Add("Grid").Margin("0,0,0,5")
         mainGrid.Cols("Auto", "20", "Auto")
-        
+
         ; Build Two Calendars
         loop 2 {
             calIdx := A_Index
             cBase := mainGrid.Add("StackPanel").Grid_Column(calIdx == 1 ? 0 : 2).Width(250)
-            
+
             ; Header
             hdr := cBase.Add("Grid").Margin("0,0,0,15")
             hdr.Cols("Auto", "*", "Auto")
-            
+
             if (calIdx == 1)
                 hdr.Add("Button").Name(this.id "_Prev").Content(Chr(0xE76B)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Use("IconBtn").Width(30).Height(30).Grid_Column(0).Cursor("Hand")
-                
+
             hdr.Add("TextBlock").Name(this.id "_MonthYear_" calIdx).Text("Month Year").HorizontalAlignment("Center").VerticalAlignment("Center").FontWeight("Bold").FontSize(14).Grid_Column(1)
-            
+
             if (calIdx == 2)
                 hdr.Add("Button").Name(this.id "_Next").Content(Chr(0xE76C)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Use("IconBtn").Width(30).Height(30).Grid_Column(2).Cursor("Hand")
-            
+
             ; Days of week
             dow := cBase.Add("UniformGrid").Columns(7).Margin("0,0,0,10")
             for d in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
                 dow.Add("TextBlock").Text(d).HorizontalAlignment("Center").Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold")
-                
+
             ; Days Grid
             grid := cBase.Add("UniformGrid").Columns(7)
             loop 42 {
                 dayId := (calIdx - 1) * 42 + A_Index
-                
+
                 ; Cell Wrapper
                 cell := grid.Add("Grid").Height(32)
-                
+
                 ; Layer 1: Background range highlight (stretches to edges, no corner radius)
                 rangeBg := cell.Add("Border").Name(this.id "_RangeBg_" dayId).BorderThickness("0")
                 rangeBg.InjectResources('<Style TargetType="Border"><Setter Property="Background" Value="Transparent"/><Style.Triggers><Trigger Property="Tag" Value="Range"><Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Opacity" Value="0.2"/></Trigger></Style.Triggers></Style>')
-                
+
                 ; Layer 2: Circular hover/selection button
                 btnDay := cell.Add("Button").Name(this.id "_Day_" dayId).Width(32).Height(32).BorderThickness("0").Cursor("Hand")
                 btnDay.InjectResources('<Style TargetType="Button"><Setter Property="Foreground" Value="{DynamicResource TextMain}"/><Setter Property="Background" Value="Transparent"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="16" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter><Style.Triggers><Trigger Property="Tag" Value="Selected"><Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="White"/></Trigger><Trigger Property="Tag" Value="Today"><Setter Property="BorderThickness" Value="1"/><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="{DynamicResource Accent}"/></Trigger></Style.Triggers></Style>')
             }
         }
     }
-    
+
     Bind(uiHost) {
         this.ui := uiHost
         uiHost.OnEvent(this.id "_Btn", "Click", ObjBindMethod(this, "OnOpen"))
         uiHost.OnEvent(this.id "_Prev", "Click", ObjBindMethod(this, "OnPrev"))
         uiHost.OnEvent(this.id "_Next", "Click", ObjBindMethod(this, "OnNext"))
-        
+
         loop 84 {
             this._BindDayBtn(uiHost, A_Index)
         }
     }
-    
+
     _BindDayBtn(uiHost, idx) {
         uiHost.OnEvent(this.id "_Day_" idx, "Click", (state, ctrl, ev) => this.OnDayClick(state, idx))
     }
-    
+
     OnOpen(state, ctrl, ev) {
         this.Render()
     }
-    
+
     OnPrev(state, ctrl, ev) {
         this.viewMonth -= 1
         if (this.viewMonth < 1) {
@@ -990,7 +991,7 @@ class DateRangePickerEx {
         }
         this.Render()
     }
-    
+
     OnNext(state, ctrl, ev) {
         this.viewMonth += 1
         if (this.viewMonth > 12) {
@@ -999,13 +1000,13 @@ class DateRangePickerEx {
         }
         this.Render()
     }
-    
+
     OnDayClick(state, idx) {
         if (!this.dayMap.Has(idx))
             return
-            
+
         clickedDate := this.dayMap[idx]
-        
+
         if (this.startMode) {
             this.startStr := clickedDate
             this.endStr := clickedDate
@@ -1019,18 +1020,18 @@ class DateRangePickerEx {
             }
             this.startMode := true
         }
-        
+
         this.ui.Update(this.id "_Display", "Text", FormatTime(this.startStr, "yyyy-MM-dd") "  -  " FormatTime(this.endStr, "yyyy-MM-dd"))
         this.Render()
     }
-    
+
     Render() {
         this.dayMap := Map()
         monthNames := ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-        
+
         loop 2 {
             calIdx := A_Index
-            
+
             ; Calculate year/month for this calendar
             calMonth := this.viewMonth + (calIdx - 1)
             calYear := this.viewYear
@@ -1038,36 +1039,36 @@ class DateRangePickerEx {
                 calMonth -= 12
                 calYear += 1
             }
-            
+
             y := Format("{:04}", calYear)
             m := Format("{:02}", calMonth)
-            
+
             this.ui.Update(this.id "_MonthYear_" calIdx, "Text", monthNames[Integer(m)] " " y)
-            
+
             firstDay := y m "01"
             wDay := FormatTime(firstDay, "WDay")
             startOffset := wDay - 2
             if (startOffset < 0)
                 startOffset := 6
-                
+
             daysInMonth := this.GetDaysInMonth(y, m)
-            
+
             loop 42 {
                 dayId := (calIdx - 1) * 42 + A_Index
                 dayNum := A_Index - startOffset
-                
+
                 if (dayNum > 0 && dayNum <= daysInMonth) {
                     currentDate := y m Format("{:02}", dayNum)
                     this.dayMap[dayId] := currentDate
-                    
+
                     this.ui.Update(this.id "_Day_" dayId, "Content", dayNum)
                     this.ui.Update(this.id "_Day_" dayId, "IsEnabled", "True")
-                    
+
                     isStart := (currentDate == this.startStr)
                     isEnd := (currentDate == this.endStr)
                     inRange := (currentDate >= this.startStr && currentDate <= this.endStr)
                     isSingleDayRange := (this.startStr == this.endStr)
-                    
+
                     ; 1. Configure the Circular Button (Foreground)
                     if (isStart || isEnd) {
                         this.ui.Update(this.id "_Day_" dayId, "Tag", "Selected")
@@ -1076,7 +1077,7 @@ class DateRangePickerEx {
                     } else {
                         this.ui.Update(this.id "_Day_" dayId, "Tag", "")
                     }
-                    
+
                     ; 2. Configure the Range Band (Background)
                     if (inRange && !isSingleDayRange) {
                         this.ui.Update(this.id "_RangeBg_" dayId, "Tag", "Range")
@@ -1091,7 +1092,7 @@ class DateRangePickerEx {
                         this.ui.Update(this.id "_RangeBg_" dayId, "Tag", "")
                         this.ui.Update(this.id "_RangeBg_" dayId, "Margin", "0")
                     }
-                    
+
                 } else {
                     this.ui.Update(this.id "_Day_" dayId, "Content", "")
                     this.ui.Update(this.id "_Day_" dayId, "IsEnabled", "False")
@@ -1101,7 +1102,7 @@ class DateRangePickerEx {
             }
         }
     }
-    
+
     GetDaysInMonth(y, m) {
         m := Integer(m)
         y := Integer(y)
@@ -1117,15 +1118,15 @@ class DateRangePickerEx {
 XAMLElement.Prototype.DefineProp("BreadcrumbBar", { Call: _BreadcrumbBar })
 _BreadcrumbBar(this, paths) {
     sp := this.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,15")
-    
+
     for i, p in paths {
         btn := sp.Add("Button").Content(p).Background("Transparent").BorderThickness(0).Foreground(i == paths.Length ? "{DynamicResource TextMain}" : "{DynamicResource Accent}").FontWeight(i == paths.Length ? "Bold" : "Normal").Cursor("Hand")
         btn.InjectResources('<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.8"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
-        
+
         if (i < paths.Length) {
             chevron := sp.Add("ToggleButton").Content(Chr(0xE76C)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).Foreground("{DynamicResource TextSub}").Background("Transparent").BorderThickness(0).Margin("4,0").Cursor("Hand")
             chevron.InjectResources('<Style TargetType="ToggleButton"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton"><Border Background="{TemplateBinding Background}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.8"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
-            
+
             pop := chevron.AddRichPopover()
             pop.Add("TextBlock").Text("Sibling Folders").FontWeight("Bold").Margin("0,0,0,5").Foreground("{DynamicResource TextSub}")
             pop.Add("Button").Content(p " Resources").Background("Transparent").BorderThickness(0).HorizontalAlignment("Left")
@@ -1140,48 +1141,48 @@ XAMLElement.Prototype.DefineProp("Stepper", { Call: _Stepper })
 _Stepper(this, steps, currentIndex) {
     grid := this.Add("Grid").Margin("0,0,0,20")
     grid.Rows("Auto", "Auto")
-    
+
     colArr := []
     for _ in steps {
         colArr.Push("*")
     }
     grid.Cols(colArr*)
-    
+
     for i, _ in steps {
         if (i < steps.Length) {
             isCompleted := i < currentIndex
             lineColor := isCompleted ? "{DynamicResource Accent}" : "{DynamicResource ControlBorder}"
-            
+
             rightGrid := grid.Add("Grid").Grid_Column(i - 1).Grid_Row(0)
             rightGrid.Cols("*", "*")
             rightGrid.Add("Rectangle").Height(2).Fill(lineColor).Grid_Column(1).VerticalAlignment("Center")
-            
+
             leftGrid := grid.Add("Grid").Grid_Column(i).Grid_Row(0)
             leftGrid.Cols("*", "*")
             leftGrid.Add("Rectangle").Height(2).Fill(lineColor).Grid_Column(0).VerticalAlignment("Center")
         }
     }
-    
+
     for i, stepText in steps {
         isCompleted := i < currentIndex
         isCurrent := i == currentIndex
-        
+
         circleBg := isCompleted || isCurrent ? "{DynamicResource Accent}" : "{DynamicResource ControlBg}"
         circleFg := isCompleted || isCurrent ? "White" : "{DynamicResource TextSub}"
         circleBorder := isCurrent ? "{DynamicResource Accent}" : "{DynamicResource ControlBorder}"
-        
+
         circle := grid.Add("Border").Width(24).Height(24).CornerRadius(12).Background(circleBg).BorderBrush(circleBorder).BorderThickness(isCurrent ? 2 : 1).HorizontalAlignment("Center").Grid_Row(0).Grid_Column(i - 1)
-        
+
         if (isCompleted) {
             circle.Add("TextBlock").Text(Chr(0xE73E)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).Foreground("White").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0,1,0,0")
         } else {
             circle.Add("TextBlock").Text(i).Foreground(circleFg).FontSize(11).FontWeight("Bold").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0,2,0,0")
         }
-        
+
         textFg := isCurrent ? "{DynamicResource TextMain}" : "{DynamicResource TextSub}"
         grid.Add("TextBlock").Text(stepText).Foreground(textFg).FontSize(11).FontWeight(isCurrent ? "Bold" : "Normal").HorizontalAlignment("Center").Margin("0,5,0,0").Grid_Row(1).Grid_Column(i - 1)
     }
-    
+
     return grid
 }
 
@@ -1190,9 +1191,9 @@ _SplitPanel(this, orientation, ratio) {
     rParts := StrSplit(ratio, ":")
     w1 := (rParts.Length >= 1) ? rParts[1] "*" : "1*"
     w2 := (rParts.Length >= 2) ? rParts[2] "*" : "1*"
-    
+
     grid := this.Add("Grid")
-    
+
     if (orientation == "Horizontal") {
         grid.Cols(w1, "Auto", w2)
         grid.Add("GridSplitter").Grid_Column(1).Width(5).HorizontalAlignment("Center").Background("Transparent").Cursor("SizeWE")
@@ -1200,13 +1201,13 @@ _SplitPanel(this, orientation, ratio) {
         grid.Rows(w1, "Auto", w2)
         grid.Add("GridSplitter").Grid_Row(1).Height(5).VerticalAlignment("Center").Background("Transparent").Cursor("SizeNS")
     }
-    
+
     grid.LeftPanel := grid.Add("Border").Grid_Column(0).Grid_Row(0)
     grid.RightPanel := grid.Add("Border").Grid_Column(orientation == "Horizontal" ? 2 : 0).Grid_Row(orientation == "Horizontal" ? 0 : 2)
-    
+
     grid.DefineProp("SetLeft", { Call: (this, child) => this.LeftPanel.Add(child) })
     grid.DefineProp("SetRight", { Call: (this, child) => this.RightPanel.Add(child) })
-    
+
     return grid
 }
 
@@ -1215,17 +1216,17 @@ _DataTableView(this, id, dataArray) {
     bdr := this.Add("Border").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Background("{DynamicResource ControlBg}").ClipToBounds("True")
     grid := bdr.Add("Grid")
     grid.Rows("30", "*")
-    
+
     grid.IsSharedSizeScope("True")
-    
+
     if (dataArray.Length == 0)
         return bdr
-    
+
     columns := []
     for key, val in dataArray[1].OwnProps() {
         columns.Push(key)
     }
-    
+
     headerGrid := grid.Add("Grid").Grid_Row(0).Background("{DynamicResource ControlBgHover}")
     hColDefs := headerGrid.Add("Grid.ColumnDefinitions")
     for i, col in columns {
@@ -1233,35 +1234,35 @@ _DataTableView(this, id, dataArray) {
         if (i < columns.Length)
             hColDefs.Add("ColumnDefinition").Width("1") ; Space for splitter
     }
-    
+
     for i, col in columns {
         colIdx := (i - 1) * 2
         headerGrid.Add("Button").Name(id "_Header_" StrReplace(col, " ", "")).Content(col).Grid_Column(colIdx).Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("0").FontSize(11).FontWeight("Bold").HorizontalContentAlignment("Left").Padding("10,0").Cursor("Hand")
-        
+
         if (i < columns.Length) {
             headerGrid.Add("GridSplitter").Grid_Column(colIdx + 1).Width(1).HorizontalAlignment("Center").VerticalAlignment("Stretch").Background("{DynamicResource ControlBorder}")
         }
     }
-    
+
     lb := grid.Add("ListBox").Name(id "_List").Grid_Row(1).Background("Transparent").BorderThickness("0").ScrollViewer_HorizontalScrollBarVisibility("Disabled").HorizontalContentAlignment("Stretch")
-    
+
     for rIndex, rowObj in dataArray {
         _BuildDataTableRow(lb, columns, rIndex, rowObj)
     }
-    
+
     return bdr
 }
 
 _BuildDataTableRow(parent, columns, rIndex, rowObj) {
     rowGrid := parent.Add("Grid").Background(Mod(rIndex, 2) == 0 ? "{DynamicResource ControlBg}" : "Transparent")
     rColDefs := rowGrid.Add("Grid.ColumnDefinitions")
-    
+
     for i, col in columns {
         rColDefs.Add("ColumnDefinition").Width(i == columns.Length ? "*" : "Auto").SharedSizeGroup("TableCol_" i)
         if (i < columns.Length)
             rColDefs.Add("ColumnDefinition").Width("1")
     }
-    
+
     for i, col in columns {
         val := rowObj.HasProp(col) ? rowObj.%col% : ""
         colIdx := (i - 1) * 2
@@ -1282,12 +1283,12 @@ _AddRichPopover(this) {
         elementName := "PopoverAnchor_" A_TickCount "_" popoverCounter
         this.Name(elementName)
     }
-    
+
     popup := this.Parent().Add("Popup").PlacementTarget("{Binding Source={x:Reference " elementName "}}").Placement("Bottom").StaysOpen("False").AllowsTransparency("True").IsOpen("{Binding Source={x:Reference " elementName "}, Path=IsChecked, Mode=TwoWay}")
     bdr := popup.Add("Border").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Padding("10").Margin("4")
-    
+
     bdr.Add("Border.Effect").Add("DropShadowEffect").BlurRadius(12).ShadowDepth(3).Opacity(0.25).Color("Black")
-    
+
     sp := bdr.Add("StackPanel")
     return sp
 }
@@ -1296,50 +1297,50 @@ XAMLElement.Prototype.DefineProp("StatCard", { Call: _StatCard })
 _StatCard(this, title, metric, trendText, trendUp) {
     card := this.Add("Border").Use("CardPanel").Padding("20")
     sp := card.Add("StackPanel")
-    
+
     sp.Add("TextBlock").Text(title).Foreground("{DynamicResource TextSub}").FontSize(12).FontWeight("Bold").Margin("0,0,0,10")
     sp.Add("TextBlock").Text(metric).Foreground("{DynamicResource TextMain}").FontSize(32).FontWeight("Light").Margin("0,0,0,5")
-    
+
     trendSp := sp.Add("StackPanel").Orientation("Horizontal")
     trendColor := trendUp ? "#32D74B" : "#FF453A"
     trendIcon := trendUp ? Chr(0xE74A) : Chr(0xE74B)
-    
+
     trendSp.Add("TextBlock").Text(trendIcon).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).Foreground(trendColor).VerticalAlignment("Center").Margin("0,0,5,0")
     trendSp.Add("TextBlock").Text(trendText).Foreground(trendColor).FontSize(12).FontWeight("SemiBold").VerticalAlignment("Center")
-    
+
     return card
 }
 
 XAMLElement.Prototype.DefineProp("Timeline", { Call: _Timeline })
 _Timeline(this, events) {
     sp := this.Add("StackPanel")
-    
+
     for i, evt in events {
         grid := sp.Add("Grid")
         grid.Cols("30", "*")
         grid.Rows("Auto", "*")
-        
+
         grid.Add("Ellipse").Width(10).Height(10).Fill("{DynamicResource Accent}").Grid_Column(0).Grid_Row(0).HorizontalAlignment("Center").Margin("0,5,0,0")
         if (i < events.Length) {
             grid.Add("Rectangle").Width(2).Fill("{DynamicResource ControlBorder}").Grid_Column(0).Grid_Row(1).HorizontalAlignment("Center").Margin("0,5,0,0").MinHeight(20)
         }
-        
+
         contentSp := grid.Add("StackPanel").Grid_Column(1).Grid_Row(0).Grid_RowSpan(2).Margin("10,0,0,20")
         contentSp.Add("TextBlock").Text(evt.time).Foreground("{DynamicResource TextSub}").FontSize(10).FontWeight("Bold").Margin("0,0,0,2")
         contentSp.Add("TextBlock").Text(evt.desc).Foreground("{DynamicResource TextMain}").FontSize(13).TextWrapping("Wrap")
     }
-    
+
     return sp
 }
 
 XAMLElement.Prototype.DefineProp("SkeletonLoader", { Call: _SkeletonLoader })
 _SkeletonLoader(this, w, h, isCircle := false) {
-    bdr := this.Add("Border").Width(w).Height(h).CornerRadius(isCircle ? h/2 : 4).Background("{DynamicResource ControlBorder}")
-    
+    bdr := this.Add("Border").Width(w).Height(h).CornerRadius(isCircle ? h / 2 : 4).Background("{DynamicResource ControlBorder}")
+
     trigger := bdr.Add("Border.Triggers").Add("EventTrigger").RoutedEvent("FrameworkElement.Loaded")
     sb := trigger.Add("BeginStoryboard").Add("Storyboard")
     sb.Add("DoubleAnimation").Storyboard_TargetProperty("Opacity").From(0.4).To(1.0).Duration("0:0:1").AutoReverse("True").RepeatBehavior("Forever")
-    
+
     return bdr
 }
 
@@ -1348,11 +1349,11 @@ _HotKeyBox(this, id, defaultVal := "", placeholder := "Press a key combination..
     bdr := this.Add("Border").Use("CardPanel").Padding("10,5").BorderThickness(1).BorderBrush("{DynamicResource ControlBorder}")
     grid := bdr.Add("Grid")
     grid.Cols("*", "Auto")
-    
+
     tb := grid.Add("TextBox").Name(id).Grid_Column(0).Text(defaultVal).Background("Transparent").BorderThickness(0).Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").Tag(placeholder).IsReadOnly("True").Cursor("Hand")
-    
+
     grid.Add("TextBlock").Grid_Column(1).Text(Chr(0xE765)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center").Margin("10,0,0,0")
-    
+
     return tb
 }
 
@@ -1365,12 +1366,12 @@ class XSegmentedNetworkInput {
         this.sep := (type == "IP") ? "." : ":"
         this.ui := ""
     }
-    
+
     Build(parent) {
         sp := parent.Add("StackPanel").Orientation("Horizontal")
         bdr := sp.Add("Border").Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(4).Padding("4")
         inner := bdr.Add("StackPanel").Orientation("Horizontal")
-        
+
         loop this.count {
             idx := A_Index
             val := (this.defaultVals.Length >= idx) ? String(this.defaultVals[idx]) : ""
@@ -1380,7 +1381,7 @@ class XSegmentedNetworkInput {
         }
         return sp
     }
-    
+
     Bind(ui) {
         this.ui := ui
         loop this.count {
@@ -1388,35 +1389,35 @@ class XSegmentedNetworkInput {
             ui.OnEvent(this.id "_Octet_" A_Index, "TextChanged", ObjBindMethod(this, "OnTextChanged", A_Index))
         }
     }
-    
+
     OnTextChanged(idx, state, ctrl, ev) {
         val := state[ctrl]
         orig := val
-        
+
         if (this.type == "IP")
             val := RegExReplace(val, "[^\d\.\ ]", "")
         else
             val := RegExReplace(val, "[^\da-fA-F\:\ ]", "")
-            
+
         shouldJump := false
-        
+
         if (SubStr(val, -1) == this.sep || SubStr(val, -1) == " ") {
             val := StrReplace(val, this.sep, "")
             val := StrReplace(val, " ", "")
             shouldJump := true
         }
-        
+
         if (val != orig)
             this.ui.Update(ctrl, "Text", val)
-            
+
         if (shouldJump) {
             if (idx < this.count)
-                this.ui.Update(this.id "_Octet_" (idx+1), "Focus", "True")
+                this.ui.Update(this.id "_Octet_" (idx + 1), "Focus", "True")
         } else {
             if (this.type == "IP" && StrLen(val) >= 3 && idx < this.count) {
-                this.ui.Update(this.id "_Octet_" (idx+1), "Focus", "True")
+                this.ui.Update(this.id "_Octet_" (idx + 1), "Focus", "True")
             } else if (this.type == "MAC" && StrLen(val) >= 2 && idx < this.count) {
-                this.ui.Update(this.id "_Octet_" (idx+1), "Focus", "True")
+                this.ui.Update(this.id "_Octet_" (idx + 1), "Focus", "True")
             }
         }
     }
@@ -1428,26 +1429,26 @@ _RadialGauge(this, id, title, value, maxVal, units := "%") {
     card := this.Add("Border").Use("CardPanel").Padding("15")
     sp := card.Add("StackPanel")
     sp.Add("TextBlock").Text(title).Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold").HorizontalAlignment("Center").Margin("0,0,0,10")
-    
+
     gaugeGrid := sp.Add("Grid").Width(100).Height(50)
-    
+
     bgArc := gaugeGrid.Add("Path").Data("M 4,50 A 46,46 0 0,1 96,50").Stroke("{DynamicResource ControlBorder}").StrokeThickness(8).HorizontalAlignment("Center")
-    
+
     ; We draw the fill arc from Left (4) to Right (96)
     ; StrokeDashOffset shifts the dash pattern, revealing the solid part from the start (Left)
     fillArc := gaugeGrid.Add("Path").Name(id "_Arc").Data("M 4,50 A 46,46 0 0,1 96,50").Stroke("{DynamicResource Accent}").StrokeThickness(8).HorizontalAlignment("Center")
-    
+
     ; Total length is 144.51 pixels. At thickness 8, dash length is 18.06 units.
     fillArc.StrokeDashArray("18.06 18.06")
-    
+
     pct := value / maxVal
     offset := 18.06 * (1 - pct)
     fillArc.StrokeDashOffset(offset)
-    
+
     valSp := gaugeGrid.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Center").VerticalAlignment("Bottom").Margin("0,0,0,-10")
     valSp.Add("TextBlock").Name(id "_Text").Text(value).Foreground("{DynamicResource TextMain}").FontSize(20).FontWeight("Bold").VerticalAlignment("Bottom")
     valSp.Add("TextBlock").Text(units).Foreground("{DynamicResource TextSub}").FontSize(12).VerticalAlignment("Bottom").Margin("2,0,0,3")
-    
+
     return card
 }
 
@@ -1455,51 +1456,51 @@ _RadialGauge(this, id, title, value, maxVal, units := "%") {
 XAMLElement.Prototype.DefineProp("SkeletonBlock", { Call: _SkeletonBlock })
 _SkeletonBlock(this, w, h, radius := 4) {
     bdr := this.Add("Border").Height(h).CornerRadius(radius).Background("{DynamicResource ControlBorder}")
-    
+
     if (w == "100%") {
         bdr.HorizontalAlignment("Stretch")
     } else if (w != "") {
         bdr.Width(w)
     }
-    
+
     trigger := bdr.Add("Border.Triggers").Add("EventTrigger").RoutedEvent("FrameworkElement.Loaded")
     sb := trigger.Add("BeginStoryboard").Add("Storyboard")
     sb.Add("DoubleAnimation").Storyboard_TargetProperty("Opacity").From(0.3).To(0.8).Duration("0:0:1.5").AutoReverse("True").RepeatBehavior("Forever")
-    
+
     return bdr
 }
 
 XAMLElement.Prototype.DefineProp("Avatar", { Call: _Avatar })
 _Avatar(this, imagePath, initials, statusColor := "") {
     grid := this.Add("Grid").Width(40).Height(40).HorizontalAlignment("Left")
-    
+
     circleBg := grid.Add("Ellipse").Fill("{DynamicResource ControlBgHover}").Width(40).Height(40)
-    
+
     grid.Add("TextBlock").Text(initials).Foreground("{DynamicResource TextSub}").FontWeight("Bold").FontSize(14).HorizontalAlignment("Center").VerticalAlignment("Center")
-    
+
     if (imagePath != "") {
         imgBrush := grid.Add("Ellipse.Fill").Add("ImageBrush").ImageSource(imagePath).Stretch("UniformToFill")
     }
-    
+
     if (statusColor != "") {
         statusBdr := grid.Add("Border").Width(12).Height(12).CornerRadius(6).Background(statusColor).BorderBrush("{DynamicResource ControlBg}").BorderThickness(2).HorizontalAlignment("Right").VerticalAlignment("Bottom")
     }
-    
+
     return grid
 }
 
 XAMLElement.Prototype.DefineProp("AddBadge", { Call: _AddBadge })
 _AddBadge(this, text, bgColor := "#FF453A") {
     target := this
-    
+
     if (this._Props.Has("Content")) {
         originalContent := this._Props["Content"]
         this._Props.Delete("Content")
-        
+
         target := this.Add("Grid")
         target.Add("TextBlock").Text(originalContent).HorizontalAlignment("Center").VerticalAlignment("Center")
     }
-    
+
     bdr := target.Add("Border").Background(bgColor).CornerRadius(10).Padding("6,2").HorizontalAlignment("Right").VerticalAlignment("Top").Margin("0,-12,-12,0")
     bdr.Add("TextBlock").Text(text).Foreground("White").FontSize(10).FontWeight("Bold").HorizontalAlignment("Center").VerticalAlignment("Center")
     return bdr
@@ -1522,10 +1523,10 @@ XAMLElement.Prototype.DefineProp("Snackbar", { Call: _Snackbar })
 _Snackbar(this, message, actionText := "") {
     bdr := this.Add("Border").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Padding("15,10").HorizontalAlignment("Center").VerticalAlignment("Bottom").Margin("0,0,0,20")
     bdr.Add("Border.Effect").Add("DropShadowEffect").BlurRadius(15).ShadowDepth(4).Opacity(0.4)
-    
+
     sp := bdr.Add("StackPanel").Orientation("Horizontal")
     sp.Add("TextBlock").Text(message).Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").FontSize(13)
-    
+
     if (actionText != "") {
         sp.Add("Button").Content(actionText).Foreground("{DynamicResource Accent}").Background("Transparent").BorderThickness(0).Margin("15,0,0,0").FontWeight("Bold").VerticalAlignment("Center").Cursor("Hand")
     }
@@ -1554,15 +1555,15 @@ class DataGridEx {
         this.filterColumn := opts.HasProp("FilterColumn") ? opts.FilterColumn : ""
         this.filterValues := opts.HasProp("FilterValues") ? opts.FilterValues : []
         this.filterStates := Map()
-        
+
         this.hiddenColumns := Map()
         if (opts.HasProp("HiddenColumns")) {
             for _, cName in opts.HiddenColumns
                 this.hiddenColumns[cName] := true
         }
-        
+
         this.ui := ""
-        
+
         ; Auto-detect columns from first row
         if (dataArray.Length > 0) {
             for key, val in dataArray[1].OwnProps()
@@ -1570,29 +1571,29 @@ class DataGridEx {
             if (this.sortCol == "")
                 this.sortCol := this.columns[1]
         }
-        
+
         ; Column widths: set defaults
         if (opts.HasProp("ColumnWidths")) {
             for col, w in opts.ColumnWidths.OwnProps()
                 this.columnWidths[col] := w
         }
-        
+
         ; Init filter states
         for fv in this.filterValues
             this.filterStates[fv] := true
     }
-    
+
     ; Set column width (e.g. "150" for fixed, "2*" for star, "30%" for percentage)
     SetColumnWidth(colName, width) {
         this.columnWidths[colName] := width
         return this
     }
-    
+
     ; Get WPF width string for a column
     _GetColWidth(colName, colIndex) {
         if (this.hiddenColumns.Has(colName) && this.hiddenColumns[colName])
             return "0"
-            
+
         if (this.columnWidths.Has(colName)) {
             w := this.columnWidths[colName]
             ; Percentage: convert "30%" to "3*" (approx star ratio)
@@ -1605,7 +1606,7 @@ class DataGridEx {
         ; Default: last column fills remaining space
         return (colIndex == this.columns.Length) ? "*" : "Auto"
     }
-    
+
     ; Build the XAML UI into a parent element
     Build(parent) {
         grid := parent.Add("Grid").Name(this.id "_MainGrid").Margin("0,0,0,0")
@@ -1613,7 +1614,7 @@ class DataGridEx {
         if (this.showPagination)
             rows .= ",Auto"
         grid.Rows(StrSplit(rows, ",")*)
-        
+
         ; --- Toolbar ---
         toolbar := grid.Add("Grid").Grid_Row(0).Margin("0,0,0,10")
         toolCols := ""
@@ -1630,7 +1631,7 @@ class DataGridEx {
             toolCols .= "Auto,"
         toolCols := RTrim(toolCols, ",")
         toolbar.Cols(StrSplit(toolCols, ",")*)
-        
+
         tci := 0
         if (this.showSearch) {
             searchBdr := toolbar.Add("Border").Use("CardPanel").Padding("6,4").Grid_Column(tci).Margin("0,0,10,0").VerticalAlignment("Top")
@@ -1653,7 +1654,7 @@ class DataGridEx {
             }
             tci++
         }
-        
+
         ; Columns toggle
         colBtn := toolbar.Add("ToggleButton").Content("Columns").Grid_Column(tci).Width(80).Height(30).VerticalAlignment("Top").Margin("0,0,10,0").Use("IconBtn").Cursor("Hand")
         colPop := colBtn.AddRichPopover()
@@ -1663,19 +1664,19 @@ class DataGridEx {
             colPop.Add("CheckBox").Content(col).Name(this.id "_ToggleCol_" StrReplace(col, " ", "")).IsChecked(isChecked).Margin("0,0,0,5")
         }
         tci++
-        
+
         if (this.showRowCount) {
             initEnd := Min(this.pageSize, this.data.Length)
             initText := this.data.Length == 0 ? "0 rows" : this.data.Length " rows, showing (" initEnd ")"
             toolbar.Add("TextBlock").Name(this.id "_RowCount").Text(initText).Grid_Column(tci).VerticalAlignment("Center").Foreground("{DynamicResource TextSub}").FontSize(12).FontWeight("Normal")
-        }        
+        }
         ; --- Table ---
         tableBdr := grid.Add("Border").Grid_Row(1).Margin("0,0,15,0").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Background("{DynamicResource ControlBg}").ClipToBounds("True")
-        
+
         tableGrid := tableBdr.Add("Grid")
         tableGrid.Rows("30", "*")
         tableGrid.IsSharedSizeScope("True")
-        
+
         ; Table Header
         headerGrid := tableGrid.Add("Grid").Name(this.id "_HeaderGrid").Grid_Row(0).Background("{DynamicResource ControlBgHover}")
         hColDefs := headerGrid.Add("Grid.ColumnDefinitions")
@@ -1685,7 +1686,7 @@ class DataGridEx {
             if (i < this.columns.Length)
                 hColDefs.Add("ColumnDefinition").Name(this.id "_HeaderSplit_" i).Width(w == "0" ? "0" : "Auto")
         }
-        
+
         ; Dummy Grid to proxy explicit Widths into SharedSizeGroups (fixes GridSplitter bug)
         dummyGrid := tableGrid.Add("Grid").Height(0).IsHitTestVisible("False").Grid_Row(0)
         dColDefs := dummyGrid.Add("Grid.ColumnDefinitions")
@@ -1694,7 +1695,7 @@ class DataGridEx {
             if (i < this.columns.Length)
                 dColDefs.Add("ColumnDefinition").Width("{Binding ElementName=" this.id "_HeaderSplit_" i ", Path=Width}").SharedSizeGroup("TableSplit_" i)
         }
-        
+
         for i, col in this.columns {
             colIdx := (i - 1) * 2
             headerGrid.Add("Button").Name(this.id "_Table_Header_" StrReplace(col, " ", "")).Content(col).Grid_Column(colIdx).Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("0").FontSize(11).FontWeight("Bold").HorizontalContentAlignment("Left").Padding("10,0").Cursor("Hand")
@@ -1703,10 +1704,10 @@ class DataGridEx {
                 headerGrid.Add("GridSplitter").Name(this.id "_Table_Splitter_" i).Grid_Column(colIdx + 1).Width(7).HorizontalAlignment("Center").VerticalAlignment("Stretch").Background("Transparent").Cursor("SizeWE").ResizeBehavior("PreviousAndNext")
             }
         }
-        
+
         ; Table ListBox
         tableGrid.Add("ListBox").Name(this.id "_Table_List").Grid_Row(1).Background("Transparent").BorderThickness("0").ScrollViewer_HorizontalScrollBarVisibility("Auto").VirtualizingPanel_IsVirtualizing("False").HorizontalContentAlignment("Stretch")
-        
+
         ; --- Pagination ---
         if (this.showPagination) {
             pagSp := grid.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Center").Grid_Row(2).Margin("0,15,15,0")
@@ -1714,14 +1715,14 @@ class DataGridEx {
             pagSp.Add("TextBlock").Name(this.id "_PageStatus").Text("Page 1").VerticalAlignment("Center").Foreground("{DynamicResource TextMain}").FontSize(13)
             pagSp.Add("Button").Name(this.id "_BtnNext").Content(Chr(0xE76C)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Width(30).Height(30).Use("IconBtn").Margin("10,0,0,0").Cursor("Hand")
         }
-        
+
         return grid
     }
-    
+
     ; Register events with the XAMLHost instance
     Bind(uiHost) {
         this.ui := uiHost
-        
+
         ; Header sort buttons & splitters
         for i, col in this.columns {
             uiHost.OnEvent(this.id "_Table_Header_" StrReplace(col, " ", ""), "Click", ((c) => (state, ctrl, ev) => this.Sort(state, c))(col))
@@ -1730,17 +1731,17 @@ class DataGridEx {
                 uiHost.OnEvent(this.id "_Table_Splitter_" i, "MouseDoubleClick", (state, ctrl, ev) => this.OnSplitterDoubleClick(state, ctrl))
             }
         }
-        
+
         ; Search
         if (this.showSearch) {
             uiHost.Track(this.id "_Search")
             uiHost.OnEvent(this.id "_Search", "TextChanged", (state, ctrl, ev) => this.OnSearch(state))
         }
-        
+
         ; Reset
         if (this.showReset)
             uiHost.OnEvent(this.id "_BtnReset", "Click", (state, ctrl, ev) => this.Reset(state))
-        
+
         ; Filters
         if (this.showFilters) {
             for fv in this.filterValues {
@@ -1750,25 +1751,25 @@ class DataGridEx {
                 uiHost.OnEvent(trackName, "Click", (state, ctrl, ev) => this.OnFilter(state))
             }
         }
-        
+
         ; Column Toggles
         for col in this.columns {
             trackName := this.id "_ToggleCol_" StrReplace(col, " ", "")
             uiHost.Track(trackName)
             uiHost.OnEvent(trackName, "Click", (state, ctrl, ev) => this.OnColumnToggle(state))
         }
-        
+
         ; Pagination
         if (this.showPagination) {
             uiHost.OnEvent(this.id "_BtnPrev", "Click", (state, ctrl, ev) => this.ChangePage(state, -1))
             uiHost.OnEvent(this.id "_BtnNext", "Click", (state, ctrl, ev) => this.ChangePage(state, 1))
         }
-        
+
         ; Initial Render on Load
         uiHost.Track(this.id "_MainGrid")
         uiHost.OnEvent(this.id "_MainGrid", "Loaded", (state, ctrl, ev) => this.Render(state))
     }
-    
+
     Sort(state, col) {
         if (this.sortCol == col)
             this.sortAsc := !this.sortAsc
@@ -1779,21 +1780,21 @@ class DataGridEx {
         this.page := 1
         this.Render(state)
     }
-    
+
     ChangePage(state, delta) {
         this.page += delta
         if (this.page < 1)
             this.page := 1
         this.Render(state)
     }
-    
+
     OnSearch(state) {
         searchKey := this.id "_Search"
         this.searchQuery := state.Has(searchKey) ? state[searchKey] : ""
         this.page := 1
         this.Render(state)
     }
-    
+
     OnFilter(state) {
         ; Read filter checkbox states
         for fv in this.filterValues {
@@ -1803,20 +1804,20 @@ class DataGridEx {
         this.page := 1
         this.Render(state)
     }
-    
+
     OnColumnToggle(state) {
         for i, col in this.columns {
             key := this.id "_ToggleCol_" StrReplace(col, " ", "")
             isVisible := state.Has(key) ? (state[key] ~= "i)true|1") : true
-            
+
             wasHidden := this.hiddenColumns.Has(col) ? this.hiddenColumns[col] : false
             isHidden := !isVisible
-            
+
             if (wasHidden == isHidden)
                 continue
-                
+
             this.hiddenColumns[col] := isHidden
-            
+
             if (isHidden) {
                 this.ui.Update(this.id "_HeaderCol_" i, "Width", "0")
                 if (i < this.columns.Length)
@@ -1830,11 +1831,11 @@ class DataGridEx {
         }
         this.Render(state)
     }
-    
+
     OnSplitterDoubleClick(state, ctrlName) {
         colIndex := RegExReplace(ctrlName, ".*_(\d+)$", "$1")
         colName := this.columns[colIndex]
-        
+
         ; Find the longest text string in the column to approximate pixel width
         maxLen := StrLen(colName)
         for row in this.data {
@@ -1844,17 +1845,17 @@ class DataGridEx {
                     maxLen := StrLen(val)
             }
         }
-        
+
         ; Approximate pixel width: ~7.5px per char (Segoe UI 12) + 30px padding
         newWidth := Round(maxLen * 7.5 + 30)
-        
+
         this.ui.Update(this.id "_HeaderCol_" colIndex, "Width", String(newWidth))
         if (colIndex < this.columns.Length)
             this.ui.Update(this.id "_HeaderSplit_" colIndex, "Width", "Auto")
-            
+
         this.columnWidths[colName] := String(newWidth)
     }
-    
+
     Reset(state) {
         this.page := 1
         this.sortCol := this.columns.Length > 0 ? this.columns[1] : ""
@@ -1866,7 +1867,7 @@ class DataGridEx {
             this.ui.Update(this.id "_Search", "Text", "")
         this.Render(state)
     }
-    
+
     Render(state) {
         ; --- 1. Sort ---
         if (this.sortCol != "" && this.data.Length > 1) {
@@ -1878,13 +1879,13 @@ class DataGridEx {
                     j := A_Index
                     v1 := this.data[j].%sc%
                     v2 := this.data[j + 1].%sc%
-                    
+
                     isNum := IsNumber(v1) && IsNumber(v2)
                     if (isNum)
                         swap := sa ? (v1 > v2) : (v1 < v2)
                     else
                         swap := sa ? (StrCompare(v1, v2) > 0) : (StrCompare(v1, v2) < 0)
-                        
+
                     if (swap) {
                         tmp := this.data[j]
                         this.data[j] := this.data[j + 1]
@@ -1893,7 +1894,7 @@ class DataGridEx {
                 }
             }
         }
-        
+
         ; --- 2. Filter ---
         filtered := []
         for rowObj in this.data {
@@ -1915,7 +1916,7 @@ class DataGridEx {
             }
             filtered.Push(rowObj)
         }
-        
+
         ; --- 3. Pagination ---
         total := filtered.Length
         totalPages := (total > 0) ? Ceil(total / this.pageSize) : 1
@@ -1923,56 +1924,56 @@ class DataGridEx {
             this.page := totalPages
         if (this.page < 1)
             this.page := 1
-        
+
         startIdx := (this.page - 1) * this.pageSize + 1
         endIdx := Min(startIdx + this.pageSize - 1, total)
-        
+
         if (this.showPagination)
             this.ui.Update(this.id "_PageStatus", "Text", "Page " this.page " of " totalPages)
-            
+
         if (this.showRowCount) {
             if (total == 0)
                 this.ui.Update(this.id "_RowCount", "Text", "0 rows")
             else
                 this.ui.Update(this.id "_RowCount", "Text", total " rows, showing (" (endIdx - startIdx + 1) ")")
         }
-        
+
         ; --- 4. Clear & guard ---
         this.ui.Update(this.id "_Table_List", "ClearItems", "")
         if (total == 0)
             return
-        
+
         startIdx := (this.page - 1) * this.pageSize + 1
         endIdx := Min(startIdx + this.pageSize - 1, total)
         count := endIdx - startIdx + 1
         if (count <= 0)
             return
-        
+
         ; --- 5. Inject rows ---
         loop count {
             idx := startIdx + A_Index - 1
             rowObj := filtered[idx]
-            
+
             rowGrid := XAML_Generator()
             rowGrid.Background(Mod(A_Index, 2) == 0 ? "{DynamicResource ControlBg}" : "Transparent")
             rowGrid.MinWidth("{Binding ElementName=" this.id "_HeaderGrid, Path=ActualWidth}")
             rColDefs := rowGrid.Add("Grid.ColumnDefinitions")
-            
+
             for i, col in this.columns {
                 w := this._GetColWidth(col, i)
                 ; Use Width="0" so the row content does not stretch the SharedSizeGroup
                 rColDefs.Add("ColumnDefinition").Width("0").SharedSizeGroup("TableCol_" i)
-                
+
                 if (i < this.columns.Length)
                     rColDefs.Add("ColumnDefinition").Width(w == "0" ? "0" : "Auto").SharedSizeGroup("TableSplit_" i)
             }
-            
+
             for i, col in this.columns {
                 val := rowObj.HasProp(col) ? rowObj.%col% : ""
                 colIdx := (i - 1) * 2
                 rowGrid.Add("TextBlock").Text(val).Grid_Column(colIdx).Foreground("{DynamicResource TextMain}").FontSize(12).VerticalAlignment("Center").Margin("10,8").TextTrimming("CharacterEllipsis").ToolTip(val)
             }
-            
+
             rowStr := rowGrid.Compile()
             rowStr := RegExReplace(rowStr, "<!--.*?-->", "")
             rowStr := StrReplace(rowStr, "<Grid ", '<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" ')
@@ -1995,12 +1996,12 @@ _Rating(this, id, opts := {}) {
     iconFont := opts.HasProp("IconFont") ? opts.IconFont : "Segoe Fluent Icons, Segoe MDL2 Assets"
     color := opts.HasProp("Color") ? opts.Color : "#FFD700"
     emptyColor := opts.HasProp("EmptyColor") ? opts.EmptyColor : "{DynamicResource TextSub}"
-    
+
     grid := this.Add("Grid").Margin("0,0,0,5")
     grid.Cols("Auto", "Auto")
-    
+
     sp := grid.Add("StackPanel").Orientation("Horizontal").Grid_Column(0)
-    
+
     if (allowHalf) {
         ; Half-star mode: each position has two halved buttons
         steps := maxVal * 2
@@ -2008,12 +2009,12 @@ _Rating(this, id, opts := {}) {
             idx := A_Index
             ; Container for one star position
             starGrid := sp.Add("Grid").Width(iconSize).Height(iconSize).Margin("1,0")
-            
+
             ; Left half button (covers left 50%)
             leftVal := idx - 0.5
             leftBtn := starGrid.Add("Button").Name(id "_Half_" (idx * 2 - 1)).Width(iconSize / 2).HorizontalAlignment("Left").Background("Transparent").BorderThickness("0").Cursor("Hand").Padding("0").Tag(leftVal)
             leftBtn.Add("TextBlock").Text(leftVal <= defaultVal ? icon : iconEmpty).FontFamily(iconFont).FontSize(iconSize).Foreground(leftVal <= defaultVal ? color : emptyColor).Margin("-" iconSize / 4 ",0,0,0")
-            
+
             ; Right half button (covers right 50%)
             rightVal := idx
             rightBtn := starGrid.Add("Button").Name(id "_Half_" (idx * 2)).Width(iconSize / 2).HorizontalAlignment("Right").Background("Transparent").BorderThickness("0").Cursor("Hand").Padding("0").Tag(rightVal)
@@ -2028,10 +2029,10 @@ _Rating(this, id, opts := {}) {
             btn.Add("TextBlock").Text(isFilled ? icon : iconEmpty).FontFamily(iconFont).FontSize(iconSize).Foreground(isFilled ? color : emptyColor).Name(id "_StarIcon_" idx)
         }
     }
-    
+
     ; Value display
     grid.Add("TextBlock").Name(id "_Value").Text(defaultVal "/" maxVal).Foreground("{DynamicResource TextSub}").FontSize(12).VerticalAlignment("Center").Margin("10,0,0,0").Grid_Column(1)
-    
+
     ; Store metadata on the grid
     grid.DefineProp("RatingId", { Get: (*) => id })
     grid.DefineProp("RatingMax", { Get: (*) => maxVal })
@@ -2040,7 +2041,7 @@ _Rating(this, id, opts := {}) {
     grid.DefineProp("AllowHalf", { Get: (*) => allowHalf })
     grid.DefineProp("RatingColor", { Get: (*) => color })
     grid.DefineProp("RatingEmptyColor", { Get: (*) => emptyColor })
-    
+
     return grid
 }
 
@@ -2072,15 +2073,15 @@ _RatingSet(uiHost, id, maxVal, clickedIdx, icon, iconEmpty, color, emptyColor) {
         ; We'll use a simple state approach — check what's displayed
         ; If clicking same star as current rating, toggle half-step
     }
-    
+
     ; Get current rating by counting filled stars (check icon text)
     ; Since we can't easily read WPF state from AHK, store in a global
     static ratings := Map()
     if (!ratings.Has(id))
         ratings[id] := 0
-    
+
     currentRating := ratings[id]
-    
+
     if (clickedIdx == currentRating) {
         ; Same star clicked — toggle to half-step above (x.5)
         newRating := currentRating + 0.5
@@ -2092,11 +2093,11 @@ _RatingSet(uiHost, id, maxVal, clickedIdx, icon, iconEmpty, color, emptyColor) {
     } else {
         newRating := clickedIdx
     }
-    
+
     ratings[id] := newRating
     filledFull := Floor(newRating)
     hasHalf := (newRating != filledFull)
-    
+
     loop maxVal {
         if (A_Index <= filledFull) {
             uiHost.Update(id "_StarIcon_" A_Index, "Text", icon)
@@ -2116,7 +2117,7 @@ _RatingSet(uiHost, id, maxVal, clickedIdx, icon, iconEmpty, color, emptyColor) {
     loop filledFull {
         uiHost.Update(id "_StarIcon_" A_Index, "Opacity", "1")
     }
-    
+
     ; Display value — show decimal only if half
     displayVal := hasHalf ? (newRating) : (Integer(newRating))
     uiHost.Update(id "_Value", "Text", displayVal "/" maxVal)
@@ -2135,13 +2136,13 @@ XAMLElement.Prototype.DefineProp("EmojiPicker", { Call: _EmojiPicker })
 _EmojiPicker(this, id, opts := {}) {
     btnText := opts.HasProp("ButtonText") ? opts.ButtonText : Chr(0x1F600)
     targetName := opts.HasProp("Target") ? opts.Target : ""
-    
+
     ; Emoji categories
-    smileys := ["😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎","😍","🥰","😘","😗","😙","🤗","🤩","🤔","🤨","😐","😑","😶","🙄","😏","😣","😥","😮","🤐","😯","😪","😫","🥱","😴","😌"]
-    gestures := ["👍","👎","👏","🙌","🤝","👋","✌️","🤞","🤟","🤘","👌","🤌","👈","👉","👆","👇","☝️","✋"]
-    hearts := ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","❣️","💕","💞","💓","💗","💖","💘","💝","💟"]
-    objects := ["🔥","⭐","🌟","✨","💫","🎉","🎊","🏆","🥇","🎯","💡","📌","📎","🔑","🔒","💬","💭","🗨️"]
-    
+    smileys := ["😀", "😁", "😂", "🤣", "😃", "😄", "😅", "😆", "😉", "😊", "😋", "😎", "😍", "🥰", "😘", "😗", "😙", "🤗", "🤩", "🤔", "🤨", "😐", "😑", "😶", "🙄", "😏", "😣", "😥", "😮", "🤐", "😯", "😪", "😫", "🥱", "😴", "😌"]
+    gestures := ["👍", "👎", "👏", "🙌", "🤝", "👋", "✌️", "🤞", "🤟", "🤘", "👌", "🤌", "👈", "👉", "👆", "👇", "☝️", "✋"]
+    hearts := ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟"]
+    objects := ["🔥", "⭐", "🌟", "✨", "💫", "🎉", "🎊", "🏆", "🥇", "🎯", "💡", "📌", "📎", "🔑", "🔒", "💬", "💭", "🗨️"]
+
     allEmoji := []
     for e in smileys
         allEmoji.Push(e)
@@ -2151,42 +2152,42 @@ _EmojiPicker(this, id, opts := {}) {
         allEmoji.Push(e)
     for e in objects
         allEmoji.Push(e)
-    
+
     ; Toggle button to open the picker
     btn := this.Add("ToggleButton").Name(id "_Btn").Content(btnText).Width(45).Height(35).FontSize(18).FontFamily("Segoe UI Emoji").Use("IconBtn").Cursor("Hand")
-    
+
     pop := btn.AddRichPopover()
-    
+
     ; Category header
     tabSp := pop.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,8")
     tabSp.Add("TextBlock").Text("Smileys & Gestures & Hearts & Objects").Foreground("{DynamicResource TextSub}").FontSize(10).FontWeight("Bold")
-    
+
     ; Emoji grid — use Segoe UI Emoji font for color rendering
     wrap := pop.Add("ScrollViewer").Name(id "_EmojiScroll").Height(200).VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled")
     emojiGrid := wrap.Add("WrapPanel").Width(280)
-    
+
     for i, emoji in allEmoji {
         emojiGrid.Add("Button").Content(emoji).Name(id "_E_" i).Width(35).Height(35).FontSize(18).FontFamily("Segoe UI Emoji").Background("Transparent").BorderThickness("0").Cursor("Hand").Padding("0").Margin("1")
     }
-    
+
     ; Selected display
     selBdr := pop.Add("Border").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,1,0,0").Margin("0,8,0,0").Padding("0,8,0,0")
     selSp := selBdr.Add("StackPanel").Orientation("Horizontal")
     selSp.Add("TextBlock").Text("Selected: ").Foreground("{DynamicResource TextSub}").FontSize(12).VerticalAlignment("Center")
     selSp.Add("TextBlock").Name(id "_Selected").Text("None").Foreground("{DynamicResource TextMain}").FontSize(16).FontFamily("Segoe UI Emoji").VerticalAlignment("Center")
-    
+
     ; Store metadata
     btn.DefineProp("EmojiId", { Get: (*) => id })
     btn.DefineProp("EmojiCount", { Get: (*) => allEmoji.Length })
     btn.DefineProp("EmojiList", { Get: (*) => allEmoji })
-    
+
     return btn
 }
 
 ; Helper to bind emoji picker events
 EmojiPickerBind(uiHost, id, emojiList, targetName := "") {
     uiHost.OnEvent(id "_Btn", "Click", (state, ctrl, ev) => uiHost.Update(id "_EmojiScroll", "TrapScroll", ""))
-    
+
     for i, emoji in emojiList {
         _BindEmojiBtn(uiHost, id, i, emoji, targetName)
     }

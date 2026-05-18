@@ -1,10 +1,11 @@
 #Requires AutoHotkey v2.0
-#Include "../lib/XAML_Host.ahk"
-#Include "../lib/XAML_Generator.ahk"
-#Include "../lib/XAML_Dialog.ahk"
-#Include "../lib/XAML_GUI.ahk"
-#Include "../lib/XAML_Components.ahk"
-#Include "../lib/XAML_Adv_Components.ahk"
+#Include "../../lib/XAML_Host.ahk"
+#Include "../../lib/XAML_Generator.ahk"
+#Include "../../lib/XAML_Dialog.ahk"
+#Include "../../lib/XAML_GUI.ahk"
+#Include "../../lib/XAML_Components.ahk"
+#Include "../../lib/XAML_Adv_Components.ahk"
+#Include "../data/MockData.ahk"
 
 app := XAML_GUI("Fluid UI Workbench")
 
@@ -108,26 +109,7 @@ global myGrid := ""
 BuildDataGridExTab(tab) {
     global myGrid
 
-    ; Generate test data
-    testData := []
-    roles := ["Administrator", "Developer", "Guest", "Manager", "Analyst"]
-    statuses := ["Active", "Offline", "Pending"]
-    names := ["John", "Jane", "Bob", "Alice", "Charlie", "Diana", "Eve", "Frank"]
-    lasts := ["Doe", "Smith", "Wilson", "Johnson", "Brown", "Taylor", "Anderson"]
-    loop 200 {
-        n := names[Random(1, names.Length)] " " lasts[Random(1, lasts.Length)]
-        r := roles[Random(1, roles.Length)]
-        s := statuses[Random(1, statuses.Length)]
-        testData.Push({ Id: A_Index, Name: n, Role: r, Status: s })
-    }
-
-    ; Scramble the data to prove "random order"
-    scrambled := []
-    while (testData.Length > 0) {
-        idx := Random(1, testData.Length)
-        scrambled.Push(testData[idx])
-        testData.RemoveAt(idx)
-    }
+    scrambled := Example_MockData.GenerateDataGridExData()
 
     ; Create DataGridEx with all features enabled
     myGrid := DataGridEx("DGX", scrambled, {
@@ -413,7 +395,7 @@ RatingBind(ui, "Rating5", 5, false, Chr(0xE735), Chr(0xE734), "#FFD700", "{Dynam
 RatingBind(ui, "Rating10", 10, false, Chr(0xEB52), Chr(0xEB51), "#FF453A", "{DynamicResource TextSub}")
 
 ; Emoji Picker — bind all emoji button events
-emojiList := ["😀", "😁", "😂", "🤣", "😃", "😄", "😅", "😆", "😉", "😊", "😋", "😎", "😍", "🥰", "😘", "😗", "😙", "🤗", "🤩", "🤔", "🤨", "😐", "😑", "😶", "🙄", "😏", "😣", "😥", "😮", "🤐", "😯", "😪", "😫", "🥱", "😴", "😌", "👍", "👎", "👏", "🙌", "🤝", "👋", "✌️", "🤞", "🤟", "🤘", "👌", "🤌", "👈", "👉", "👆", "👇", "☝️", "✋", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "🔥", "⭐", "🌟", "✨", "💫", "🎉", "🎊", "🏆", "🥇", "🎯", "💡", "📌", "📎", "🔑", "🔒", "💬", "💭", "🗨️"]
+emojiList := Example_MockData.GetEmojiList()
 EmojiPickerBind(ui, "MyEmoji", emojiList)
 
 ; Bind DateRangePickerEx events
@@ -478,7 +460,7 @@ GaugeSetNewTarget() {
         gaugeTarget := 0
     if (gaugeTarget > 100)
         gaugeTarget := 100
-    
+
     ui.Update("MyGauge_Text", "Text", Integer(gaugeTarget))
 }
 
@@ -489,13 +471,13 @@ GaugeAnimateTick() {
         gaugeValue := gaugeTarget
         return
     }
-    
+
     ; Smooth easing
     gaugeValue += diff * 0.15
-    
+
     pct := gaugeValue / 100
     offset := 18.06 * (1 - pct)
-    
+
     ui.Update("MyGauge_Arc", "StrokeDashOffset", offset)
 }
 
@@ -793,31 +775,31 @@ BuildAdvancedUITab(tab) {
     panel.Add("TextBlock").Text("NEW COMPONENTS").Margin("0,20,0,10")
     newCard := panel.Add("Border").Use("CardPanel").Padding("20").Margin("0,0,0,20")
     newSp := newCard.Add("StackPanel")
-    
+
     newSp.Add("TextBlock").Text("HotKey Box").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,0,0,8")
     hkInput := newSp.HotKeyBox("QuickSaveBinding", "^+S", "Press a key combination...")
     app.RegisterHotKeyChange(hkInput, (newBind) => app.ShowSnackbar("New bind set to: " newBind))
-    
+
     newSp.Add("TextBlock").Text("Segmented Network Input").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
     segInput := XSegmentedNetworkInput("MyIP", "IP", ["192", "168", "1", "100"])
     segInput.Build(newSp)
     app.RegisterSegmentedInput(segInput)
-    
+
     newSp.Add("TextBlock").Text("Skeleton Block").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
     newSp.SkeletonBlock("100%", 120, 8)
-    
+
     newSp.Add("TextBlock").Text("Avatar").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
     newSp.Avatar("", "JD", "#34C759") ; JD with green status
-    
+
     newSp.Add("TextBlock").Text("Radial Gauge").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
     gaugeSp := newSp.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,20")
     gaugeSp.Gauge("MyGauge", "CPU Usage", 45, 100, "%")
-    
+
     gaugeControls := gaugeSp.Add("StackPanel").VerticalAlignment("Center").Margin("20,0,0,0")
     gaugeControls.Add("Button").Name("BtnTestGauge").Content("Start Monitor").Use("PrimaryBtn").Width(120).Height(30)
     newSp.Add("TextBlock").Text("BREADCRUMB BAR").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
     newSp.BreadcrumbBar(["Home", "Projects", "AHK", "XAML_Components.ahk"])
-    
+
     newSp.Add("TextBlock").Text("STEPPER (WIZARD)").Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize(13).Margin("0,15,0,8")
     newSp.Stepper(["Configuration", "Authentication", "Deployment", "Verification"], 3)
 }

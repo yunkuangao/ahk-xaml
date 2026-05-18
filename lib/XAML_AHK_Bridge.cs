@@ -537,9 +537,6 @@ public class AhkWpfEngine : Application {
                     }
                     else val = cb.Text;
                 }
-                else if (c is ListBox) {
-                    val = ((ListBox)c).SelectedIndex.ToString();
-                }
                 else if (c is TreeView) {
                     TreeView tv = (TreeView)c;
                     if (tv.SelectedItem is TreeViewItem) {
@@ -800,6 +797,8 @@ public class AhkWpfEngine : Application {
                     } catch (Exception ex) {
                         Console.WriteLine("NavigateToString error: " + ex.Message);
                     }
+                } else if (parts[1] == "BindEvent") {
+                    BindEvent(parts[0], parts[2]);
 #if ENABLE_WEBVIEW
                 } else if (parts[1] == "Navigate" && ctrl is Microsoft.Web.WebView2.Wpf.WebView2) {
                     try {
@@ -877,6 +876,9 @@ public class AhkWpfEngine : Application {
                     ZoomCanvas((Canvas)ctrl, double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture));
                 } else if (parts[1] == "EnableDrag" && ctrl is FrameworkElement) {
                     EnableCanvasDrag((FrameworkElement)ctrl, parts[0], parts.Length > 2 ? parts[2] : "");
+                } else if (parts[1] == "BeginStoryboard" && ctrl is FrameworkElement) {
+                    var sb = ((FrameworkElement)ctrl).FindResource(parts[2]) as System.Windows.Media.Animation.Storyboard;
+                    if (sb != null) sb.Begin();
                 } else if (parts[1] == "EnableListBoxDragDrop" && ctrl is ListBox) {
                     EnableListBoxDragDrop((ListBox)ctrl, parts[0]);
                 } else if (parts[1] == "Close" && ctrl is Window) {

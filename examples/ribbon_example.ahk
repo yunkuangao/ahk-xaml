@@ -99,7 +99,7 @@ if (XAML_DEBUG) {
     ; Development Mode: Generate the UI dynamically every time.
     ui := app.Compile()
 } else {
-    ; Production Mode: Compile into a standalone DLL on first run, 
+    ; Production Mode: Compile into a standalone DLL on first run,
     ; then bypass XAML generation and boot straight from the DLL instantly!
     ui := app.Compile("ribbon_example_compiled.dll")
 }

@@ -1,10 +1,10 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
-#Include "..\lib\XAML_GUI.ahk"
-#Include "..\lib\XAML_Generator.ahk"
-#Include "..\lib\XAML_Host.ahk"
-#Include "..\lib\XAML_Components.ahk"
-#Include "..\lib\XAML_Dialog.ahk"
+#Include "..\..\lib\XAML_GUI.ahk"
+#Include "..\..\lib\XAML_Generator.ahk"
+#Include "..\..\lib\XAML_Host.ahk"
+#Include "..\..\lib\XAML_Components.ahk"
+#Include "..\..\lib\XAML_Dialog.ahk"
 
 ; --- Docking Manager Example ---
 ; Demonstrates how to create a multi-window IDE-like environment
@@ -407,7 +407,8 @@ class PanelManager {
         }
 
         ; Initialize XAML Host for this panel (No owner, so Z-order is standard)
-        ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", main.ToString()), "", "")
+        tmp := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", titleHeight)
+        ui := XAMLHost(StrReplace(tmp, "%app%", main.ToString()), "", "")
 
         ; Replace template dimensions, add title/taskbar visibility, remove CenterScreen, and use dynamic PanelRadius
         ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Title="' pInfo.Title '" ShowInTaskbar="False" Width="' w '" Height="' h '" Left="' x '" Top="' y '"')
@@ -435,7 +436,8 @@ class PanelManager {
             return
 
         try {
-            themeData := IniRead("themes.ini", themeName)
+            iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
+            themeData := IniRead(iniPath, themeName)
             Loop Parse, themeData, "`n", "`r" {
                 parts := StrSplit(A_LoopField, "=", " `t", 2)
                 if (parts.Length == 2) {

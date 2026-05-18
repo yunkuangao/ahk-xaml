@@ -219,7 +219,8 @@ class XAMLHost {
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\ahk-xaml.dll"
+        baseDllName := XAML_ENABLE_WEBVIEW ? "ahk-xaml-webview.dll" : "ahk-xaml.dll"
+        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\" baseDllName
         trackedCsv := ""
 
         uniqueCsv := Map()
@@ -241,10 +242,10 @@ class XAMLHost {
         }
 
         SplitPath(A_LineFile, , &libDir)
-        sharedExe := libDir "\ahk-xaml.dll"
+        sharedExe := libDir "\" baseDllName
 
-        if (A_IsCompiled && FileExist(A_ScriptDir "\ahk-xaml.dll")) {
-            targetExe := A_ScriptDir "\ahk-xaml.dll"
+        if (A_IsCompiled && FileExist(A_ScriptDir "\" baseDllName)) {
+            targetExe := A_ScriptDir "\" baseDllName
         } else if (!A_IsCompiled) {
             ; Development Mode: Compile generic engine once to the lib directory if it doesn't exist
             if !FileExist(sharedExe) {
@@ -269,7 +270,7 @@ class XAMLHost {
             ; Production Mode: Extract the embedded, pre-compiled generic engine directly.
             ; No C# compiler or source code is required on the user's machine.
             if !FileExist(targetExe)
-                FileInstall("ahk-xaml.dll", targetExe, 1)
+                FileInstall("ahk-xaml.dll", targetExe, 1) ; NOTE: FileInstall must take a literal string. If WebView is needed, users must ensure they include the correct DLL in their production build manually or we default to ahk-xaml.dll
         }
 
         if FileExist(this.errLog)
@@ -423,7 +424,7 @@ XAML_TEMPLATE := '
             TextElement.Foreground="{DynamicResource TextMain}" FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif">
         
         <WindowChrome.WindowChrome>
-            <WindowChrome GlassFrameThickness="-1" CaptionHeight="50" CornerRadius="{DynamicResource WindowRadius}" />
+            <WindowChrome GlassFrameThickness="-1" CaptionHeight="%CaptionHeight%" CornerRadius="{DynamicResource WindowRadius}" />
         </WindowChrome.WindowChrome>
     
         %components%

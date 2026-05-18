@@ -1,4 +1,5 @@
 #Requires AutoHotkey v2.0
+#Include "../lib/XAML_Config.ahk"
 #Include "../lib/XAML_Host.ahk"
 #Include "../lib/XAML_Generator.ahk"
 
@@ -13,5 +14,6 @@ btn.SetProp("TotallyFakeProperty", "ThisWillCrash")
 CompiledMarkup := X.Compile()
 
 ; Initialize and start the UI
-ui := XAMLHost(StrReplace(XAML_TEMPLATE, "%app%", CompiledMarkup))
+tmp := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", "50")
+ui := XAMLHost(StrReplace(tmp, "%app%", CompiledMarkup))
 ui.Show()

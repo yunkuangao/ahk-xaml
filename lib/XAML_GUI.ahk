@@ -20,6 +20,7 @@ class XAML_GUI {
         this.showBurger := hasOpt("BurgerMenu") ? getOpt("BurgerMenu") : true
         this.showMinMax := hasOpt("MinMaxButtons") ? getOpt("MinMaxButtons") : true
         this.showIcon := hasOpt("AppIcon") ? getOpt("AppIcon") : true
+        this.titleBarHeight := hasOpt("TitleBarHeight") ? getOpt("TitleBarHeight") : 50
 
         ; Expose the root generator for customization
         this.X := XAML_Generator("Grid").Name("AppGrid").Background("{DynamicResource BgColor}").Focusable("True")
@@ -36,7 +37,7 @@ class XAML_GUI {
         }
 
         this.main := this.X.Add("Grid").Grid_Column(1)
-        this.main.Rows("50", "*", "Auto")
+        this.main.Rows(String(this.titleBarHeight), "*", "Auto")
 
         dragArea := this.main.Add("Border").Name("DragArea").Grid_Row(0).Background("{x:Null}").Cursor("Arrow").SetProp("Panel.ZIndex", "100")
         this.BuildWindowControls(dragArea)
@@ -66,7 +67,7 @@ class XAML_GUI {
         X.DefineTemplate("PageTitle", { FontSize: 28, FontWeight: "SemiBold", Foreground: "{DynamicResource TextMain}", Margin: "0" })
         X.DefineTemplate("BodyText", { FontSize: 13, FontWeight: "Normal", TextWrapping: "Wrap" })
         X.DefineTemplate("CardPanel", { BorderBrush: "{DynamicResource ControlBorder}", BorderThickness: 1, CornerRadius: 6, Background: "{DynamicResource ControlBg}" })
-        
+
         IconButtonTemplate(el) {
             el.Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").FontWeight("Bold")
             el.InjectResources('<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="15"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style TargetType="RepeatButton"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="{TemplateBinding Background}" CornerRadius="15"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style TargetType="ToggleButton"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton"><Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="15" BorderBrush="{DynamicResource ControlBorder}" BorderThickness="1" Padding="8,4"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBgHover}"/><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
@@ -84,7 +85,8 @@ class XAML_GUI {
         sp.Add("TextBlock").Text("THEME ENGINE").Margin("0,0,0,5")
         themeCombo := sp.Add("ComboBox").Name("ComboTheme").Height(35).Margin("0,0,0,15")
         try {
-            Loop Parse, IniRead("themes.ini"), "`n", "`r"
+            iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
+            Loop Parse, IniRead(iniPath), "`n", "`r"
                 themeCombo.Add("ComboBoxItem").Content(A_LoopField)
         }
         themeCombo.SelectedIndex(0)
@@ -103,17 +105,17 @@ class XAML_GUI {
         grid := container.Add("Grid")
 
         leftSp := grid.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").Margin("15,0,0,0")
-        
+
         if (this.showBurger) {
             leftSp.Add("ToggleButton").Name("BtnToggleSidebar").Style("{StaticResource HamburgerButton}").WindowChrome_IsHitTestVisibleInChrome("True").ToolTip("Toggle Sidebar (Ctrl+B)").Margin("0,0,10,0")
         }
 
         titleSp := leftSp.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").IsHitTestVisible("False")
-        
+
         if (this.showIcon) {
             titleSp.Add("Image").Name("AppIcon").Width(16).Height(16).Margin("0,0,10,0")
         }
-        
+
         titleSp.Add("TextBlock").Name("AppTitle").Text(this.title).Foreground("{DynamicResource TextMain}").FontSize(12).FontWeight("SemiBold")
 
         winBtns := grid.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").VerticalAlignment("Top")
@@ -122,16 +124,16 @@ class XAML_GUI {
         CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
 
         if (this.showMinMax) {
-            minBtn := winBtns.Add("Button").Name("BtnMinimize").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(35).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Minimize")
+            minBtn := winBtns.Add("Button").Name("BtnMinimize").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(String(this.titleBarHeight)).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Minimize")
             minBtn.InjectResources(ChromeBtnTemplate)
             minBtn.Add("TextBlock").Text(Chr(0xE921)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
 
-            maxBtn := winBtns.Add("Button").Name("BtnMaximize").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(35).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Maximize")
+            maxBtn := winBtns.Add("Button").Name("BtnMaximize").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(String(this.titleBarHeight)).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Maximize")
             maxBtn.InjectResources(ChromeBtnTemplate)
             maxBtn.Add("TextBlock").Name("BtnMaximizeTxt").Text(Chr(0xE922)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
         }
 
-        closeBtn := winBtns.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(35).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Close Application")
+        closeBtn := winBtns.Add("Button").Name("BtnClose").WindowChrome_IsHitTestVisibleInChrome("True").Width(45).Height(String(this.titleBarHeight)).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Cursor("Hand").ToolTip("Close Application")
         closeBtn.InjectResources(CloseBtnTemplate)
         closeBtn.Add("TextBlock").Text(Chr(0xE8BB)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
     }
@@ -151,7 +153,8 @@ class XAML_GUI {
             this.xamlString := ""
             this.host := XAMLHost("", outFile, options*)
         } else {
-            this.xamlString := StrReplace(XAML_TEMPLATE, "%app%", this.X.Compile())
+            this.xamlString := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", this.titleBarHeight)
+            this.xamlString := StrReplace(this.xamlString, "%app%", this.X.Compile())
             this.host := XAMLHost(this.xamlString, outFile, options*)
         }
         this.BindBaseEvents()
@@ -190,7 +193,7 @@ class XAML_GUI {
 
         this.host.OnEvent("ComboTheme", "SelectionChanged", ObjBindMethod(this, "ThemeChanged"))
         this.host.OnEvent("ComboScale", "SelectionChanged", ObjBindMethod(this, "ScaleChanged"))
-        
+
         if (this.showBurger) {
             this.host.OnEvent("BtnToggleSidebar", "Click", ObjBindMethod(this, "OnSidebarClick"))
             this.host.Track("BtnToggleSidebar")
@@ -223,12 +226,12 @@ class XAML_GUI {
         this.host.Update("Window", "DWM", "2,1")
         this.host.Update("Window", "Title", this.title)
 
-        hIcon := LoadPicture("shell32.dll", "Icon15", &ImageType := 1)
+        hIcon := LoadPicture("shell32.dll", "Icon26", &ImageType := 1)
         this.host.Update("Window", "Icon", "HICON:" hIcon)
-        TraySetIcon("shell32.dll", 15)
+        TraySetIcon("shell32.dll", 26)
 
         this.host.Update("AppTitle", "Text", this.title)
-        
+
         if (this.showIcon) {
             this.host.Update("AppIcon", "Source", "HICON:" hIcon)
         }
@@ -239,7 +242,7 @@ class XAML_GUI {
         for _, tok in this.tokenizers {
             tok.RenderTags()
         }
-        
+
         ; Force window to foreground on load
         if (this.host.wpfHwnd) {
             try WinActivate("ahk_id " this.host.wpfHwnd)
@@ -251,7 +254,8 @@ class XAML_GUI {
             return
         theme := state["ComboTheme"]
         try {
-            themeData := IniRead("themes.ini", theme)
+            iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
+            themeData := IniRead(iniPath, theme)
             Loop Parse, themeData, "`n", "`r" {
                 parts := StrSplit(A_LoopField, "=", " `t", 2)
                 if (parts.Length == 2) {
@@ -362,18 +366,18 @@ class XAML_GUI {
         this.ih.KeyOpt("{LCtrl}{RCtrl}{LAlt}{RAlt}{LShift}{RShift}{LWin}{RWin}", "-E")
         this.ih.Start()
         this.ih.Wait()
-        
+
         if (this.focusedInput != ctrl || !this.ih)
             return
-            
+
         key := this.ih.EndKey != "" ? this.ih.EndKey : this.ih.Input
         this.ih := ""
-        
+
         if (key == "Escape") {
             this.host.Update("AppGrid", "Focus", "True")
             return
         }
-        
+
         mods := ""
         if GetKeyState("Ctrl", "P")
             mods .= "^"
@@ -383,7 +387,7 @@ class XAML_GUI {
             mods .= "!"
         if GetKeyState("LWin", "P") || GetKeyState("RWin", "P")
             mods .= "#"
-            
+
         if (key == "Backspace") {
             newBind := ""
         } else if (key != "") {
@@ -391,11 +395,11 @@ class XAML_GUI {
         } else {
             newBind := ""
         }
-        
+
         this.host.Update(ctrl, "Text", newBind)
         if (this.hotkeyBoxes[ctrl].onChange)
             this.hotkeyBoxes[ctrl].onChange.Call(newBind)
-            
+
         this.host.Update("AppGrid", "Focus", "True")
     }
 
@@ -409,7 +413,8 @@ class XAML_GUI {
         HotIf
 
         HotIf (*) => WinActive("ahk_id " this.host.wpfHwnd)
-        Hotkey "^b", (*) => this.host.Update("BtnToggleSidebar", "Invoke", "1"), "On"
+        if (this.showBurger)
+            Hotkey "^b", (*) => this.host.Update("BtnToggleSidebar", "Invoke", "1"), "On"
         HotIf
     }
 

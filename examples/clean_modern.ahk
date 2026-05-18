@@ -6,7 +6,7 @@
 #Include "../lib/XAML_Components.ahk"
 
 ; --- Super Basic Example ---
-; Here we pass options to the XAML_GUI constructor to disable the sidebar, 
+; Here we pass options to the XAML_GUI constructor to disable the sidebar,
 ; the hamburger menu button, and the app icon, resulting in a clean, minimal interface.
 options := Map("Sidebar", false, "BurgerMenu", false, "AppIcon", false)
 
@@ -43,11 +43,11 @@ app.Show()
 OnLoginClick(state) {
     user := state["InputUser"]
     pass := state["InputPass"]
-    
+
     if (user == "" || pass == "") {
         app.ShowSnackbar("Please fill in all fields.")
         return
     }
-    
+
     MsgBox("Logged in as " user)
 }

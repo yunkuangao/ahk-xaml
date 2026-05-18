@@ -1,9 +1,10 @@
 #Requires AutoHotkey v2.0
-#Include "..\lib\XAML_Host.ahk"
-#Include "..\lib\XAML_Dialog.ahk"
-#Include "..\lib\XAML_Components.ahk"
-#Include "..\lib\XAML_Adv_Components.ahk"
-#Include "..\lib\XAML_GUI.ahk"
+#Include "..\..\lib\XAML_Host.ahk"
+#Include "..\..\lib\XAML_Dialog.ahk"
+#Include "..\..\lib\XAML_Components.ahk"
+#Include "..\..\lib\XAML_Adv_Components.ahk"
+#Include "..\..\lib\XAML_GUI.ahk"
+#Include "..\data/MockData.ahk"
 
 ; Setup standard UI without the built-in sidebar/tabs, so we can use our new NavigationView
 options := Map("Sidebar", true, "BurgerMenu", true)
@@ -52,18 +53,7 @@ c3sp.Add("TextBlock").Text("SYSTEM ERRORS").Foreground("{DynamicResource TextSub
 c3sp.Sparkline([5, 2, 0, 8, 3, 1, 0, 4, 2, 0, 1, 0], 150, 40, "#FFCC00", "Bar")
 
 docBdr := dashGrid.Add("Border").Grid_Row(2).Use("CardPanel").Padding("20")
-mdText := "
-(
-    # Project Documentation
-    ## Overview
-    This is a demonstration of the dynamic MarkdownRenderer control.
-    
-    ### Features
-    - Native WPF Runs and Blocks
-    - Dynamic style mapping
-    - No HTML rendering overhead
-    - Supports **bold text** dynamically!
-)"
+mdText := Example_MockData.GetMockMarkdownText()
 docSp := docBdr.Add("Grid")
 docSp.Rows("Auto", "*")
 
@@ -91,15 +81,7 @@ kanbanGrid.Add("TextBlock").Text("Task Board").Grid_Row(0).FontSize("24").FontWe
 
 kb := kanbanGrid.KanbanBoard("ProjectKanban")
 kb.sv.Grid_Row(2)
-kb.AddColumn("To Do", "#FF3333")
-kb.AddColumn("In Progress", "#FFCC00")
-kb.AddColumn("Done", "#32D74B")
-
-kb.AddCard(1, "Design mockups")
-kb.AddCard(1, "Fix memory leak")
-kb.AddCard(2, "Implement CommandBar")
-kb.AddCard(2, "Refactor XAML Engine")
-kb.AddCard(3, "Write unit tests")
+Example_MockData.PopulateKanbanBoard(kb)
 
 nav.AddPage("Kanban", Chr(0xE8D4), kanbanGrid)
 
@@ -136,18 +118,7 @@ spZ.Add("TextBlock").Text("Zoom Fit").FontSize("12").VerticalAlignment("Center")
 
 ng := nodesGrid.NodeGraph("WorkflowGraph")
 ng.bdr.Grid_Row(2)
-ng.AddNode("Input1", "REST API Source", 40, 60, "Input")
-ng.AddNode("Input2", "Database Polling", 40, 200, "Input")
-ng.AddNode("Filter", "Filter Records", 240, 40, "Process")
-ng.AddNode("Transform", "Transform Data", 240, 160, "Process")
-ng.AddNode("Merge", "Merge Results", 460, 100, "Process")
-ng.AddNode("Output", "Export JSON", 680, 100, "Output")
-
-ng.AddConnection("Input1", "Filter")
-ng.AddConnection("Input2", "Transform")
-ng.AddConnection("Filter", "Merge")
-ng.AddConnection("Transform", "Merge")
-ng.AddConnection("Merge", "Output")
+Example_MockData.PopulateNodeGraph(ng)
 
 nav.AddPage("Node Graph", Chr(0xE9D5), nodesGrid)
 
@@ -258,26 +229,7 @@ propHeader.Add("TextBlock").Text("Auto-generated UI from AHK Objects").Foregroun
 
 propGridContainer := propPage.Add("Grid").Grid_Row(1).Margin("0,0,20,0").Width("400").HorizontalAlignment("Left")
 
-testSettings := Map(
-    "General", Map(
-        "AppName", "AHK Studio",
-        "Version", 2.1,
-        "IsPortable", true,
-        "MaxRecentFiles", 10
-    ),
-    "Editor", Map(
-        "FontFamily", "Consolas",
-        "FontSize", 14,
-        "WordWrap", false,
-        "ShowLineNumbers", true,
-        "TabSize", 4
-    ),
-    "Advanced", Map(
-        "EnableTelemetry", false,
-        "DebugLevel", 3,
-        "CustomArgs", "--verbose"
-    )
-)
+testSettings := Example_MockData.GetMockSettingsMap()
 
 pg := propGridContainer.PropertyGrid(testSettings, "MySettingsGrid")
 
@@ -361,7 +313,8 @@ UpdateSvgThemeBase(state, ctrl, event) {
     themeName := state["ComboTheme"]
     baseColor := "#1E1E1E"
     try {
-        themeData := IniRead("themes.ini", themeName)
+        iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
+        themeData := IniRead(iniPath, themeName)
         Loop Parse, themeData, "`n", "`r" {
             parts := StrSplit(A_LoopField, "=", " `t", 2)
             if (parts.Length == 2 && parts[1] == "Resource_DropdownBg") {
@@ -429,7 +382,8 @@ ChangeSvgBgColor(state, ctrl, event) {
     if (res.Status == "OK") {
         baseColor := "#1E1E1E"
         try {
-            themeData := IniRead("themes.ini", themeName)
+            iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
+            themeData := IniRead(iniPath, themeName)
             Loop Parse, themeData, "`n", "`r" {
                 parts := StrSplit(A_LoopField, "=", " `t", 2)
                 if (parts.Length == 2 && parts[1] == "Resource_DropdownBg") {
