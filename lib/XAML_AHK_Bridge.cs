@@ -537,6 +537,9 @@ public class AhkWpfEngine : Application {
                     }
                     else val = cb.Text;
                 }
+                else if (c is ListBox) {
+                    val = ((ListBox)c).SelectedIndex.ToString();
+                }
                 else if (c is TreeView) {
                     TreeView tv = (TreeView)c;
                     if (tv.SelectedItem is TreeViewItem) {

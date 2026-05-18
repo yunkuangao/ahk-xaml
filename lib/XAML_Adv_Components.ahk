@@ -2373,106 +2373,455 @@ class XFlyout {
 }
 
 ; ==============================================================================
-; COMMAND PALETTE (Auto-Suggest Flyout)
+; COMMAND PALETTE (Robust, Feature-Rich VS Code-Style)
 ; ==============================================================================
 
 class XCommandPalette {
     __New(parentXAML, name := "") {
         this.id := name != "" ? name : "CmdPalette_" XCommandPalette.Count()
-        this.commands := Map()
-        this.homeCommands := []
+        this.commands := Map()        ; id => { label, icon, shortcut, category, callback }
+        this.commandOrder := []       ; Ordered list of command IDs
+        this.homeCommands := []       ; IDs shown on home screen
+        this.recentCommands := []     ; Last executed commands (most recent first)
+        this.maxRecent := 5
+        this.modes := Map()           ; prefix => { label, filterFn }
+        this.customDataSource := ""   ; External data source function
         this.ui := ""
-        
-        ; Create the Flyout
-        this.flyout := XFlyout(this.id, "Top", "Overlay", 400, true)
-        this.flyout.Build(parentXAML).HorizontalAlignment("Center").Margin("0,10,0,0").CornerRadius("6")
-        this.flyout.container.Background("{DynamicResource SolidSidebar}").BorderBrush("{DynamicResource SolidBorder}").BorderThickness("1").Width("600").Height("300")
-        
-        grid := this.flyout.container.Add("Grid").Margin("10")
-        grid.Rows("Auto", "*")
-        
-        this.searchBox := grid.Add("TextBox").Name(this.id "_Search").Text("> ").Background("{DynamicResource SolidControl}").Foreground("{DynamicResource TextMain}").BorderThickness("1").BorderBrush("{DynamicResource Accent}").Padding("10,8").FontSize(14)
-        
-        this.listSp := grid.Add("StackPanel").Grid_Row(1).Margin("0,10,0,0")
-        this.listTitle := this.listSp.Add("TextBlock").Name(this.id "_Title").Text("recently used").Foreground("{DynamicResource TextSub}").FontSize(11).Margin("5,0,0,5")
-        
-        this.listBox := this.listSp.Add("ListBox").Name(this.id "_List").Background("Transparent").BorderThickness("0").Foreground("{DynamicResource TextMain}").Margin("0,5,0,0")
-        this.listBox.InjectResources('<Style TargetType="ListBoxItem"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="10,5"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="bg" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bg" Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="bg" Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
-        
-        this.listBox.Add("ListBox.ItemTemplate").Add("DataTemplate").Add("TextBlock").Text("{Binding}").Foreground("{DynamicResource TextMain}")
+        this.isOpen := false
+        this.selectedIndex := -1      ; Currently highlighted result (-1 = none)
+        this.currentResults := []     ; Array of { id, label } for current visible results
+        this.escHotkeyBound := false
+        this.navHotkeyBound := false
+
+        ; --- Build the Flyout ---
+        this.flyout := XFlyout(this.id, "Top", "Overlay", 380, true)
+        this.flyout.Build(parentXAML).HorizontalAlignment("Center").Margin("0,10,0,0").CornerRadius("8")
+        this.flyout.container.Background("{DynamicResource SolidSidebar}").BorderBrush("{DynamicResource SolidBorder}").BorderThickness("1").Width("620")
+
+        mainGrid := this.flyout.container.Add("Grid")
+        mainGrid.Rows("Auto", "Auto", "*")
+
+        ; Search Box with icon
+        searchBorder := mainGrid.Add("Border").Grid_Row(0).Background("{DynamicResource SolidControl}").BorderBrush("{DynamicResource Accent}").BorderThickness("0,0,0,2").Padding("0")
+        searchGrid := searchBorder.Add("Grid")
+        searchGrid.Cols("Auto", "*")
+        searchGrid.Add("TextBlock").Text(Chr(0xE721)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Foreground("{DynamicResource Accent}").FontSize(14).VerticalAlignment("Center").Margin("14,0,0,0").IsHitTestVisible("False")
+        this.searchBox := searchGrid.Add("TextBox").Name(this.id "_Search").Grid_Column(1).Text("").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness("0").Padding("10,12").FontSize(14).CaretBrush("{DynamicResource Accent}")
+
+        ; Category Label
+        this.listTitle := mainGrid.Add("TextBlock").Name(this.id "_Title").Grid_Row(1).Text("recently used").Foreground("{DynamicResource TextSub}").FontSize(10).FontWeight("SemiBold").Margin("14,8,14,4").Opacity("0.7")
+
+        ; Scrollable results area
+        this.resultsList := mainGrid.Add("ListBox").Name(this.id "_Results").Grid_Row(2).MaxHeight("300")
+        this.resultsList.Background("Transparent").BorderThickness("0").Margin("6,0,6,6").ScrollViewer_HorizontalScrollBarVisibility("Disabled")
+        this.resultsList.ItemContainerStyle('<Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,0,2"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger></Style.Triggers></Style>')
+
+        ; --- Register built-in help mode ---
+        this.AddMode("?", "Help", ObjBindMethod(this, "GetHelpItems"))
     }
-    
-    AddCommand(id, text) {
-        this.commands[id] := text
+
+    ; =========================================================================
+    ; COMMAND REGISTRATION
+    ; =========================================================================
+
+    AddCommand(id, label, opts := "") {
+        cmd := { id: id, label: label, icon: "", shortcut: "", category: "", callback: "" }
+        if (IsObject(opts)) {
+            if (opts.HasProp("Icon"))
+                cmd.icon := opts.Icon
+            if (opts.HasProp("Shortcut"))
+                cmd.shortcut := opts.Shortcut
+            if (opts.HasProp("Category"))
+                cmd.category := opts.Category
+            if (opts.HasProp("Callback"))
+                cmd.callback := opts.Callback
+        }
+        this.commands[id] := cmd
+        this.commandOrder.Push(id)
     }
-    
+
     SetHomeCommands(idsArray) {
         this.homeCommands := idsArray
     }
-    
+
+    AddMode(prefix, label, filterFn) {
+        this.modes[prefix] := { label: label, filterFn: filterFn }
+    }
+
+    SetDataSource(filterFn) {
+        this.customDataSource := filterFn
+    }
+
+    ; =========================================================================
+    ; BINDING & LIFECYCLE
+    ; =========================================================================
+
     Bind(uiObj, hotkeyStr := "") {
         this.ui := uiObj
-        this.flyout.Bind(uiObj, hotkeyStr)
+        this.flyout.Bind(uiObj, "")
+
+        ; Track the flyout state toggle to detect open/close
+        uiObj.OnEvent(this.flyout.stateName, "Click", ObjBindMethod(this, "OnFlyoutStateChanged"))
+        uiObj.Track(this.flyout.stateName)
+
+        ; Text changes drive filtering
+        uiObj.OnEvent(this.id "_Search", "TextChanged", ObjBindMethod(this, "OnSearchChanged"))
+
+        ; Keyboard Navigation via WPF PreviewKeyDown
+        uiObj.OnEvent(this.id "_Search", "PreviewKeyDown", ObjBindMethod(this, "OnPreviewKeyDown"))
         
-        uiObj.OnEvent(this.id "_Search", "TextChanged", (state, ctrl, *) => this.FilterList(state[ctrl]))
-        uiObj.OnEvent(this.id "_List", "SelectionChanged", (state, ctrl, *) => this.OnSelect(state[ctrl]))
-        
-        ; Initialize home state
-        this.FilterList("> ")
+        ; Clicks via ListBox SelectionChanged
+        uiObj.Track(this.id "_Results")
+        uiObj.OnEvent(this.id "_Results", "SelectionChanged", ObjBindMethod(this, "OnListSelection"))
+
+        ; Register the global hotkey to open
+        if (hotkeyStr != "") {
+            this.openHotkey := hotkeyStr
+            Hotkey(hotkeyStr, (*) => this.Open(), "On")
+        }
     }
-    
-    FilterList(query) {
+
+    ; =========================================================================
+    ; OPEN / CLOSE
+    ; =========================================================================
+
+    Open() {
         if (!this.ui)
             return
-            
-        ; Clean query
-        query := Trim(query)
-        if (SubStr(query, 1, 1) == ">")
-            query := Trim(SubStr(query, 2))
-            
-        this.ui.Update(this.id "_List", "ClearItems", "")
+
+        ; Re-populate the home screen before opening
+        this.ui.Update(this.id "_Search", "Text", "")
+        this.FilterList("")
+
+        this.flyout.Toggle()
+        this.ui.Update(this.id "_Search", "Focus", "True")
+        this.isOpen := true
+    }
+
+    Close() {
+        this.flyout.Toggle()
+        this.isOpen := false
+    }
+
+    OnFlyoutStateChanged(state, ctrl, event) {
+        this.isOpen := (state[this.flyout.stateName] == "True")
+        if (this.isOpen) {
+            this.ui.Update(this.id "_Search", "Focus", "True")
+        }
+    }
+
+    ; =========================================================================
+    ; KEYBOARD NAVIGATION
+    ; =========================================================================
+
+
+        try {
+            HotIf (*) => this.isOpen && WinActive("ahk_id " this.ui.wpfHwnd)
+            Hotkey "Escape", "Off"
+            Hotkey "Up", "Off"
+            Hotkey "Down", "Off"
+            Hotkey "Enter", "Off"
+            Hotkey "Home", "Off"
+            Hotkey "End", "Off"
+            HotIf
+        }
+    }
+
+    OnListSelection(state, ctrl, ev) {
+        if (!this.isOpen)
+            return
+        if (!state.Has(this.id "_Results"))
+            return
+        idxStr := state[this.id "_Results"]
+        if (idxStr == "" || idxStr == "-1")
+            return
         
-        if (query == "") {
-            this.ui.Update(this.id "_Title", "Text", "recently used")
-            for id in this.homeCommands {
-                if (this.commands.Has(id))
-                    this.ui.Update(this.id "_List", "AddItem", this.commands[id])
+        idx := Integer(idxStr)
+        if (idx >= 0 && idx < this.currentResults.Length) {
+            cmdId := this.currentResults[idx + 1].id
+            ; Deselect so subsequent clicks on the same item fire again
+            this.ui.Update(this.id "_Results", "SelectedIndex", "-1")
+            this.ExecuteCommand(cmdId)
+        }
+    }
+
+    OnEscape(*) {
+        if (!this.isOpen)
+            return
+        this.Close()
+    }
+
+    OnArrowUp(*) {
+        if (!this.isOpen || this.currentResults.Length == 0)
+            return
+        if (this.selectedIndex <= 0)
+            this.selectedIndex := this.currentResults.Length - 1
+        else
+            this.selectedIndex--
+        this.HighlightSelected()
+    }
+
+    OnArrowDown(*) {
+        if (!this.isOpen || this.currentResults.Length == 0)
+            return
+        if (this.selectedIndex >= this.currentResults.Length - 1)
+            this.selectedIndex := 0
+        else
+            this.selectedIndex++
+        this.HighlightSelected()
+    }
+
+    OnEnter(*) {
+        if (!this.isOpen)
+            return
+        if (this.selectedIndex >= 0 && this.selectedIndex < this.currentResults.Length) {
+            result := this.currentResults[this.selectedIndex + 1]
+            this.ExecuteCommand(result.id)
+        } else if (this.currentResults.Length > 0) {
+            ; Execute first result if nothing explicitly selected
+            result := this.currentResults[1]
+            this.ExecuteCommand(result.id)
+        }
+    }
+
+    OnHomeKey(*) {
+        if (!this.isOpen || this.currentResults.Length == 0)
+            return
+        this.selectedIndex := 0
+        this.HighlightSelected()
+    }
+
+    OnEndKey(*) {
+        if (!this.isOpen || this.currentResults.Length == 0)
+            return
+        this.selectedIndex := this.currentResults.Length - 1
+        this.HighlightSelected()
+    }
+
+    ; =========================================================================
+    ; SEARCH & FILTERING
+    ; =========================================================================
+
+    OnSearchChanged(state, ctrl, event) {
+        if (!this.ui || !state.Has(ctrl))
+            return
+        query := state[ctrl]
+
+        ; Always move caret to end
+        this.ui.Update(this.id "_Search", "CaretIndex", "9999")
+
+        this.FilterAndRender(query)
+    }
+
+    FilterAndRender(query) {
+        rawQuery := Trim(query)
+        this.currentResults := []
+        this.selectedIndex := 0
+        titleText := ""
+        resultItems := []
+
+        ; Check for mode prefix
+        if (rawQuery == "") {
+            ; HOME SCREEN
+            titleText := "recently used"
+            if (this.recentCommands.Length > 0) {
+                for id in this.recentCommands {
+                    if (this.commands.Has(id))
+                        resultItems.Push(this.commands[id])
+                }
+            } else {
+                for id in this.homeCommands {
+                    if (this.commands.Has(id))
+                        resultItems.Push(this.commands[id])
+                }
             }
         } else {
-            this.ui.Update(this.id "_Title", "Text", "search results")
-            for id, text in this.commands {
-                if (InStr(text, query))
-                    this.ui.Update(this.id "_List", "AddItem", text)
+            ; Check mode prefixes
+            prefix := SubStr(rawQuery, 1, 1)
+            handled := false
+
+            if (this.modes.Has(prefix)) {
+                mode := this.modes[prefix]
+                titleText := mode.label
+                searchTerm := Trim(SubStr(rawQuery, 2))
+                resultItems := mode.filterFn.Call(searchTerm)
+                handled := true
+            }
+
+            if (!handled) {
+                if (prefix == ">") {
+                    ; Command mode
+                    titleText := "commands"
+                    searchTerm := Trim(SubStr(rawQuery, 2))
+                    resultItems := this.FilterCommands(searchTerm)
+                } else {
+                    ; General search (no prefix)
+                    titleText := "search results"
+                    resultItems := this.FilterCommands(rawQuery)
+                }
             }
         }
+
+        ; Use custom data source if set
+        if (this.customDataSource != "" && rawQuery != "") {
+            try {
+                customResults := this.customDataSource.Call(rawQuery)
+                if (IsObject(customResults)) {
+                    for item in customResults
+                        resultItems.Push(item)
+                }
+            }
+        }
+
+        ; Render
+        this.RenderResults(titleText, resultItems)
     }
-    
-    OnSelect(selectedText) {
-        if (selectedText == "" || !this.ui)
+
+    FilterCommands(searchTerm) {
+        results := []
+        if (searchTerm == "") {
+            ; Show all commands
+            for id in this.commandOrder {
+                if (this.commands.Has(id))
+                    results.Push(this.commands[id])
+            }
+        } else {
+            ; Fuzzy-ish filter: case-insensitive substring match
+            for id in this.commandOrder {
+                if (!this.commands.Has(id))
+                    continue
+                cmd := this.commands[id]
+                if (InStr(cmd.label, searchTerm))
+                    results.Push(cmd)
+            }
+        }
+        return results
+    }
+
+    GetHelpItems(searchTerm := "") {
+        help := []
+        help.Push({ id: "_help_commands", label: "Type > to search commands", icon: Chr(0xE756), shortcut: "", category: "help", callback: "" })
+        help.Push({ id: "_help_search", label: "Type to search across all commands", icon: Chr(0xE721), shortcut: "", category: "help", callback: "" })
+        help.Push({ id: "_help_navigate", label: "Use ↑↓ arrows to navigate, Enter to select", icon: Chr(0xE76C), shortcut: "", category: "help", callback: "" })
+        help.Push({ id: "_help_escape", label: "Press Escape to close the palette", icon: Chr(0xE7E8), shortcut: "Esc", category: "help", callback: "" })
+        help.Push({ id: "_help_home", label: "Clear the input to return to home screen", icon: Chr(0xE80F), shortcut: "", category: "help", callback: "" })
+        if (searchTerm != "") {
+            filtered := []
+            for item in help {
+                if (InStr(item.label, searchTerm))
+                    filtered.Push(item)
+            }
+            return filtered
+        }
+        return help
+    }
+
+    ShowHome() {
+        this.FilterAndRender("")
+    }
+
+    ; =========================================================================
+    ; RENDERING
+    ; =========================================================================
+
+    RenderResults(titleText, items) {
+        if (!this.ui)
             return
-            
-        ; Find ID from text
-        selectedId := ""
-        for id, text in this.commands {
-            if (text == selectedText) {
-                selectedId := id
-                break
+
+        this.ui.Update(this.id "_Title", "Text", titleText)
+
+        ; Clear existing results
+        this.ui.Update(this.id "_Results", "ClearItems", "")
+
+        this.currentResults := []
+        for item in items {
+            this.currentResults.Push(item)
+        }
+
+        ; Dynamically inject result grids into the ListBox
+        for item in this.currentResults {
+            iconText := item.icon != "" ? item.icon : Chr(0xE756)
+            shortcutText := item.HasProp("shortcut") ? item.shortcut : ""
+            if (!IsObject(shortcutText))
+                shortcutText := String(shortcutText)
+
+            shortcutBlock := ""
+            if (shortcutText != "") {
+                shortcutBlock := '<Border Background="{DynamicResource SolidControl}" CornerRadius="3" Padding="6,2" VerticalAlignment="Center" Grid.Column="2"><TextBlock Text="' shortcutText '" Foreground="{DynamicResource TextSub}" FontSize="11" FontFamily="Consolas, Segoe UI"/></Border>'
             }
+
+            xamlStr := '<Border CornerRadius="4" Padding="10,7" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Cursor="Hand"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Grid.Column="0" Text="' iconText '" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' item.label '" Foreground="{DynamicResource TextMain}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>' shortcutBlock '</Grid></Border>'
+
+            this.ui.Update(this.id "_Results", "AddXamlItem", xamlStr)
         }
-        
-        if (selectedId != "") {
-            ; Close flyout
-            this.flyout.SetState(Map(), false)
-            
-            ; Reset search box and list selection natively via Update
-            this.ui.Update(this.id "_Search", "Text", "> ")
-            
-            ; Fire global callback
-            if (HasMethod(this, "OnCommandSelected"))
-                this.OnCommandSelected(selectedId)
-        }
+
+        this.HighlightSelected()
     }
-    
+
+    HighlightSelected() {
+        if (!this.ui || this.currentResults.Length == 0)
+            return
+
+        ; Update the native ListBox selection
+        this.ui.Update(this.id "_Results", "SelectedIndex", String(this.selectedIndex))
+    }
+
+    ; =========================================================================
+    ; COMMAND EXECUTION
+    ; =========================================================================
+
+    ExecuteCommand(id) {
+        if (!this.ui)
+            return
+
+        ; Skip help items (they're informational only)
+        if (SubStr(id, 1, 6) == "_help_") {
+            ; For help items: insert the suggested prefix into the search box
+            if (id == "_help_commands") {
+                this.ui.Update(this.id "_Search", "Text", ">")
+                this.ui.Update(this.id "_Search", "Focus", "True")
+                this.ui.Update(this.id "_Search", "CaretIndex", "9999")
+                return
+            }
+            return
+        }
+
+        ; Track in recent history
+        this.AddToRecent(id)
+
+        ; Close palette
+        this.Close()
+
+        ; Fire per-command callback if set
+        if (this.commands.Has(id) && this.commands[id].callback != "") {
+            try this.commands[id].callback.Call(id)
+            return
+        }
+
+        ; Fire global callback
+        if (HasMethod(this, "OnCommandSelected"))
+            this.OnCommandSelected(id)
+    }
+
+    AddToRecent(id) {
+        ; Remove if already in recent
+        newRecent := []
+        for rid in this.recentCommands {
+            if (rid != id)
+                newRecent.Push(rid)
+        }
+        ; Prepend
+        newRecent.InsertAt(1, id)
+        ; Trim to max
+        if (newRecent.Length > this.maxRecent)
+            newRecent.RemoveAt(this.maxRecent + 1)
+        this.recentCommands := newRecent
+    }
+
+    ; =========================================================================
+    ; UTILITY
+    ; =========================================================================
+
     static Count() {
         static counter := 0
         return ++counter
