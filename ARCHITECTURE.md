@@ -31,14 +31,14 @@
 │                    AHK Process                          │
 │                                                         │
 │  ┌──────────────┐   ┌─────────────────┐                 │
-│  │ XAML_GUI.ahk │──▶│ XAML_Generator   │                │
+│  │ XAML_GUI.ahk │──>│ XAML_Generator  │                 │
 │  │ (App Shell)  │   │ (AST → XAML)    │                 │
 │  └──────┬───────┘   └────────┬────────┘                 │
 │         │                    │                          │
 │         ▼                    ▼                          │
 │  ┌──────────────────────────────────┐                   │
 │  │          XAML_Host.ahk           │                   │
-│  │  • Compiles C# engine (csc.exe) │                   │
+│  │  • Compiles C# engine (csc.exe)  │                   │
 │  │  • Launches WPF process          │                   │
 │  │  • Receives WM_COPYDATA events   │                   │
 │  │  • Dispatches to AHK callbacks   │                   │

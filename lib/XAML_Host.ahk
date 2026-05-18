@@ -1,6 +1,93 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 
+
+class CodeBox {
+    static Init() {
+        if !DllCall("GetModuleHandle", "Str", "msftedit.dll", "Ptr")
+            DllCall("LoadLibrary", "Str", "msftedit.dll", "Ptr")
+    }
+
+    static Add(guiObj, options, text := "", fgColor := 0xE0E0E0) {
+        this.Init()
+
+        ; Extract background option to handle natively for RichEdit
+        bkgColor := 0x1E1E1E
+        if RegExMatch(options, "i)Background([0-9a-fA-F]{6})", &m) {
+            bkgColor := Integer("0x" m[1])
+            options := RegExReplace(options, "i)Background[0-9a-fA-F]{6}", "")
+        }
+
+        ; Normalize newlines to CR for perfectly accurate regex index mapping
+        text := StrReplace(StrReplace(text, "`r`n", "`n"), "`n", "`r")
+
+        ; Base RichEdit properties: WS_VSCROLL | WS_HSCROLL | ES_READONLY | ES_NOHIDESEL | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_MULTILINE
+        ctrl := guiObj.Add("Custom", "ClassRichEdit50W +0x003009C4 " options, "")
+
+        bgrBkg := ((bkgColor & 0xFF0000) >> 16) | (bkgColor & 0x00FF00) | ((bkgColor & 0x0000FF) << 16)
+        SendMessage(0x0443, 0, bgrBkg, ctrl.Hwnd) ; EM_SETBKGNDCOLOR
+
+        SendMessage(0x000C, 0, StrPtr(text), ctrl.Hwnd) ; WM_SETTEXT
+
+        this.SetFormat(ctrl.Hwnd, fgColor, true, false)
+        this.Highlight(ctrl.Hwnd, text)
+
+        return ctrl
+    }
+
+    static Highlight(hwnd, text) {
+        SendMessage(0x000B, 0, 0, hwnd) ; Disable redraw during syntax highlighting
+
+        colors := Map(
+            "Comment", 0x6A9955, "String", 0xCE9178, "Keyword", 0x569CD6,
+            "Type", 0x4EC9B0, "Number", 0xB5CEA8, "Punctuation", 0x8F8F8F,
+            "XMLTag", 0x569CD6, "Error", 0xF44747, "LogAt", 0xC586C0
+        )
+
+        ; Rule priority order is essential (later items overwrite earlier matches)
+        rules := [{ p: "[\{\}\(\)\[\]<>]", c: colors["Punctuation"], b: false }, { p: "\b\d+(\.\d+)?\b", c: colors["Number"], b: false }, { p: "\b(string|int|bool|var|object|double|float|long|Exception)\b", c: colors["Type"], b: true }, { p: "\b(if|else|while|for|foreach|return|class|static|void|public|private|protected|async|await|try|catch|using|namespace|new)\b", c: colors["Keyword"], b: true }, { p: "\b(true|false|null)\b", c: colors["Keyword"], b: true }, { p: "\b(Error|Exception|Fail|Failed|Critical|FATAL|ERROR)\b", c: colors["Error"], b: true }, { p: "\b(at|in|line)\b", c: colors["LogAt"], b: false }, { p: "<\/?[\w:-]+>?", c: colors["XMLTag"], b: true }, { p: '(?m)".*?"', c: colors["String"], b: false }, { p: "(?m)'.*?'", c: colors["String"], b: false }, { p: "(?m)//.*", c: colors["Comment"], b: false }, { p: "(?s)<!--.*?-->", c: colors["Comment"], b: false }, { p: "(?s)/\*.*?\*/", c: colors["Comment"], b: false }
+        ]
+
+        for rule in rules {
+            pos := 1
+            while (match := RegExMatch(text, rule.p, &m, pos)) {
+                this.SetSel(hwnd, match - 1, match - 1 + m.Len[0])
+                this.SetFormat(hwnd, rule.c, false, rule.b)
+                pos := match + m.Len[0]
+            }
+        }
+
+        this.SetSel(hwnd, 0, 0)
+        SendMessage(0x000B, 1, 0, hwnd) ; Re-enable redraw
+        DllCall("InvalidateRect", "Ptr", hwnd, "Ptr", 0, "Int", 1)
+    }
+
+    static SetSel(hwnd, start, end) {
+        cr := Buffer(8, 0)
+        NumPut("Int", start, cr, 0)
+        NumPut("Int", end, cr, 4)
+        SendMessage(0x0437, 0, cr.Ptr, hwnd) ; EM_EXSETSEL
+    }
+
+    static SetFormat(hwnd, colorRGB, isDefault := false, bold := false) {
+        bgr := ((colorRGB & 0xFF0000) >> 16) | (colorRGB & 0x00FF00) | ((colorRGB & 0x0000FF) << 16)
+        cf2 := Buffer(116, 0)
+        NumPut("UInt", 116, cf2, 0)
+
+        mask := 0x40000000 ; CFM_COLOR
+        effects := 0
+        if (bold) {
+            mask |= 0x00000001 ; CFM_BOLD
+            effects |= 0x00000001 ; CFE_BOLD
+        }
+
+        NumPut("UInt", mask, cf2, 4)
+        NumPut("UInt", effects, cf2, 8)
+        NumPut("UInt", bgr, cf2, 20)
+        SendMessage(0x0444, isDefault ? 4 : 1, cf2.Ptr, hwnd) ; EM_SETCHARFORMAT
+    }
+}
+
 class XAMLHost {
     static _instances := Map()
     static _msgHooked := false
@@ -89,27 +176,60 @@ class XAMLHost {
         details := StrReplace(details, " ---> ", "`r`n`r`n---> ")
         details := StrReplace(details, "`r`n", "`n")
         details := StrReplace(details, "`n", "`r`n")
-
-        ; Add an extra break before the first stack trace line to separate the error message
         details := StrReplace(details, "`r`n   at ", "`r`n`r`n   at ", , &_, 1)
 
-        errGui := Gui("+Resize", title)
+        errGui := Gui("+Resize +MinSize800x600", title)
+        errGui.BackColor := "White"
         errGui.MarginX := 20
         errGui.MarginY := 20
 
-        errGui.SetFont("s12 bold cMaroon", "Segoe UI")
-        errGui.Add("Text", "w860", header)
+        errGui.SetFont("s13 bold cD00000", "Segoe UI")
+        headerText := errGui.Add("Text", "w860", header)
 
+        exceptionMsg := ""
+        stackTrace := details
+        if InStr(title, "Compile Error") {
+            lines := StrSplit(details, "`n", "`r")
+            for line in lines {
+                if InStr(line, "error CS") {
+                    exceptionMsg .= line "`n"
+                }
+            }
+            if exceptionMsg != ""
+                exceptionMsg := Trim(exceptionMsg, "`n")
+        } else {
+            pos := InStr(details, "   at ")
+            if (pos > 0) {
+                exceptionMsg := Trim(SubStr(details, 1, pos - 1), "`r`n ")
+                stackTrace := Trim(SubStr(details, pos), "`r`n ")
+            } else {
+                exceptionMsg := details
+                stackTrace := ""
+            }
+        }
+
+        excEdit := ""
+        if (exceptionMsg != "") {
+            ; Use regex to add spacing and indentation
+            exceptionMsg := RegExReplace(exceptionMsg, "m)^([\w\.]+Exception):\s*(.*)", "$1:`r`n    $2")
+            exceptionMsg := RegExReplace(exceptionMsg, "m)^(--->\s*[\w\.]+Exception):\s*(.*)", "`r`n$1:`r`n    $2")
+
+            ; Add empty lines at the top and bottom to create pseudo-padding inside the edit control
+            exceptionMsg := "`r`n" exceptionMsg "`r`n"
+
+            errGui.SetFont("s10 bold cWhite", "Consolas")
+            excEdit := CodeBox.Add(errGui, "y+15 w860 ReadOnly -Wrap -E0x200 Background1E1E1E", exceptionMsg, 0xFFFFFF)
+            lineCount := StrSplit(exceptionMsg, "`n").Length
+            h := Min(200, Max(40, lineCount * 17 + 8))
+            excEdit.Move(, , , h)
+        }
+
+        snipLbl := "", snipEdit := ""
         if (snippet != "") {
-            errGui.SetFont("s10 bold cBlack", "Segoe UI")
-            errGui.Add("Text", "y+10", "Generated XAML Snippet:")
-            errGui.SetFont("s9 norm cBlack", "Consolas")
-            snipEdit := errGui.Add("Edit", "y+5 w860 h150 ReadOnly +VScroll +HScroll -Wrap", snippet)
-
-            errGui.SetFont("s10 bold cBlack", "Segoe UI")
-            errGui.Add("Text", "y+15", "Full Exception Trace:")
-            errGui.SetFont("s9 norm cBlack", "Consolas")
-            errGui.Add("Edit", "y+5 w860 h300 ReadOnly +VScroll +HScroll -Wrap", details)
+            errGui.SetFont("s11 bold c003366", "Segoe UI")
+            snipLbl := errGui.Add("Text", "y+15", "Generated XAML Snippet:")
+            errGui.SetFont("s9 norm cE0E0E0", "Consolas")
+            snipEdit := CodeBox.Add(errGui, "y+5 w860 h150 ReadOnly +VScroll +HScroll -Wrap Background1E1E1E", "`r`n" snippet, 0xE0E0E0)
 
             ; Auto scroll to the '>>' marker
             lines := StrSplit(snippet, "`n", "`r")
@@ -121,17 +241,92 @@ class XAMLHost {
                 }
             }
             if (targetLine > 0) {
-                ; EM_LINESCROLL message
                 SendMessage(0xB6, 0, targetLine > 3 ? targetLine - 3 : targetLine, snipEdit.Hwnd)
             }
-        } else {
-            errGui.SetFont("s9 norm cBlack", "Consolas")
-            errGui.Add("Edit", "y+15 w860 h450 ReadOnly +VScroll +HScroll -Wrap", details)
         }
 
+        errGui.SetFont("s11 bold c003366", "Segoe UI")
+        traceLbl := errGui.Add("Text", "y+15", stackTrace != "" ? "Full Exception Trace:" : "Details:")
+        errGui.SetFont("s9 norm cE0E0E0", "Consolas")
+        traceEdit := CodeBox.Add(errGui, "y+5 w860 h250 ReadOnly +VScroll +HScroll -Wrap Background1E1E1E", "`r`n" (stackTrace != "" ? stackTrace : details), 0xE0E0E0)
+
         errGui.SetFont("s10 norm cBlack", "Segoe UI")
-        btn := errGui.Add("Button", "w120 x390 y+20 Default", "Close")
-        btn.OnEvent("Click", (*) => errGui.Destroy())
+        btnCopy := errGui.Add("Button", "w150 x20 y+20", "📋 Copy to Clipboard")
+        btnExport := errGui.Add("Button", "w150 x+10", "💾 Export to File")
+        btnClose := errGui.Add("Button", "w120 x+340 Default", "Close")
+
+        btnCopy.OnEvent("Click", (*) => CopyToClipboard())
+        CopyToClipboard() {
+            A_Clipboard := header "`r`n`r`n" (snippet ? "XAML SNIPPET:`r`n" snippet "`r`n`r`n" : "") "DETAILS:`r`n" details
+            MsgBox("Error details copied to clipboard.", "Copied", "Iconi 0x40000 T2")
+        }
+
+        btnExport.OnEvent("Click", (*) => ExportLog())
+        ExportLog() {
+            fileSavePath := FileSelect("S", "AhkEngineCrash_" A_Now ".log", "Save Error Log", "Log Files (*.log)")
+            if (fileSavePath != "") {
+                try {
+                    if FileExist(fileSavePath)
+                        FileDelete(fileSavePath)
+                    content := "TIME: " A_Now "`r`n"
+                    content .= "HEADER: " header "`r`n`r`n"
+                    if (snippet)
+                        content .= "XAML SNIPPET:`r`n" snippet "`r`n`r`n"
+                    content .= "EXCEPTION DETAILS:`r`n" details
+                    FileAppend(content, fileSavePath)
+                    MsgBox("Error log saved successfully.", "Export Complete", "Iconi")
+                } catch as err {
+                    MsgBox("Failed to save error log: " err.Message, "Export Failed", "Iconx")
+                }
+            }
+        }
+
+        btnClose.OnEvent("Click", (*) => errGui.Destroy())
+        errGui.OnEvent("Size", Gui_Size)
+
+        Gui_Size(guiObj, minMax, width, height) {
+            if (minMax = -1)
+                return
+            marg := 20
+            availW := width - marg * 2
+
+            headerText.GetPos(&tx, &ty, &tw, &th)
+            headerText.Move(, , availW)
+            currentY := ty + th + 10
+
+            if (excEdit != "") {
+                excEdit.GetPos(&ex, &ey, &ew, &eh)
+                excEdit.Move(, currentY, availW)
+                currentY += eh + 15
+            }
+
+            btnClose.GetPos(&bx, &by, &bw, &bh)
+            btnY := height - marg - bh
+            btnCopy.Move(, btnY)
+            btnExport.Move(, btnY)
+            btnClose.Move(width - marg - bw, btnY)
+
+            availH := btnY - 15 - currentY
+
+            if (snipEdit != "") {
+                snipLbl.GetPos(&slx, &sly, &slw, &slh)
+                snipLbl.Move(, currentY)
+                currentY += slh + 5
+
+                snipH := Max(60, availH * 0.35)
+                snipEdit.Move(, currentY, availW, snipH)
+                currentY += snipH + 15
+                availH := btnY - 15 - currentY
+            }
+
+            traceLbl.GetPos(&tlx, &tly, &tlw, &tlh)
+            traceLbl.Move(, currentY)
+            currentY += tlh + 5
+
+            traceH := Max(60, btnY - 15 - currentY)
+            traceEdit.Move(, currentY, availW, traceH)
+        }
+        btnClose.Focus()
 
         errGui.Show()
         WinWaitClose(errGui)
