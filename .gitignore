@@ -8,3 +8,6 @@ scratch*
 *.exe
 *.xml
 WebView2
+.vscode/
+.vscode/*
+*.json
