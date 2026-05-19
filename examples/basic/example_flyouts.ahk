@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
-#Include "..\lib\XAML_GUI.ahk"
-#Include "..\lib\XAML_Adv_Components.ahk"
+#Include "..\../lib\XAML_GUI.ahk"
+#Include "..\../lib\XAML_Adv_Components.ahk"
 
 ; Initialize App with the built-in sidebar enabled to show they can coexist
 app := XAML_GUI("Flyout Component Demo", { Sidebar: true })

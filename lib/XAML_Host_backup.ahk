@@ -91,8 +91,6 @@ class CodeBox {
 class XAMLHost {
     static _instances := Map()
     static _msgHooked := false
-    static daemonHwnd := 0
-    static daemonReceiver := 0
 
     __New(xaml := "", exePath := "", ownerHwnd := 0) {
         this.id := "WPF_" A_TickCount "_" Random(1000, 9999)
@@ -146,15 +144,6 @@ class XAMLHost {
     }
 
     static Prewarm(exePath := "") {
-        if (!XAMLHost.daemonReceiver) {
-            XAMLHost.daemonReceiver := Gui()
-            DllCall("user32\ChangeWindowMessageFilterEx", "Ptr", XAMLHost.daemonReceiver.Hwnd, "UInt", 0x004A, "UInt", 1, "Ptr", 0)
-            if (!XAMLHost._msgHooked) {
-                OnMessage(0x004A, ObjBindMethod(XAMLHost, "OnCopyData"), 255)
-                XAMLHost._msgHooked := true
-            }
-        }
-
         if !DirExist(A_Temp "\AhkWpf")
             DirCreate(A_Temp "\AhkWpf")
 
@@ -187,7 +176,7 @@ class XAMLHost {
                 FileInstall("ahk-xaml.dll", targetExe, 1)
         }
 
-        Run('"' targetExe '" --daemon "' ProcessExist() '" "' String(XAMLHost.daemonReceiver.Hwnd) '"', "", "Hide")
+        Run('"' targetExe '" --prewarm "' ProcessExist() '"', "", "Hide")
     }
 
     CheckForCrashes() {
@@ -456,7 +445,7 @@ class XAMLHost {
         return true
     }
 
-    _EnsureDaemon() {
+    Show(assetPath := "") {
         if !DirExist(A_Temp "\AhkWpf")
             DirCreate(A_Temp "\AhkWpf")
         if FileExist(this.errLog)
@@ -464,6 +453,25 @@ class XAMLHost {
 
         baseDllName := (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) ? "ahk-xaml-webview.dll" : "ahk-xaml.dll"
         targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\" baseDllName
+        trackedCsv := ""
+
+        uniqueCsv := Map()
+        for ctrlName in this.events
+            uniqueCsv[ctrlName] := true
+        for ctrlName in this.tracked
+            uniqueCsv[ctrlName] := true
+
+        for name in uniqueCsv
+            trackedCsv .= name ","
+        trackedCsv := RTrim(trackedCsv, ",")
+
+        if (assetPath != "") {
+            xamlFile := assetPath
+            eventsFile := "none"
+        } else {
+            xamlFile := "STREAM"
+            eventsFile := "STREAM"
+        }
 
         SplitPath(A_LineFile, , &libDir)
         sharedExe := libDir "\" baseDllName
@@ -471,13 +479,17 @@ class XAMLHost {
         if (A_IsCompiled && FileExist(A_ScriptDir "\" baseDllName)) {
             targetExe := A_ScriptDir "\" baseDllName
         } else if (!A_IsCompiled) {
+            ; Development Mode: Compile generic engine once to the lib directory if it doesn't exist
             if !FileExist(sharedExe) {
                 if !XAMLHost.CompileEngine(libDir, sharedExe)
-                    return ""
+                    return
             }
+
+            ; Copy generic engine to Temp for isolated execution if missing
             if !FileExist(targetExe)
                 FileCopy(sharedExe, targetExe, 1)
 
+            ; Copy WebView2 dependencies to Temp directory alongside engine
             if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {
                 SplitPath(targetExe, , &targetDir)
                 if FileExist(libDir "\WebView2\WebView2Loader.dll") {
@@ -487,77 +499,19 @@ class XAMLHost {
                 }
             }
         } else {
+            ; Production Mode: Extract the embedded, pre-compiled generic engine directly.
+            ; No C# compiler or source code is required on the user's machine.
             if !FileExist(targetExe)
-                FileInstall("ahk-xaml.dll", targetExe, 1)
+                FileInstall("ahk-xaml.dll", targetExe, 1) ; NOTE: FileInstall must take a literal string. If WebView is needed, users must ensure they include the correct DLL in their production build manually or we default to ahk-xaml.dll
         }
 
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
-        if !XAMLHost.daemonHwnd {
-            XAMLHost.Prewarm(targetExe)
-            startWait := A_TickCount
-            while (!XAMLHost.daemonHwnd && A_TickCount - startWait < 5000) {
-                Sleep(10)
-            }
-        }
-        return targetExe
-    }
+        Run('"' targetExe '" "' this.id '" "' String(this.receiver.Hwnd) '" "' trackedCsv '" "' ProcessExist() '" "' A_ScriptName '" "' xamlFile '" "' eventsFile '" "' String(this.ownerHwnd) '"', "", "Hide", &pid)
+        this.pid := pid
 
-    _BuildTrackedCsv() {
-        uniqueCsv := Map()
-        for ctrlName in this.events
-            uniqueCsv[ctrlName] := true
-        for ctrlName in this.tracked
-            uniqueCsv[ctrlName] := true
-        trackedCsv := ""
-        for name in uniqueCsv
-            trackedCsv .= name ","
-        return RTrim(trackedCsv, ",")
-    }
-
-    _BuildEventBindings() {
-        eventBindings := ""
-        for cName, events in this.events {
-            for eName, evtList in events {
-                eventBindings .= cName ":" eName ","
-            }
-        }
-        return RTrim(eventBindings, ",")
-    }
-
-    _SendToEngine(payload) {
-        buf := Buffer(StrPut(payload, "UTF-8"))
-        StrPut(payload, buf, "UTF-8")
-        cds := Buffer(A_PtrSize * 3)
-        NumPut("Ptr", 0, cds, 0)
-        NumPut("UInt", buf.Size, cds, A_PtrSize)
-        NumPut("Ptr", buf.Ptr, cds, A_PtrSize * 2)
-        DllCall("user32\SendMessageW", "Ptr", XAMLHost.daemonHwnd, "UInt", 0x004A, "Ptr", 0, "Ptr", cds.Ptr)
-    }
-
-    Show(assetPath := "") {
-        targetExe := this._EnsureDaemon()
-        if (targetExe == "")
-            return
-
-        trackedCsv := this._BuildTrackedCsv()
-
-        if (assetPath != "") {
-            ; File-based asset path — use the old STREAM-free path
-            payload := "CREATE_WINDOW|" this.id "|" trackedCsv "|" A_ScriptName "|" String(this.ownerHwnd) "|" assetPath "|none"
-            this._SendToEngine(payload)
-        } else {
-            ; Inline mode: embed XAML + events directly in the CREATE_WINDOW message
-            ; This eliminates the Engine|Ready -> XAML_PAYLOAD round-trip entirely
-            eventBindings := this._BuildEventBindings()
-            inlinePayload := this.xaml "`n---AHK-XAML-EVENTS---`n" eventBindings
-            payload := "CREATE_WINDOW_INLINE|" this.id "|" trackedCsv "|" A_ScriptName "|" String(this.ownerHwnd) "|" inlinePayload
-            this._SendToEngine(payload)
-        }
-
-        this.wpfHwnd := 0
-        this.CheckForCrashes()
+        SetTimer(ObjBindMethod(this, "CheckForCrashes"), 500)
     }
 
     static OnCopyData(wParam, lParam, msg, hwnd) {
@@ -566,17 +520,11 @@ class XAMLHost {
 
         lpData := NumGet(lParam, A_PtrSize * 2, "Ptr")
         payload := StrGet(lpData, "UTF-8")
-        if (!InStr(payload, "EVENT|") && !InStr(payload, "DAEMON|"))
+        if !InStr(payload, "EVENT|")
             return 0
-            
+
         lines := StrSplit(payload, "`n", "`r")
         parts := StrSplit(lines[1], "|")
-        
-        if (parts[1] == "DAEMON" && parts[2] == "Ready") {
-            XAMLHost.daemonHwnd := Integer(parts[3])
-            return 1
-        }
-
         if (parts.Length < 4)
             return 0
 
@@ -585,27 +533,6 @@ class XAMLHost {
             return 0
 
         instance := XAMLHost._instances[winId]
-
-        if (ctrlName == "Engine" && eventName == "Error") {
-            errorMsg := XAMLHost.Base64Decode(parts[5])
-            
-            ahkLine := "Unknown"
-            snippet := ""
-            if RegExMatch(errorMsg, "s)AHK_LINE:(.*?)\nXAML_SNIPPET:(.*?)\n\n(.*)", &m) {
-                ahkLine := m[1]
-                snippet := m[2]
-                errorMsg := m[3]
-            }
-
-            header := "The Background Engine crashed! Details below:"
-            if (ahkLine != "Unknown") {
-                header := "Engine crashed while rendering AHK Line " ahkLine "!"
-            }
-
-            XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, errorMsg)
-            ExitApp()
-            return 1
-        }
 
         if (ctrlName == "Engine" && eventName == "Ready") {
             targetHwnd := Integer(parts[5])

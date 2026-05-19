@@ -1,7 +1,7 @@
 #Requires AutoHotkey v2.0
-#Include "../lib/XAML_Config.ahk"
-#Include "../lib/XAML_Host.ahk"
-#Include "../lib/XAML_Generator.ahk"
+#Include "../../lib/XAML_Config.ahk"
+#Include "../../lib/XAML_Host.ahk"
+#Include "../../lib/XAML_Generator.ahk"
 
 ; Create a basic UI
 X := XAML_Generator("Grid").Background("#111111")
@@ -17,3 +17,4 @@ CompiledMarkup := X.Compile()
 tmp := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", "50")
 ui := XAMLHost(StrReplace(tmp, "%app%", CompiledMarkup))
 ui.Show()
+Persistent()

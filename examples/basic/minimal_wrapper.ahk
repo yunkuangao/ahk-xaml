@@ -1,9 +1,9 @@
 #Requires AutoHotkey v2.0
-#Include "../lib/XAML_Host.ahk"
-#Include "../lib/XAML_Generator.ahk"
-#Include "../lib/XAML_Dialog.ahk"
-#Include "../lib/XAML_GUI.ahk"
-#Include "../lib/XAML_Components.ahk"
+#Include "../../lib/XAML_Host.ahk"
+#Include "../../lib/XAML_Generator.ahk"
+#Include "../../lib/XAML_Dialog.ahk"
+#Include "../../lib/XAML_GUI.ahk"
+#Include "../../lib/XAML_Components.ahk"
 
 ; 1. Initialize the App Engine
 app := XAML_GUI("Minimal AHK GUI")

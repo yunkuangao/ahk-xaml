@@ -2163,7 +2163,7 @@ _EmojiPicker(this, id, opts := {}) {
     tabSp.Add("TextBlock").Text("Smileys & Gestures & Hearts & Objects").Foreground("{DynamicResource TextSub}").FontSize(10).FontWeight("Bold")
 
     ; Emoji grid — use Segoe UI Emoji font for color rendering
-    wrap := pop.Add("ScrollViewer").Name(id "_EmojiScroll").Height(200).VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled")
+    wrap := pop.Add("ScrollViewer").Name(id "_EmojiScroll").Height(200).VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled").Tag("ContainScroll")
     emojiGrid := wrap.Add("WrapPanel").Width(280)
 
     for i, emoji in allEmoji {
@@ -2190,8 +2190,6 @@ _EmojiPicker(this, id, opts := {}) {
 
 ; Helper to bind emoji picker events
 EmojiPickerBind(uiHost, id, emojiList, targetName := "") {
-    uiHost.OnEvent(id "_Btn", "Click", (state, ctrl, ev) => uiHost.Update(id "_EmojiScroll", "TrapScroll", ""))
-
     for i, emoji in emojiList {
         _BindEmojiBtn(uiHost, id, i, emoji, targetName)
     }

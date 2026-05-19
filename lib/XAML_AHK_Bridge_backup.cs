@@ -23,7 +23,7 @@ using Microsoft.Web.WebView2.Core;
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
 
-public class AhkWpfEngine {
+public class AhkWpfEngine : Application {
     [StructLayout(LayoutKind.Sequential)]
     public struct COPYDATASTRUCT {
         public IntPtr dwData; public int cbData; public IntPtr lpData;
@@ -67,7 +67,7 @@ public class AhkWpfEngine {
     
     private static void OnScrollViewerLoaded(object sender, RoutedEventArgs e) {
         ScrollViewer sv = sender as ScrollViewer;
-        if (sv != null && (sv.Tag as string == null || !(sv.Tag as string).Contains("Trapped"))) {
+        if (sv != null && (sv.Tag as string) != "Trapped") {
             bool inPopup = false;
             DependencyObject d = sv;
             while (d != null) {
@@ -76,7 +76,7 @@ public class AhkWpfEngine {
                 else d = LogicalTreeHelper.GetParent(d);
             }
             if (inPopup) {
-                sv.Tag = ((sv.Tag as string) ?? "") + " Trapped";
+                sv.Tag = "Trapped";
                 System.Windows.Input.MouseWheelEventHandler handler = (s, args) => {
                     var _sv = (ScrollViewer)s;
                     _sv.ScrollToVerticalOffset(_sv.VerticalOffset - args.Delta / 3.0);
@@ -100,14 +100,10 @@ public class AhkWpfEngine {
                 else if (args.Delta < 0 && sv.VerticalOffset < sv.ScrollableHeight) canScroll = true;
             }
             
-            string tag = sv != null ? (sv.Tag as string) : "";
-            bool passScroll = (tag != null && tag.Contains("PassScroll"));
-            bool containScroll = (tag != null && tag.Contains("ContainScroll"));
+            bool passScroll = (sv != null && (sv.Tag as string) == "PassScroll");
             
             if (!canScroll || passScroll) {
                 args.Handled = true;
-                
-                if (containScroll) return;
                 
                 Window window = Window.GetWindow(sender as DependencyObject);
                 if (window != null && !window.IsEnabled) return;
@@ -134,114 +130,10 @@ public class AhkWpfEngine {
     [STAThread]
     public static void Main(string[] args) {
         try {
-                        if (args.Length >= 3 && args[0] == "--daemon") {
-                try {
-                    System.IO.File.AppendAllText(@"C:\projects\ahk\ahk-xaml\daemon_log.txt", "Daemon started with args: " + string.Join(" ", args) + "\n");
-                    int ahkPid = int.Parse(args[1]);
-                    IntPtr ahkHwnd = (IntPtr)long.Parse(args[2]);
-                    
-                    HwndSourceParameters parameters = new HwndSourceParameters("DaemonReceiver", 0, 0);
-                    parameters.WindowStyle = 0;
-                    HwndSource msgWindow = new HwndSource(parameters);
-                    
-                    msgWindow.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) => {
-                        if (msg == 0x004A) {
-                            try {
-                                var cds = (COPYDATASTRUCT)Marshal.PtrToStructure(lParam, typeof(COPYDATASTRUCT));
-                                byte[] bytes = new byte[cds.cbData];
-                                Marshal.Copy(cds.lpData, bytes, 0, cds.cbData);
-                                string text = Encoding.UTF8.GetString(bytes).TrimEnd('\0');
-                                
-                                if (text.StartsWith("CREATE_WINDOW_INLINE|")) {
-                                    // Fast path: XAML + events are embedded directly in the message
-                                    // Format: CREATE_WINDOW_INLINE|winId|trackedCsv|scriptName|ownerHwnd|xaml\n---AHK-XAML-EVENTS---\nevents
-                                    string[] p = text.Split(new[] { '|' }, 6);
-                                    if (p.Length >= 6) {
-                                        string wId = p[1];
-                                        string tCsv = p[2];
-                                        string sName = p[3];
-                                        string oHwnd = p[4];
-                                        string inlineData = p[5];
-                                        
-                                        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => {
-                                            try {
-                                                AhkWpfEngine eng = new AhkWpfEngine();
-                                                eng.RunEngineInline(wId, ahkHwnd.ToString(), tCsv, sName, oHwnd, inlineData, true);
-                                            } catch (Exception ex) {
-                                                byte[] b = Encoding.UTF8.GetBytes("EVENT|" + wId + "|Engine|Error|" + Convert.ToBase64String(Encoding.UTF8.GetBytes(ex.Message)) + "\n");
-                                                var c = new COPYDATASTRUCT { cbData = b.Length + 1, lpData = Marshal.AllocHGlobal(b.Length + 1) };
-                                                Marshal.Copy(b, 0, c.lpData, b.Length); Marshal.WriteByte(c.lpData, b.Length, 0);
-                                                SendMessage(ahkHwnd, 0x004A, IntPtr.Zero, ref c);
-                                                Marshal.FreeHGlobal(c.lpData);
-                                            }
-                                        }));
-                                    }
-                                } else if (text.StartsWith("CREATE_WINDOW|")) {
-                                    string[] p = text.Split(new[] { '|' }, 7);
-                                    if (p.Length >= 7) {
-                                        string wId = p[1];
-                                        string tCsv = p[2];
-                                        string sName = p[3];
-                                        string oHwnd = p[4];
-                                        string xPath = p[5];
-                                        string ePath = p[6];
-                                        
-                                        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => {
-                                            try {
-                                                AhkWpfEngine eng = new AhkWpfEngine();
-                                                eng.RunEngine(wId, ahkHwnd.ToString(), tCsv, sName, xPath, ePath, oHwnd, true);
-                                            } catch (Exception ex) {
-                                                byte[] b = Encoding.UTF8.GetBytes("EVENT|" + wId + "|Engine|Error|" + Convert.ToBase64String(Encoding.UTF8.GetBytes(ex.Message)) + "\n");
-                                                var c = new COPYDATASTRUCT { cbData = b.Length + 1, lpData = Marshal.AllocHGlobal(b.Length + 1) };
-                                                Marshal.Copy(b, 0, c.lpData, b.Length); Marshal.WriteByte(c.lpData, b.Length, 0);
-                                                SendMessage(ahkHwnd, 0x004A, IntPtr.Zero, ref c);
-                                                Marshal.FreeHGlobal(c.lpData);
-                                            }
-                                        }));
-                                    }
-                                }
-                            } catch { }
-                            handled = true;
-                        }
-                        return IntPtr.Zero;
-                    });
-                    
-                    byte[] rBytes = Encoding.UTF8.GetBytes("DAEMON|Ready|" + msgWindow.Handle.ToString() + "\n");
-                    var rCds = new COPYDATASTRUCT { cbData = rBytes.Length + 1, lpData = Marshal.AllocHGlobal(rBytes.Length + 1) };
-                    Marshal.Copy(rBytes, 0, rCds.lpData, rBytes.Length); Marshal.WriteByte(rCds.lpData, rBytes.Length, 0);
-                    SendMessage(ahkHwnd, 0x004A, IntPtr.Zero, ref rCds);
-                    Marshal.FreeHGlobal(rCds.lpData);
-                    
-                    System.Threading.Thread t = new System.Threading.Thread(() => {
-                        try {
-                            var p = System.Diagnostics.Process.GetProcessById(ahkPid);
-                            p.WaitForExit();
-                            Environment.Exit(0);
-                        } catch { Environment.Exit(0); }
-                    });
-                    t.IsBackground = true;
-                    t.Start();
-                    
-                    Application app = new Application();
-                    app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                    
-                    // Force JIT compilation of WPF rendering engine in the background
-                    var dummy = new Window { Width = 0, Height = 0, WindowStyle = WindowStyle.None, ShowInTaskbar = false, AllowsTransparency = true, Opacity = 0 };
-                    dummy.Show();
-                    dummy.Hide();
-#if ENABLE_WEBVIEW
-                    try {
-                        var wv = new Microsoft.Web.WebView2.Wpf.WebView2();
-                    } catch { }
-#endif
-
-                    app.Run();
-                } catch { }
-                return;
-            }
             if (args.Length >= 2 && args[0] == "--prewarm") {
                 try {
                     int pid = int.Parse(args[1]);
+                    var app = new Application();
                     var dummy = new Window { Width = 0, Height = 0, WindowStyle = WindowStyle.None, ShowInTaskbar = false, AllowsTransparency = true, Opacity = 0 };
                     dummy.Show();
                     dummy.Hide();
@@ -259,7 +151,7 @@ public class AhkWpfEngine {
                     });
                     t.IsBackground = true;
                     t.Start();
-                    new Application().Run();
+                    app.Run();
                 } catch { }
                 return;
             }
@@ -296,7 +188,7 @@ public class AhkWpfEngine {
                 t.IsBackground = true;
                 t.Start();
             }
-            engine.RunEngine(args[0], args[1], args[2], args.Length >= 5 ? args[4] : "", args.Length >= 6 ? args[5] : "", args.Length >= 7 ? args[6] : "", args.Length >= 8 ? args[7] : "0", false);
+            engine.RunEngine(args[0], args[1], args[2], args.Length >= 5 ? args[4] : "", args.Length >= 6 ? args[5] : "", args.Length >= 7 ? args[6] : "", args.Length >= 8 ? args[7] : "0");
         } catch (Exception ex) {
             try {
                 string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf");
@@ -306,104 +198,7 @@ public class AhkWpfEngine {
         }
     }
 
-    public void RunEngineInline(string id, string hwndStr, string trackedCsv, string scriptName, string ownerHwndStr, string inlineData, bool isDaemon) {
-        // Fast path: parse XAML + events directly from the inline data
-        string[] parts = inlineData.Split(new[] { "\n---AHK-XAML-EVENTS---\n" }, 2, StringSplitOptions.None);
-        string xamlContent = parts[0];
-        string eventsContent = parts.Length > 1 ? parts[1] : "";
-        
-        winId = id; ahkHwnd = (IntPtr)long.Parse(hwndStr);
-        tracked = trackedCsv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-        
-        byte[] xamlBytes = Encoding.UTF8.GetBytes(xamlContent);
-        if (Application.Current == null) new Application();
-        try {
-            using (var stream = new System.IO.MemoryStream(xamlBytes)) {
-                win = (Window)XamlReader.Load(stream);
-            }
-            foreach (System.Collections.DictionaryEntry entry in win.Resources) {
-                Application.Current.Resources[entry.Key] = entry.Value;
-            }
-            xamlContent = null;
-            xamlBytes = null;
-        } catch (XamlParseException ex) {
-            string[] xamlLines = Encoding.UTF8.GetString(xamlBytes).Replace("\r\n", "\n").Split('\n');
-            string snippet = "Unknown";
-            string ahkLine = "Unknown";
-            if (ex.LineNumber > 0 && ex.LineNumber <= xamlLines.Length) {
-                int startLine = Math.Max(0, ex.LineNumber - 8);
-                int endLine = Math.Min(xamlLines.Length - 1, ex.LineNumber + 8);
-                StringBuilder sb = new StringBuilder();
-                for (int i = startLine; i <= endLine; i++) {
-                    string prefix = (i == ex.LineNumber - 1) ? ">> " : "   ";
-                    sb.AppendLine(prefix + (i+1) + "| " + xamlLines[i].TrimEnd());
-                }
-                snippet = sb.ToString().TrimEnd();
-            }
-            throw new Exception("AHK_LINE:" + ahkLine + "\nXAML_SNIPPET:\n" + snippet + "\n\n" + ex.ToString());
-        }
-        
-        // Bind standard window chrome handlers
-        var dragArea = win.FindName("DragArea") as UIElement;
-        if (dragArea != null) dragArea.MouseLeftButtonDown += (s, e) => { try { win.DragMove(); } catch { } };
-        var btnClose = win.FindName("BtnClose") as ButtonBase;
-        if (btnClose != null) btnClose.Click += (s, e) => { try { win.Close(); } catch { } };
-        var btnMaximize = win.FindName("BtnMaximize") as ButtonBase;
-        if (btnMaximize != null) btnMaximize.Click += (s, e) => { win.WindowState = win.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; };
-        var btnMinimize = win.FindName("BtnMinimize") as ButtonBase;
-        if (btnMinimize != null) btnMinimize.Click += (s, e) => { win.WindowState = WindowState.Minimized; };
-        
-        win.Resources["BaseWindowRadius"] = new CornerRadius(12);
-        if (Application.Current != null) Application.Current.Resources["BaseWindowRadius"] = win.Resources["BaseWindowRadius"];
-        
-        win.StateChanged += (s, e) => UpdateSnapState(win);
-        win.LocationChanged += (s, e) => UpdateSnapState(win);
-        win.SizeChanged += (s, e) => UpdateSnapState(win);
-        
-        win.Loaded += (s, e) => {
-            IntPtr hwndVal = new WindowInteropHelper(win).Handle;
-            HwndSource.FromHwnd(hwndVal).AddHook(WndProc);
-            SendToAhk("EVENT|" + winId + "|Window|LoadedHwnd|" + hwndVal.ToString() + "\n");
-            UpdateSnapState(win);
-            DumpState("Window", "Loaded");
-        };
-        win.Closing += (s, e) => { 
-            var ownHwnd = new WindowInteropHelper(win).Owner;
-            if (ownHwnd != IntPtr.Zero) {
-                SetWindowPos(ownHwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0003);
-                SetForegroundWindow(ownHwnd);
-            }
-            SendToAhk("EVENT|" + winId + "|Window|Closing\n"); 
-        };
-        win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
-        
-        // Bind events
-        if (!string.IsNullOrEmpty(eventsContent)) {
-            string[] pairs = eventsContent.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (string p in pairs) {
-                string[] kv = p.Split(':');
-                if (kv.Length == 2) BindEvent(kv[0], kv[1]);
-            }
-        }
-        
-        // Set owner
-        if (ownerHwndStr != "0") {
-            try {
-                IntPtr oHwnd = new IntPtr(long.Parse(ownerHwndStr));
-                if (oHwnd != IntPtr.Zero) {
-                    new WindowInteropHelper(win).Owner = oHwnd;
-                }
-            } catch { }
-        }
-        
-        if (isDaemon) {
-            win.Show();
-        } else {
-            win.ShowDialog();
-        }
-    }
-
-    public void RunEngine(string id, string hwndStr, string trackedCsv, string scriptName, string xamlFilePath, string eventsFilePath, string ownerHwndStr = "0", bool isDaemon = false) {
+    public void RunEngine(string id, string hwndStr, string trackedCsv, string scriptName, string xamlFilePath, string eventsFilePath, string ownerHwndStr = "0") {
         winId = id; ahkHwnd = (IntPtr)long.Parse(hwndStr);
         tracked = trackedCsv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
         
@@ -680,11 +475,7 @@ public class AhkWpfEngine {
         
         eventsContent = null;
         
-        if (isDaemon) {
-            win.Show();
-        } else {
-            win.ShowDialog();
-        }
+        win.ShowDialog();
     }
 
     private void UpdateSnapState(Window win) {
@@ -1036,36 +827,15 @@ public class AhkWpfEngine {
                     } catch (Exception ex) {
                         System.IO.File.AppendAllText("xaml_parse_error.log", "Parse Error: " + ex.Message + "\n" + (ex.InnerException != null ? ex.InnerException.Message : "") + "\nString: " + parts[2] + "\n\n");
                     }
-                } else if (parts[1] == "Background") {
-                    if (ctrl is System.Windows.Controls.Control) {
-                        if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Control)ctrl).SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, parts[2].Substring(17, parts[2].Length - 18));
-                        else ((System.Windows.Controls.Control)ctrl).Background = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    } else if (ctrl is Border) {
-                        if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((Border)ctrl).SetResourceReference(Border.BackgroundProperty, parts[2].Substring(17, parts[2].Length - 18));
-                        else ((Border)ctrl).Background = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    } else if (ctrl is System.Windows.Controls.Panel) {
-                        if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Panel)ctrl).SetResourceReference(System.Windows.Controls.Panel.BackgroundProperty, parts[2].Substring(17, parts[2].Length - 18));
-                        else ((System.Windows.Controls.Panel)ctrl).Background = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    }
-                } else if (parts[1] == "Foreground") {
-                    if (ctrl is System.Windows.Controls.Control) {
-                        if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Control)ctrl).SetResourceReference(System.Windows.Controls.Control.ForegroundProperty, parts[2].Substring(17, parts[2].Length - 18));
-                        else ((System.Windows.Controls.Control)ctrl).Foreground = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    } else if (ctrl is TextBlock) {
-                        if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((TextBlock)ctrl).SetResourceReference(TextBlock.ForegroundProperty, parts[2].Substring(17, parts[2].Length - 18));
-                        else ((TextBlock)ctrl).Foreground = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    } else if (ctrl is TextElement) {
-                        if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((TextElement)ctrl).SetResourceReference(TextElement.ForegroundProperty, parts[2].Substring(17, parts[2].Length - 18));
-                        else ((TextElement)ctrl).Foreground = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    }
-                } else if (parts[1] == "BorderBrush") {
-                    if (ctrl is Border) {
-                        if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((Border)ctrl).SetResourceReference(Border.BorderBrushProperty, parts[2].Substring(17, parts[2].Length - 18));
-                        else ((Border)ctrl).BorderBrush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    } else if (ctrl is System.Windows.Controls.Control) {
-                        if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Control)ctrl).SetResourceReference(System.Windows.Controls.Control.BorderBrushProperty, parts[2].Substring(17, parts[2].Length - 18));
-                        else ((System.Windows.Controls.Control)ctrl).BorderBrush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
-                    }
+                } else if (parts[1] == "Background" && ctrl is System.Windows.Controls.Control) {
+                    if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Control)ctrl).SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, parts[2].Substring(17, parts[2].Length - 18));
+                    else ((System.Windows.Controls.Control)ctrl).Background = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
+                } else if (parts[1] == "Foreground" && ctrl is System.Windows.Controls.Control) {
+                    if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Controls.Control)ctrl).SetResourceReference(System.Windows.Controls.Control.ForegroundProperty, parts[2].Substring(17, parts[2].Length - 18));
+                    else ((System.Windows.Controls.Control)ctrl).Foreground = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
+                } else if (parts[1] == "BorderBrush" && ctrl is Border) {
+                    if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((Border)ctrl).SetResourceReference(Border.BorderBrushProperty, parts[2].Substring(17, parts[2].Length - 18));
+                    else ((Border)ctrl).BorderBrush = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;
                 } else if (parts[1] == "Stroke" && ctrl is System.Windows.Shapes.Shape) {
                     if (parts[2].StartsWith("{DynamicResource ") && parts[2].EndsWith("}")) ((System.Windows.Shapes.Shape)ctrl).SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, parts[2].Substring(17, parts[2].Length - 18));
                     else ((System.Windows.Shapes.Shape)ctrl).Stroke = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]) as System.Windows.Media.Brush;

@@ -1,7 +1,12 @@
 #Requires AutoHotkey v2.0
 #Include "XAML_Host.ahk"
+#Include "XAML_Generator.ahk"
 
 class XDialog {
+    static Preload() {
+        XAMLHost.Prewarm()
+    }
+
     static Show(options) {
         ; --- CONFIGURATION ---
         title := options.HasProp("Title") ? options.Title : "Dialog"
@@ -147,8 +152,24 @@ class XDialog {
         if (exePath != "" && FileExist(exePath)) {
             ui := XAMLHost("", exePath, actualOwner)
         } else {
-            tmp := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", "30")
-            ui := XAMLHost(StrReplace(tmp, "%app%", main.ToString()), exePath, actualOwner)
+            ; Use a lightweight template without the 75KB component library for speed
+            dialogTemplate := '
+            (
+                <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        Width="940" Height="700"
+                        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+                        WindowStartupLocation="CenterScreen"
+                        TextElement.Foreground="{DynamicResource TextMain}" FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif">
+                    
+                    <WindowChrome.WindowChrome>
+                        <WindowChrome GlassFrameThickness="-1" CaptionHeight="30" CornerRadius="{DynamicResource WindowRadius}" />
+                    </WindowChrome.WindowChrome>
+                
+                    %app%
+                </Window>
+            )'
+            ui := XAMLHost(StrReplace(dialogTemplate, "%app%", main.ToString()), exePath, actualOwner)
         }
 
         ; Replace some default xaml.ahk window stuff to match the dialog needs
