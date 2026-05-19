@@ -1,4 +1,5 @@
 #Requires AutoHotkey v2.0
+#Include "../../lib/XAML_Config.ahk"
 #Include "../../lib/XAML_Dialog.ahk"
 
 guiObj := Gui(, "AHK-XAML Prewarm Demo")
