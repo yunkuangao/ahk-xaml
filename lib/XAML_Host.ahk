@@ -213,12 +213,25 @@ class XAMLHost {
                 header := "Engine crashed while rendering AHK Line " ahkLine "!"
             }
 
-            XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, err)
-            ExitApp()
+            lineNum := 0, colNum := 0
+            if (RegExMatch(err, "i)Line\s*(?:number)?\s*['`"]?(\d+)['`"]?\s*(?:and|,)?\s*(?:line)?\s*position\s*['`"]?(\d+)['`"]?", &match)) {
+                lineNum := Integer(match[1])
+                colNum := Integer(match[2])
+            }
+
+            hasRetry := (XAML_DEBUG && lineNum > 0)
+            action := XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, err, hasRetry)
+            if (action == "skip_property") {
+                this.SkipPropertyAndRetry(err, lineNum, colNum)
+            } else if (action == "skip_element") {
+                this.SkipElementAndRetry(err, lineNum, colNum)
+            } else {
+                ExitApp()
+            }
         }
     }
 
-    static ShowErrorDialog(title, header, snippet, details) {
+    static ShowErrorDialog(title, header, snippet, details, hasRetryOptions := false) {
         ; Pre-format the error text for better readability
         details := StrReplace(details, " ---> ", "`r`n`r`n---> ")
         details := StrReplace(details, "`r`n", "`n")
@@ -297,10 +310,21 @@ class XAMLHost {
         errGui.SetFont("s9 norm cE0E0E0", "Consolas")
         traceEdit := CodeBox.Add(errGui, "y+5 w860 h250 ReadOnly +VScroll +HScroll -Wrap Background1E1E1E", "`r`n" (stackTrace != "" ? stackTrace : details), 0xE0E0E0)
 
+        userAction := "abort"
+
         errGui.SetFont("s10 norm cBlack", "Segoe UI")
         btnCopy := errGui.Add("Button", "w150 x20 y+20", "📋 Copy to Clipboard")
         btnExport := errGui.Add("Button", "w150 x+10", "💾 Export to File")
-        btnClose := errGui.Add("Button", "w120 x+340 Default", "Close")
+
+        btnSkipProp := ""
+        btnSkipElem := ""
+        if (hasRetryOptions) {
+            btnSkipProp := errGui.Add("Button", "w150 x+10", "⚡ Skip Property")
+            btnSkipElem := errGui.Add("Button", "w150 x+10", "⚡ Skip Element")
+            btnClose := errGui.Add("Button", "w120 x+10 Default", "Abort")
+        } else {
+            btnClose := errGui.Add("Button", "w120 x+340 Default", "Close")
+        }
 
         btnCopy.OnEvent("Click", (*) => CopyToClipboard())
         CopyToClipboard() {
@@ -328,7 +352,15 @@ class XAMLHost {
             }
         }
 
-        btnClose.OnEvent("Click", (*) => errGui.Destroy())
+        if (hasRetryOptions) {
+            btnSkipProp.OnEvent("Click", (*) => (userAction := "skip_property", errGui.Destroy()))
+            btnSkipElem.OnEvent("Click", (*) => (userAction := "skip_element", errGui.Destroy()))
+            btnClose.OnEvent("Click", (*) => (userAction := "abort", errGui.Destroy()))
+        } else {
+            btnClose.OnEvent("Click", (*) => (userAction := "close", errGui.Destroy()))
+        }
+        errGui.OnEvent("Close", (*) => (userAction := "abort"))
+
         errGui.OnEvent("Size", Gui_Size)
 
         Gui_Size(guiObj, minMax, width, height) {
@@ -351,7 +383,13 @@ class XAMLHost {
             btnY := height - marg - bh
             btnCopy.Move(, btnY)
             btnExport.Move(, btnY)
-            btnClose.Move(width - marg - bw, btnY)
+            if (hasRetryOptions) {
+                btnClose.Move(width - marg - bw, btnY)
+                btnSkipElem.Move(width - marg - bw - 10 - 150, btnY, 150)
+                btnSkipProp.Move(width - marg - bw - 10 - 150 - 10 - 150, btnY, 150)
+            } else {
+                btnClose.Move(width - marg - bw, btnY)
+            }
 
             availH := btnY - 15 - currentY
 
@@ -377,6 +415,7 @@ class XAMLHost {
 
         errGui.Show()
         WinWaitClose(errGui)
+        return userAction
     }
 
     Export(filePath) {
@@ -602,8 +641,21 @@ class XAMLHost {
                 header := "Engine crashed while rendering AHK Line " ahkLine "!"
             }
 
-            XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, errorMsg)
-            ExitApp()
+            lineNum := 0, colNum := 0
+            if (RegExMatch(errorMsg, "i)Line\s*(?:number)?\s*['`"]?(\d+)['`"]?\s*(?:and|,)?\s*(?:line)?\s*position\s*['`"]?(\d+)['`"]?", &match)) {
+                lineNum := Integer(match[1])
+                colNum := Integer(match[2])
+            }
+
+            hasRetry := (XAML_DEBUG && lineNum > 0)
+            action := XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, errorMsg, hasRetry)
+            if (action == "skip_property") {
+                instance.SkipPropertyAndRetry(errorMsg, lineNum, colNum)
+            } else if (action == "skip_element") {
+                instance.SkipElementAndRetry(errorMsg, lineNum, colNum)
+            } else {
+                ExitApp()
+            }
             return 1
         }
 
@@ -714,6 +766,180 @@ class XAMLHost {
         buf := Buffer(size)
         DllCall("crypt32\CryptStringToBinaryW", "Str", b64, "UInt", 0, "UInt", 1, "Ptr", buf, "UInt*", &size, "Ptr", 0, "Ptr", 0)
         return StrGet(buf, "UTF-8")
+    }
+
+    GetCharIndex(xaml, lineNumber, linePosition) {
+        pos := 1
+        Loop lineNumber - 1 {
+            nextNewline := RegExMatch(xaml, "\r?\n", &m, pos)
+            if (!nextNewline)
+                break
+            pos := nextNewline + m.Len[0]
+        }
+        return pos + linePosition - 1
+    }
+
+    FindElementBoundaries(xaml, index) {
+        ; Find the start of the tag enclosing 'index'
+        tagStart := 0
+        p := index
+        while (p > 0) {
+            char := SubStr(xaml, p, 1)
+            if (char == "<") {
+                nextChar := SubStr(xaml, p + 1, 1)
+                if (nextChar != "!" && nextChar != "/") {
+                    tagStart := p
+                    break
+                }
+            }
+            p--
+        }
+        if (!tagStart)
+            return ""
+        
+        ; Extract tag name
+        subXaml := SubStr(xaml, tagStart)
+        if (!RegExMatch(subXaml, "^<([\w:]+)", &m))
+            return ""
+        tagName := m[1]
+        
+        ; Check if it's self-closing before any nested tag of same name
+        firstGt := InStr(xaml, ">", , tagStart)
+        if (firstGt) {
+            sub := SubStr(xaml, tagStart, firstGt - tagStart + 1)
+            if (RegExMatch(sub, "/\s*>$")) {
+                return { start: tagStart, end: firstGt, tag: tagName }
+            }
+        }
+        
+        ; Not self-closing, scan for matching </tagName>
+        depth := 1
+        pos := tagStart + 1
+        len := StrLen(xaml)
+        while (pos <= len) {
+            char := SubStr(xaml, pos, 1)
+            if (char == "<") {
+                subAtPos := SubStr(xaml, pos)
+                if (SubStr(xaml, pos + 1, 1) == "/") {
+                    ; Closing tag?
+                    if (RegExMatch(subAtPos, "^</" tagName "\s*>", &m)) {
+                        depth--
+                        if (depth == 0) {
+                            return { start: tagStart, end: pos + m.Len[0] - 1, tag: tagName }
+                        }
+                        pos += m.Len[0]
+                        continue
+                    }
+                } else {
+                    ; Opening tag?
+                    if (RegExMatch(subAtPos, "^<" tagName "\b", &m)) {
+                        depth++
+                        pos += m.Len[0]
+                        continue
+                    }
+                }
+            }
+            pos++
+        }
+        return ""
+    }
+
+    GetPropertyCandidates(errorMsg) {
+        firstLine := StrSplit(errorMsg, "`n")[1]
+        candidates := []
+        pos := 1
+        while (RegExMatch(firstLine, "[" . Chr(39) . Chr(34) . "]([\w\.:]+)[" . Chr(39) . Chr(34) . "]", &m, pos)) {
+            val := m[1]
+            candidates.Push(val)
+            if (InStr(val, ".")) {
+                parts := StrSplit(val, ".")
+                if (parts.Length >= 2) {
+                    candidates.Push(parts[parts.Length - 1] . "." . parts[parts.Length])
+                }
+                candidates.Push(parts[parts.Length])
+            }
+            pos := m.Pos[0] + m.Len[0]
+        }
+        return candidates
+    }
+
+    SkipPropertyAndRetry(errorMsg, lineNum, colNum) {
+        if (lineNum <= 0 || colNum <= 0) {
+            MsgBox("Could not locate the exact error position to skip the property.", "Skip Failed", "Iconx")
+            ExitApp()
+        }
+        
+        charIndex := this.GetCharIndex(this.xaml, lineNum, colNum)
+        if (charIndex <= 0) {
+            MsgBox("Error position out of bounds.", "Skip Failed", "Iconx")
+            ExitApp()
+        }
+        
+        elem := this.FindElementBoundaries(this.xaml, charIndex)
+        if (!elem) {
+            MsgBox("Could not find the element at the error line.", "Skip Failed", "Iconx")
+            ExitApp()
+        }
+        
+        openingTagEnd := InStr(this.xaml, ">", , elem.start)
+        if (!openingTagEnd || openingTagEnd > elem.end) {
+            MsgBox("Malformed element opening tag.", "Skip Failed", "Iconx")
+            ExitApp()
+        }
+        openingTag := SubStr(this.xaml, elem.start, openingTagEnd - elem.start + 1)
+        
+        candidates := this.GetPropertyCandidates(errorMsg)
+        
+        removed := false
+        candidateName := ""
+        for candidate in candidates {
+            ; Match attribute: candidate="..." or candidate='...'
+            pat := "i)\b([\w:]*?" . candidate . ")\s*=\s*(?:" . Chr(34) . "[^" . Chr(34) . "]*" . Chr(34) . "|'[^']*')"
+            if (RegExMatch(openingTag, pat)) {
+                openingTag := RegExReplace(openingTag, pat, "")
+                removed := true
+                candidateName := candidate
+                break
+            }
+        }
+        
+        if (!removed) {
+            MsgBox("Could not automatically identify the property to skip from error: " errorMsg, "Skip Failed", "Iconx")
+            ExitApp()
+        }
+        
+        this.xaml := SubStr(this.xaml, 1, elem.start - 1) . openingTag . SubStr(this.xaml, openingTagEnd + 1)
+        
+        ToolTip("Skipped property: " candidateName)
+        SetTimer(() => ToolTip(), -3000)
+        
+        SetTimer(() => this.Show(), -10)
+    }
+
+    SkipElementAndRetry(errorMsg, lineNum, colNum) {
+        if (lineNum <= 0 || colNum <= 0) {
+            MsgBox("Could not locate the exact error position to skip the element.", "Skip Failed", "Iconx")
+            ExitApp()
+        }
+        
+        charIndex := this.GetCharIndex(this.xaml, lineNum, colNum)
+        if (charIndex <= 0) {
+            MsgBox("Error position out of bounds.", "Skip Failed", "Iconx")
+            ExitApp()
+        }
+        
+        elem := this.FindElementBoundaries(this.xaml, charIndex)
+        if (!elem) {
+            MsgBox("Could not find the element to skip at the error line.", "Skip Failed", "Iconx")
+            ExitApp()
+        }
+        
+        this.xaml := SubStr(this.xaml, 1, elem.start - 1) . SubStr(this.xaml, elem.end + 1)
+        
+        ToolTip("Skipped element: <" elem.tag ">")
+        SetTimer(() => ToolTip(), -3000)
+        
+        SetTimer(() => this.Show(), -10)
     }
 }
 

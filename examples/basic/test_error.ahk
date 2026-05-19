@@ -3,12 +3,18 @@
 #Include "../../lib/XAML_Host.ahk"
 #Include "../../lib/XAML_Generator.ahk"
 
-; Create a basic UI
-X := XAML_Generator("Grid").Background("#111111")
+; Create a basic UI using a StackPanel so child elements stack vertically instead of on top of each other
+X := XAML_Generator("StackPanel").Background("#111111").VerticalAlignment("Center").HorizontalAlignment("Center")
 
-; Add a button with a fake property that will intentionally crash the WPF XAML parser
-btn := X.Add("Button").Content("Crash Me!")
-btn.SetProp("TotallyFakeProperty", "ThisWillCrash")
+; Add buttons with fake properties that will intentionally crash the WPF XAML parser
+btn1 := X.Add("Button").Content("Crash Me 1!").Margin("10")
+btn1.SetProp("TotallyFakeProperty", "ThisWillCrash")
+
+btn2 := X.Add("Button").Content("Crash Me 2!").Margin("10")
+btn2.SetProp("TotallyFakeProperty2", "ThisWillCrash")
+
+btn3 := X.Add("Button").Content("Crash Me 3!").Margin("10")
+btn3.SetProp("TotallyFakeProperty3", "ThisWillCrash")
 
 ; Compile the XAML
 CompiledMarkup := X.Compile()
