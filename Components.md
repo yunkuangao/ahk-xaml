@@ -431,50 +431,83 @@ nav.Bind(ui)
 
 ### KanbanBoard
 
-A drag-aware Kanban board with multiple columns and task cards.
+A fully functional, drag-and-drop Kanban board supporting dynamic columns, ticket movement, and color-coded tags.
 
+**Setup & Initialization:**
 ```ahk
 kanban := panel.KanbanBoard("MyKanban")
+
+; Add columns with custom accent colors
 kanban.AddColumn("To Do", "#FF453A")
 kanban.AddColumn("In Progress", "#FF9F0A")
 kanban.AddColumn("Done", "#32D74B")
 
-kanban.AddCard("To Do", "Design mockups", "High", "#FF453A")
-kanban.AddCard("In Progress", "Write tests", "Medium", "#FF9F0A")
+; Add cards to specific columns (1-indexed based on addition order)
+kanban.AddCard(1, "Design mockups")
+kanban.AddCard(1, "Fix navigation bug")
+kanban.AddCard(2, "Write unit tests")
+kanban.AddCard(3, "Deploy to production")
+```
 
+**Event Wiring & Drag-and-Drop:**
+```ahk
+; Bind internal events (Selection, Add button clicks)
 kanban.Bind(ui)
+
+; Explicitly enable drag-and-drop functionality between columns
+kanban.EnableDrag(ui)
+```
+
+**Programmatic Updates:**
+```ahk
+; Move the currently selected card to a different column index
+kanban.MoveSelectedTo(3) ; Moves to "Done"
 ```
 
 ### NodeGraph / Visual Scripter
 
 A fully interactive node-based visual programming environment with zoom, pan, drag, connection drawing, and state persistence.
 
+**Setup & Initialization:**
 ```ahk
 graph := panel.NodeGraph("MyGraph")
+
+; Add nodes: ID, Title, X, Y, Type (Input/Process/Output/Action)
 graph.AddNode("Input1", "REST API Source", 100, 40, "Input")
 graph.AddNode("Filter", "Filter Records", 280, 40, "Process")
 graph.AddNode("Output", "Export JSON", 500, 100, "Output")
 
+; Programmatically create Bézier connections between nodes
 graph.AddConnection("Input1", "Filter")
 graph.AddConnection("Filter", "Output")
+```
 
+**Event Wiring & Interaction:**
+```ahk
+; Bind UI events for mode switching (Select, Pan, Knife)
 graph.Bind(ui)
+
+; Enable C#-side drag logic for moving nodes on the canvas
 graph.EnableDrag(ui)
 ```
 
-**Features:**
-- Zoom via scroll wheel, pan via middle-click or Pan Mode
-- Select Mode with rubber-band selection
-- Knife Tool to cut connections
-- Grid Snap (20px increments)
-- Dynamic node creation at runtime
-- State save/load to INI with `[Nodes]` and `[Links]` sections
-- Connection paths use cubic Bézier curves
-
-**Persistence:**
+**State Management & Persistence:**
 ```ahk
+; Save the current layout and connections to disk
 graph.SaveState("node_state.ini")
+
+; Load and restore the layout dynamically
 graph.LoadState("node_state.ini", ui)
+```
+
+**Retrieving Graph State:**
+You can iterate through `graph.nodes` and `graph.connections` to generate code or execute logic based on the visual layout.
+```ahk
+for conn in graph.connections {
+    if (conn.Active) {
+        MsgBox("Connection from " conn.From " to " conn.To)
+    }
+}
 ```
 
 ### SliderRange
@@ -838,14 +871,24 @@ cropper.SetImage("C:\photos\landscape.jpg")
 cropper.Bind(ui)
 ```
 
-### XSvgViewer
+### XWebViewer
 
-An SVG renderer that converts SVG markup into WPF Path elements.
+A universal web and file viewer utilizing the native `WebBrowser` control. It provides native rendering for HTML, PDF, and Images, while also featuring a specialized rendering pipeline for SVG files with styled grid backgrounds.
 
 ```ahk
-viewer := panel.SvgViewer("MySvg")
-viewer.LoadFile("diagram.svg")
+viewer := panel.WebViewer("MyWebViewer")
+viewer.LoadFile("index.html")
 viewer.Bind(ui)
+```
+
+### XImageViewer
+
+A dedicated raw image viewer for formats like JPG, PNG, WEBP, and GIF, complete with a checkerboard transparency background.
+
+```ahk
+imgViewer := panel.ImageViewer("MyImageViewer")
+imgViewer.LoadImage("C:\photos\example.png")
+imgViewer.Bind(ui)
 ```
 
 ### MarkdownRenderer
@@ -924,7 +967,7 @@ RatingBind(ui, "MyRating", 5, false, Chr(0xE735), Chr(0xE734), "#FFD700", "{Dyna
 
 ### EmojiPicker
 
-A popover grid of clickable emoji with categories (Smileys, Gestures, Hearts, Objects).
+A popover grid of clickable emoji with categories (Smileys, Gestures, Hearts, Objects). It automatically replaces standard text-based emojis with high-quality, full-color Twemoji PNG images dynamically fetched from a CDN, ensuring beautiful and consistent rendering regardless of the user's OS version.
 
 ```ahk
 ; Basic picker
@@ -936,9 +979,60 @@ panel.EmojiPicker("MyEmoji", { Target: "TxtComment" })
 
 **Event Wiring:**
 ```ahk
-emojiList := ["😀","😁","😂", ...]  ; 90 emoji
+emojiList := ["😀","😁","😂", ...]  ; Standard text emoji are automatically converted to images
 EmojiPickerBind(ui, "MyEmoji", emojiList)
 ```
+
+### ImageViewer
+
+A responsive image viewer with a drag-and-drop zone, transparent checkerboard background, and IPC binding for dynamic image loading (handles both file paths and HICON handles natively).
+
+```ahk
+imgViewer := panel.ImageViewer("MyImgViewer")
+```
+
+**Event Wiring:**
+```ahk
+; Bind the internal LoadImage mechanism
+imgViewer.Bind(ui)
+
+; Load an image dynamically
+imgViewer.LoadImage("HICON:" hIconHandle)
+imgViewer.LoadImage("C:\path\to\image.png")
+```
+
+### Clock
+
+A beautifully styled analog and digital clock widget. The `Bind(ui)` function automatically establishes a 1000ms timer to update the clock hands and text.
+
+```ahk
+clk := panel.Clock("MyClock")
+```
+
+**Event Wiring:**
+```ahk
+; Automatically begins ticking
+clk.Bind(ui)
+```
+
+### WebViewer
+
+A universal web and file viewer utilizing the native `WebBrowser` control. It provides native rendering for HTML, PDF, and Images, while also featuring a specialized rendering pipeline for SVG files with styled grid backgrounds.
+
+```ahk
+web := panel.WebViewer("MyWebBrowser")
+```
+
+**Event Wiring:**
+```ahk
+; Bind the internal navigation and drag-and-drop events
+web.Bind(ui)
+
+; Load a file or URL
+web.LoadFile("C:\path\to\document.pdf")
+```
+
+> **Note:** The advanced components like `XCommandPalette`, `KanbanBoard`, and `NodeGraph` are documented in detail (including setup, event wiring, and dynamic data handling) in **Section IV. Advanced Components** higher up in this document.
 
 ---
 

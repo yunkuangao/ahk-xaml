@@ -139,26 +139,26 @@ mp.grid.Grid_Row(1)
 nav.AddPage("Media", Chr(0xE1D3), mediaGrid)
 
 ; ---------------------------------------------------------
-; PAGE 5: SVG Viewer
+; PAGE 5: Web/File Viewer
 ; ---------------------------------------------------------
-svgGrid := XAML_Generator("Grid").Margin("0")
-svgGrid._Parent := app.X
-svgGrid.Rows("Auto", "*")
+webGrid := XAML_Generator("Grid").Margin("0")
+webGrid._Parent := app.X
+webGrid.Rows("Auto", "*")
 
-svgHeader := svgGrid.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,10")
-svgHeader.Add("TextBlock").Text("SVG Viewer").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").Margin("0,0,20,0")
+webHeader := webGrid.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,10")
+webHeader.Add("TextBlock").Text("Web/File Viewer").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").Margin("0,0,20,0")
 
-svgHeader.Add("Button").Name("BtnSvgBgColor").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Change Background Color").Add("TextBlock").Text(Chr(0xE790)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
-svgHeader.Add("Button").Name("BtnSvgGridDark").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Dark Grid").Add("TextBlock").Text(Chr(0xE80A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
-svgHeader.Add("Button").Name("BtnSvgGridLight").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Light Grid").Add("TextBlock").Text(Chr(0xE80A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).Foreground("{DynamicResource TextSub}").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
-svgHeader.Add("Button").Name("BtnSvgGridNone").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,15,0").ToolTip("No Grid").Add("TextBlock").Text(Chr(0xE814)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).Foreground("#FF453A").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+webHeader.Add("Button").Name("BtnSvgBgColor").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Change Background Color").Add("TextBlock").Text(Chr(0xE790)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+webHeader.Add("Button").Name("BtnSvgGridDark").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Dark Grid").Add("TextBlock").Text(Chr(0xE80A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+webHeader.Add("Button").Name("BtnSvgGridLight").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Light Grid").Add("TextBlock").Text(Chr(0xE80A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).Foreground("{DynamicResource TextSub}").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+webHeader.Add("Button").Name("BtnSvgGridNone").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,15,0").ToolTip("No Grid").Add("TextBlock").Text(Chr(0xE814)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).Foreground("#FF453A").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
 
-svgHeader.Add("Button").Name("BtnSvgReplace").Content("Replace SVG").Background("Transparent").Foreground("{DynamicResource Accent}").BorderThickness("0").Margin("15,0,0,0").VerticalAlignment("Center").Visibility("Collapsed").Cursor("Hand")
+webHeader.Add("Button").Name("BtnWebReplace").Content("Replace File").Background("Transparent").Foreground("{DynamicResource Accent}").BorderThickness("0").Margin("15,0,0,0").VerticalAlignment("Center").Visibility("Collapsed").Cursor("Hand")
 
-svgViewer := svgGrid.SvgViewer("MySvgViewer")
-svgViewer.grid.Grid_Row(1)
+webViewer := webGrid.WebViewer("MyWebViewer")
+webViewer.grid.Grid_Row(1)
 
-nav.AddPage("SVG Viewer", Chr(0xEB9F), svgGrid)
+nav.AddPage("File Viewer", Chr(0xEB9F), webGrid)
 
 ; ---------------------------------------------------------
 ; PAGE 6: Image Cropper
@@ -255,23 +255,82 @@ dv.SetDiff(oldText, newText)
 
 nav.AddPage("Diff Tool", Chr(0xE81C), diffPage)
 
+; ---------------------------------------------------------
+; PAGE 11: Image Viewer
+; ---------------------------------------------------------
+imgViewerPage := XAML_Generator("Grid").Margin("0")
+imgViewerPage._Parent := app.X
+imgViewerPage.Rows("Auto", "*")
+
+imgViewerHeader := imgViewerPage.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,20")
+imgViewerHeader.Add("TextBlock").Text("Image Viewer").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").Margin("0,0,20,0").VerticalAlignment("Center")
+imgViewerHeader.Add("Button").Name("BtnImgReplace").Content("Replace Image").Background("Transparent").Foreground("{DynamicResource Accent}").BorderThickness("0").Margin("15,0,0,0").VerticalAlignment("Center").Visibility("Collapsed").Cursor("Hand")
+
+imgViewerContent := imgViewerPage.Add("Grid").Grid_Row(1).Margin("0,0,20,0")
+imgViewerContent.Cols("200", "*")
+
+iconListBdr := imgViewerContent.Add("Border").Grid_Column(0).Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").CornerRadius("8").Margin("0,0,15,0")
+iconList := iconListBdr.Add("ListBox").Name("ImgExampleList").Background("Transparent").BorderThickness("0").Padding("5")
+global exampleIcons := [{ Name: "Shell32 Icon 1", Dll: "shell32.dll", Idx: 1 }, { Name: "Shell32 Icon 3", Dll: "shell32.dll", Idx: 3 }, { Name: "Shell32 Icon 4", Dll: "shell32.dll", Idx: 4 }, { Name: "Shell32 Icon 15", Dll: "shell32.dll", Idx: 15 }, { Name: "Shell32 Icon 44", Dll: "shell32.dll", Idx: 44 }, { Name: "Shell32 Icon 130", Dll: "shell32.dll", Idx: 130 }, { Name: "Imageres Icon 109", Dll: "imageres.dll", Idx: 109 }, { Name: "Imageres Icon 110", Dll: "imageres.dll", Idx: 110 }
+]
+
+iconList.SetProp("VirtualizingStackPanel.IsVirtualizing", "False")
+for idx, ic in exampleIcons {
+    lbi := iconList.Add("ListBoxItem").Tag(ic.Name)
+    sp := lbi.Add("StackPanel").Orientation("Horizontal").Margin("0,5,0,5")
+    sp.Add("Image").Name("IconPreviewImg_" idx).Width(32).Height(32).Margin("0,0,10,0").Stretch("UniformToFill").SetProp("RenderOptions.BitmapScalingMode", "HighQuality")
+    sp.Add("TextBlock").Text(ic.Name).VerticalAlignment("Center").Foreground("{DynamicResource TextMain}")
+}
+
+imgBdrContainer := imgViewerContent.Add("Border").Grid_Column(1)
+imgViewer := imgBdrContainer.ImageViewer("MyImgViewer")
+
+nav.AddPage("Image Viewer", Chr(0xEB9F), imgViewerPage)
+
 
 ; ---------------------------------------------------------
 ; START APP
 ; ---------------------------------------------------------
 ui := app.Compile()
+nav.Bind(ui)
+
+SetTimer(LoadPreviewIcons, 1000)
+LoadPreviewIcons() {
+    static attempts := 0
+    attempts++
+    if (attempts > 30)
+        SetTimer(LoadPreviewIcons, 0)
+
+    for idx, ic in exampleIcons {
+        try {
+            ; Try variant A: pure HICON
+            h1 := LoadPicture(ic.Dll, "Icon" ic.Idx, &t1)
+            if (h1)
+                ui.Update("IconPreviewImg_" idx, "Source", (t1 == 0 ? "HBITMAP:" : "HICON:") h1)
+
+            ; Try variant B: resized HBITMAP
+            h2 := LoadPicture(ic.Dll, "Icon" ic.Idx " w32 h32", &t2)
+            if (h2)
+                ui.Update("IconPreviewImg_" idx, "Source", (t2 == 0 ? "HBITMAP:" : "HICON:") h2)
+        }
+    }
+}
 
 ; Bindings
 nav.Bind(ui)
 kb.Bind(ui)
 ng.Bind(ui)
 mp.Bind(ui)
-svgViewer.Bind(ui)
-ui.OnEvent("BtnSvgReplace", "Click", ObjBindMethod(svgViewer, "OnClick"))
+webViewer.Bind(ui)
+ui.OnEvent("BtnWebReplace", "Click", ObjBindMethod(webViewer, "OnClick"))
 ui.OnEvent("BtnSvgBgColor", "Click", ChangeSvgBgColor)
-ui.OnEvent("BtnSvgGridDark", "Click", (state, ctrl, event) => svgViewer.SetGrid("Dark"))
-ui.OnEvent("BtnSvgGridLight", "Click", (state, ctrl, event) => svgViewer.SetGrid("Light"))
-ui.OnEvent("BtnSvgGridNone", "Click", (state, ctrl, event) => svgViewer.SetGrid("None"))
+ui.OnEvent("BtnSvgGridDark", "Click", (state, ctrl, event) => webViewer.SetGrid("Dark"))
+ui.OnEvent("BtnSvgGridLight", "Click", (state, ctrl, event) => webViewer.SetGrid("Light"))
+ui.OnEvent("BtnSvgGridNone", "Click", (state, ctrl, event) => webViewer.SetGrid("None"))
+imgViewer.Bind(ui)
+ui.Track("ImgExampleList")
+ui.OnEvent("ImgExampleList", "SelectionChanged", LoadExampleImage)
+ui.OnEvent("BtnImgReplace", "Click", ObjBindMethod(imgViewer, "OnClick"))
 ic.Bind(ui)
 
 digitalClock.Bind(ui)
@@ -323,7 +382,7 @@ UpdateSvgThemeBase(state, ctrl, event) {
             }
         }
     }
-    svgViewer.SetBackground(svgViewer.bgColor, baseColor)
+    webViewer.SetBackground(webViewer.bgColor, baseColor)
 }
 
 ; Kanban move buttons
@@ -392,7 +451,30 @@ ChangeSvgBgColor(state, ctrl, event) {
                 }
             }
         }
-        svgViewer.SetBackground(res.Color, baseColor)
+        webViewer.SetBackground(res.Color, baseColor)
+    }
+}
+
+LoadExampleImage(state, ctrl, event) {
+    if !state.Has("ImgExampleList")
+        return
+    sel := state["ImgExampleList"]
+    dllName := ""
+    iconIdx := 0
+    if InStr(sel, "Shell32") {
+        dllName := "shell32.dll"
+        iconIdx := Number(StrReplace(sel, "Shell32 Icon ", ""))
+    } else if InStr(sel, "Imageres") {
+        dllName := "imageres.dll"
+        iconIdx := Number(StrReplace(sel, "Imageres Icon ", ""))
+    }
+    if (dllName != "") {
+        try {
+            ; Request large icon for the main viewer
+            hIcon := LoadPicture(dllName, "Icon" iconIdx " w256 h-1", &imgType)
+            if (hIcon)
+                imgViewer.LoadImage("HICON:" hIcon)
+        }
     }
 }
 

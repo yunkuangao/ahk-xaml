@@ -61,8 +61,31 @@ public class AhkWpfEngine : Application {
     FrameworkElement connectionSourcePort = null;
 
     static AhkWpfEngine() {
-        EventManager.RegisterClassHandler(typeof(TreeView), UIElement.PreviewMouseWheelEvent, new System.Windows.Input.MouseWheelEventHandler(OnPreviewMouseWheel), false);
+        EventManager.RegisterClassHandler(typeof(ScrollViewer), FrameworkElement.LoadedEvent, new RoutedEventHandler(OnScrollViewerLoaded), false);
         EventManager.RegisterClassHandler(typeof(ScrollViewer), UIElement.PreviewMouseWheelEvent, new System.Windows.Input.MouseWheelEventHandler(OnPreviewMouseWheel), false);
+    }
+    
+    private static void OnScrollViewerLoaded(object sender, RoutedEventArgs e) {
+        ScrollViewer sv = sender as ScrollViewer;
+        if (sv != null && (sv.Tag as string) != "Trapped") {
+            bool inPopup = false;
+            DependencyObject d = sv;
+            while (d != null) {
+                if (d is System.Windows.Controls.Primitives.Popup || d.GetType().Name == "PopupRoot") { inPopup = true; break; }
+                if (d is System.Windows.Media.Visual || d is System.Windows.Media.Media3D.Visual3D) d = System.Windows.Media.VisualTreeHelper.GetParent(d);
+                else d = LogicalTreeHelper.GetParent(d);
+            }
+            if (inPopup) {
+                sv.Tag = "Trapped";
+                System.Windows.Input.MouseWheelEventHandler handler = (s, args) => {
+                    var _sv = (ScrollViewer)s;
+                    _sv.ScrollToVerticalOffset(_sv.VerticalOffset - args.Delta / 3.0);
+                    args.Handled = true;
+                };
+                sv.PreviewMouseWheel += handler;
+                sv.MouseWheel += handler;
+            }
+        }
     }
     
     private static void OnPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs args) {
@@ -77,8 +100,14 @@ public class AhkWpfEngine : Application {
                 else if (args.Delta < 0 && sv.VerticalOffset < sv.ScrollableHeight) canScroll = true;
             }
             
-            if (!canScroll) {
+            bool passScroll = (sv != null && (sv.Tag as string) == "PassScroll");
+            
+            if (!canScroll || passScroll) {
                 args.Handled = true;
+                
+                Window window = Window.GetWindow(sender as DependencyObject);
+                if (window != null && !window.IsEnabled) return;
+                
                 var eventArg = new System.Windows.Input.MouseWheelEventArgs(args.MouseDevice, args.Timestamp, args.Delta) { RoutedEvent = UIElement.MouseWheelEvent, Source = sender };
                 var parent = System.Windows.Media.VisualTreeHelper.GetParent(sender as DependencyObject) as UIElement;
                 if (parent != null) parent.RaiseEvent(eventArg);
@@ -532,8 +561,9 @@ public class AhkWpfEngine : Application {
                 else if (c is ComboBox) {
                     ComboBox cb = (ComboBox)c;
                     if (cb.SelectedItem is ComboBoxItem) {
+                        object tag = ((ComboBoxItem)cb.SelectedItem).Tag;
                         object content = ((ComboBoxItem)cb.SelectedItem).Content;
-                        val = content != null ? content.ToString() : "";
+                        val = tag != null ? tag.ToString() : (content != null ? content.ToString() : "");
                     }
                     else val = cb.Text;
                 }
@@ -543,6 +573,15 @@ public class AhkWpfEngine : Application {
                         object tag = ((TreeViewItem)tv.SelectedItem).Tag;
                         val = tag != null ? tag.ToString() : "";
                     }
+                }
+                else if (c is ListBox) {
+                    ListBox lb = (ListBox)c;
+                    if (lb.SelectedItem is ListBoxItem) {
+                        object tag = ((ListBoxItem)lb.SelectedItem).Tag;
+                        object content = ((ListBoxItem)lb.SelectedItem).Content;
+                        val = tag != null ? tag.ToString() : (content != null ? content.ToString() : "");
+                    }
+                    else if (lb.SelectedItem != null) val = lb.SelectedItem.ToString();
                 }
                 if (val == null) val = "";
                 sb.Append(t + "=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(val)) + "\n");
@@ -612,16 +651,22 @@ public class AhkWpfEngine : Application {
                 Marshal.StructureToPtr(mmi, lParam, true);
             } catch { }
         } else if (msg == 0x020A) { // WM_MOUSEWHEEL
+            if (win != null && !win.IsEnabled) { handled = true; return IntPtr.Zero; }
             try {
                 int delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
                 DependencyObject target = System.Windows.Input.Mouse.DirectlyOver as DependencyObject;
+                
                 while (target != null) {
                     ScrollViewer sv = target as ScrollViewer;
                     if (sv != null && sv.VerticalScrollBarVisibility == ScrollBarVisibility.Disabled && sv.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled) {
-                        sv.ScrollToHorizontalOffset(sv.HorizontalOffset - delta);
-                        handled = true;
-                        break;
+                        bool canScroll = (delta > 0 && sv.HorizontalOffset > 1.0) || (delta < 0 && (sv.ScrollableWidth - sv.HorizontalOffset) > 1.0);
+                        if (canScroll) {
+                            sv.ScrollToHorizontalOffset(sv.HorizontalOffset - delta);
+                            handled = true;
+                            break;
+                        }
                     }
+                    
                     if (target is System.Windows.Media.Visual || target is System.Windows.Media.Media3D.Visual3D) {
                         target = System.Windows.Media.VisualTreeHelper.GetParent(target);
                     } else {
@@ -630,15 +675,19 @@ public class AhkWpfEngine : Application {
                 }
             } catch { }
         } else if (msg == 0x020E) { // WM_MOUSEHWHEEL
+            if (win != null && !win.IsEnabled) { handled = true; return IntPtr.Zero; }
             try {
                 int delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
                 DependencyObject target = System.Windows.Input.Mouse.DirectlyOver as DependencyObject;
                 while (target != null) {
                     ScrollViewer sv = target as ScrollViewer;
                     if (sv != null && sv.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled) {
-                        sv.ScrollToHorizontalOffset(sv.HorizontalOffset + delta);
-                        handled = true;
-                        break;
+                        bool canScroll = (delta < 0 && sv.HorizontalOffset > 1.0) || (delta > 0 && (sv.ScrollableWidth - sv.HorizontalOffset) > 1.0);
+                        if (canScroll) {
+                            sv.ScrollToHorizontalOffset(sv.HorizontalOffset + delta);
+                            handled = true;
+                            break;
+                        }
                     }
                     if (target is System.Windows.Media.Visual || target is System.Windows.Media.Media3D.Visual3D) {
                         target = System.Windows.Media.VisualTreeHelper.GetParent(target);
@@ -695,6 +744,21 @@ public class AhkWpfEngine : Application {
             }
         } else {
             object ctrl = parts[0] == "Window" ? win : win.FindName(parts[0]);
+            if (ctrl == null && parts[0] != "Window") {
+                ctrl = FindLogicalNodeDeep(win, parts[0]);
+                if (ctrl == null) {
+                    WalkVisualTree(win, (DependencyObject d) => {
+                        if (ctrl != null) return;
+                        FrameworkElement fe = d as FrameworkElement;
+                        if (fe != null && fe.Name == parts[0]) {
+                            ctrl = d;
+                        }
+                    });
+                }
+            }
+            if (ctrl == null && parts[0] != "Window") {
+                try { System.IO.File.AppendAllText(System.Environment.ExpandEnvironmentVariables("%TEMP%\\AhkWpf\\AhkWpfDebug.log"), "Control not found: " + parts[0] + "\n"); } catch { }
+            }
             if (ctrl != null) {
                 if (parts[1] == "AddItem" && ctrl is ItemsControl) {
                     ((ItemsControl)ctrl).Items.Add(parts[2]);
@@ -940,6 +1004,9 @@ public class AhkWpfEngine : Application {
                             if (parts[2].StartsWith("HICON:")) {
                                 IntPtr hIcon = new IntPtr(long.Parse(parts[2].Substring(6)));
                                 val = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(hIcon, System.Windows.Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+                            } else if (parts[2].StartsWith("HBITMAP:")) {
+                                IntPtr hBmp = new IntPtr(long.Parse(parts[2].Substring(8)));
+                                val = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(hBmp, IntPtr.Zero, System.Windows.Int32Rect.Empty, System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
                             } else {
                                 val = new System.Windows.Media.ImageSourceConverter().ConvertFromString(parts[2]);
                             }
@@ -955,6 +1022,19 @@ public class AhkWpfEngine : Application {
                 }
             }
         }
+    }
+
+    private DependencyObject FindLogicalNodeDeep(DependencyObject parent, string name) {
+        FrameworkElement fe = parent as FrameworkElement;
+        if (fe != null && fe.Name == name) return parent;
+        foreach (object child in LogicalTreeHelper.GetChildren(parent)) {
+            DependencyObject doChild = child as DependencyObject;
+            if (doChild != null) {
+                DependencyObject found = FindLogicalNodeDeep(doChild, name);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     private void WalkVisualTree(System.Windows.DependencyObject parent, Action<System.Windows.DependencyObject> callback) {

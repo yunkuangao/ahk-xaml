@@ -39,6 +39,14 @@ class XAML_GUI {
         this.main := this.X.Add("Grid").Grid_Column(1)
         this.main.Rows(String(this.titleBarHeight), "*", "Auto")
 
+        ; Robust fix: default any new elements added to app.main to Grid_Row(1) (Content Area)
+        ; This prevents users from accidentally squishing their UI into the title bar.
+        this.main.DefineProp("Add", { Call: (thisObj, type) => (
+            el := XAMLElement.Prototype.Add.Call(thisObj, type),
+            el.Grid_Row(1),
+            el
+        )})
+
         dragArea := this.main.Add("Border").Name("DragArea").Grid_Row(0).Background("{x:Null}").Cursor("Arrow").SetProp("Panel.ZIndex", "100")
         this.BuildWindowControls(dragArea)
 

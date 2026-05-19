@@ -11,3 +11,4 @@ WebView2
 .vscode/
 .vscode/*
 *.json
+scratch*

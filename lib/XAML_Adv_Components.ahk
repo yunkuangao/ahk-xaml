@@ -1141,12 +1141,12 @@ _ImageCropper(this, imageUri := "", name := "") {
 }
 
 ; ==============================================================================
-; SVG VIEWER
+; WEB VIEWER
 ; ==============================================================================
 
-class XSvgViewer {
+class XWebViewer {
     __New(parentXAML, name := "") {
-        this.id := name != "" ? name : "SvgViewer_" XSvgViewer.Count()
+        this.id := name != "" ? name : "WebViewer_" XWebViewer.Count()
 
         this.bgColor := "transparent"
         this.gridType := "None"
@@ -1164,7 +1164,7 @@ class XSvgViewer {
 
         this.sp := this.dropZone.Add("StackPanel").VerticalAlignment("Center").HorizontalAlignment("Center").IsHitTestVisible("False")
         this.sp.Add("TextBlock").Text(Chr(0xEB9F)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("48").Foreground("{DynamicResource Accent}").HorizontalAlignment("Center").Margin("0,0,0,10")
-        this.sp.Add("TextBlock").Name(this.id "_DropText").Text("Drag & Drop or Click to Load SVG").Foreground("{DynamicResource TextSub}").FontSize("14").HorizontalAlignment("Center")
+        this.sp.Add("TextBlock").Name(this.id "_DropText").Text("Drag & Drop or Click to Load (SVG, HTML, PDF, Images)").Foreground("{DynamicResource TextSub}").FontSize("14").HorizontalAlignment("Center")
 
         this.fileCache := Map()
     }
@@ -1176,9 +1176,9 @@ class XSvgViewer {
     }
 
     OnClick(state, ctrl, event) {
-        file := FileSelect(3, "", "Select SVG", "SVG Files (*.svg)")
+        file := FileSelect(3, "", "Select File", "Web/Image Files (*.svg; *.html; *.htm; *.pdf; *.jpg; *.png; *.gif)")
         if (file) {
-            this.LoadSvg(file)
+            this.LoadFile(file)
         }
     }
 
@@ -1210,26 +1210,31 @@ class XSvgViewer {
 
         file := files[1]
         SplitPath(file, , , &ext)
-        if (StrLower(ext) != "svg") {
-            MsgBox("Please drop a valid SVG file.", "Invalid File", "Iconx")
+        if !(ext ~= "i)^(svg|html|htm|pdf|jpg|jpeg|png|gif)$") {
+            MsgBox("Please drop a valid web or image file.", "Invalid File", "Iconx")
             return
         }
 
-        this.LoadSvg(file)
+        this.LoadFile(file)
     }
 
-    LoadSvg(file) {
+    LoadFile(file) {
         this.currentFile := file
-        if (!this.fileCache.Has(file)) {
-            svgContent := FileRead(file, "UTF-8")
-            this.fileCache[file] := svgContent
-        }
-
         this.ui.Update(this.id "_Drop", "Visibility", "Collapsed")
         this.ui.Update(this.id, "Visibility", "Visible")
-        this.ui.Update("BtnSvgReplace", "Visibility", "Visible")
+        this.ui.Update("BtnWebReplace", "Visibility", "Visible")
 
-        this.Render()
+        SplitPath(file, , , &ext)
+        if (StrLower(ext) == "svg") {
+            if (!this.fileCache.Has(file)) {
+                svgContent := FileRead(file, "UTF-8")
+                this.fileCache[file] := svgContent
+            }
+            this.Render()
+        } else {
+            ; Just navigate directly
+            this.ui.Update(this.id, "Source", "file:///" StrReplace(file, "\", "/"))
+        }
     }
 
     SetBackground(color, baseColor := "") {
@@ -1256,6 +1261,10 @@ class XSvgViewer {
 
     Render() {
         if (this.currentFile == "")
+            return
+
+        SplitPath(this.currentFile, , , &ext)
+        if (StrLower(ext) != "svg")
             return
 
         svgContent := this.fileCache[this.currentFile]
@@ -1291,9 +1300,97 @@ class XSvgViewer {
     }
 }
 
-XAMLElement.Prototype.DefineProp("SvgViewer", { Call: _SvgViewer })
-_SvgViewer(this, name := "") {
-    return XSvgViewer(this, name)
+XAMLElement.Prototype.DefineProp("WebViewer", { Call: _WebViewer })
+_WebViewer(this, name := "") {
+    return XWebViewer(this, name)
+}
+
+; ==============================================================================
+; IMAGE VIEWER
+; ==============================================================================
+
+class XImageViewer {
+    __New(parentXAML, name := "") {
+        this.id := name != "" ? name : "ImgViewer_" XImageViewer.Count()
+
+        this.grid := parentXAML.Add("Grid").ClipToBounds("True")
+        this.bdr := this.grid.Add("Border").Background("{DynamicResource DropdownBg}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").CornerRadius("8").ClipToBounds("True")
+
+        this.innerGrid := this.bdr.Add("Grid")
+
+        ; Checkerboard background for transparency
+        this.innerGrid.InjectResources('<DrawingBrush x:Key="Checkerboard" Viewport="0,0,20,20" ViewportUnits="Absolute" TileMode="Tile"><DrawingBrush.Drawing><DrawingGroup><GeometryDrawing Brush="#1AFFFFFF"><GeometryDrawing.Geometry><GeometryGroup><RectangleGeometry Rect="0,0,10,10"/><RectangleGeometry Rect="10,10,10,10"/></GeometryGroup></GeometryDrawing.Geometry></GeometryDrawing><GeometryDrawing Brush="#00FFFFFF"><GeometryDrawing.Geometry><GeometryGroup><RectangleGeometry Rect="10,0,10,10"/><RectangleGeometry Rect="0,10,10,10"/></GeometryGroup></GeometryDrawing.Geometry></GeometryDrawing></DrawingGroup></DrawingBrush.Drawing></DrawingBrush>')
+        
+        this.checkerBg := this.innerGrid.Add("Border").Background("{DynamicResource Checkerboard}")
+        
+        this.img := this.innerGrid.Add("Image").Name(this.id).Stretch("Uniform").Visibility("Collapsed")
+
+        this.dropZone := this.innerGrid.Add("Border").Name(this.id "_Drop").Background("Transparent").AllowDrop("True").Cursor("Hand")
+
+        this.sp := this.dropZone.Add("StackPanel").VerticalAlignment("Center").HorizontalAlignment("Center").IsHitTestVisible("False")
+        this.sp.Add("TextBlock").Text(Chr(0xEB9F)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("48").Foreground("{DynamicResource Accent}").HorizontalAlignment("Center").Margin("0,0,0,10")
+        this.sp.Add("TextBlock").Name(this.id "_DropText").Text("Drag & Drop or Click to Load Image").Foreground("{DynamicResource TextSub}").FontSize("14").HorizontalAlignment("Center")
+    }
+
+    Bind(ui) {
+        this.ui := ui
+        ui.OnEvent(this.id "_Drop", "Drop", ObjBindMethod(this, "OnDrop"))
+        ui.OnEvent(this.id "_Drop", "MouseLeftButtonDown", ObjBindMethod(this, "OnClick"))
+    }
+
+    OnClick(state, ctrl, event) {
+        file := FileSelect(3, "", "Select Image", "Image Files (*.jpg; *.jpeg; *.png; *.webp; *.gif; *.bmp)")
+        if (file) {
+            this.LoadImage(file)
+        }
+    }
+
+    _B64Decode(str) {
+        DllCall("crypt32\CryptStringToBinary", "str", str, "uint", 0, "uint", 1, "ptr", 0, "uint*", &size := 0, "ptr", 0, "ptr", 0)
+        buf := Buffer(size)
+        DllCall("crypt32\CryptStringToBinary", "str", str, "uint", 0, "uint", 1, "ptr", buf, "uint*", &size, "ptr", 0, "ptr", 0)
+        return StrGet(buf, "UTF-8")
+    }
+
+    OnDrop(state, ctrl, event) {
+        if !state.Has("Drop")
+            return
+
+        fileList := this._B64Decode(state["Drop"])
+        files := StrSplit(fileList, "|")
+        if (files.Length == 0)
+            return
+
+        file := files[1]
+        SplitPath(file, , , &ext)
+        if !(ext ~= "i)^(jpg|jpeg|png|webp|gif|bmp|ico)$") {
+            MsgBox("Please drop a valid image file.", "Invalid File", "Iconx")
+            return
+        }
+
+        this.LoadImage(file)
+    }
+
+    LoadImage(file) {
+        this.ui.Update(this.id "_Drop", "Visibility", "Collapsed")
+        this.ui.Update(this.id, "Visibility", "Visible")
+        this.ui.Update("BtnImgReplace", "Visibility", "Visible")
+        if (SubStr(file, 1, 6) == "HICON:") {
+            this.ui.Update(this.id, "Source", file)
+        } else {
+            this.ui.Update(this.id, "Source", "file:///" StrReplace(file, "\", "/"))
+        }
+    }
+
+    static Count() {
+        static counter := 0
+        return ++counter
+    }
+}
+
+XAMLElement.Prototype.DefineProp("ImageViewer", { Call: _ImageViewer })
+_ImageViewer(this, name := "") {
+    return XImageViewer(this, name)
 }
 
 ; ==============================================================================
@@ -2305,10 +2402,8 @@ class XFlyout {
             this.container.VerticalAlignment("Bottom")
             
         ; To allow Overlay to work within Grids, we must span
-        if (isVertical)
-            this.container.Grid_RowSpan("99")
-        else
-            this.container.Grid_ColumnSpan("99")
+        this.container.Grid_RowSpan("99")
+        this.container.Grid_ColumnSpan("99")
     }
     
     BuildPushAnimations(style, targetProp) {
@@ -2396,13 +2491,13 @@ class XCommandPalette {
         ; --- Build the Flyout ---
         this.flyout := XFlyout(this.id, "Top", "Overlay", 380, true)
         this.flyout.Build(parentXAML).HorizontalAlignment("Center").Margin("0,10,0,0").CornerRadius("8")
-        this.flyout.container.Background("{DynamicResource SolidSidebar}").BorderBrush("{DynamicResource SolidBorder}").BorderThickness("1").Width("620")
+        this.flyout.container.Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").Width("620")
 
         mainGrid := this.flyout.container.Add("Grid")
         mainGrid.Rows("Auto", "Auto", "*")
 
         ; Search Box with icon
-        searchBorder := mainGrid.Add("Border").Grid_Row(0).Background("{DynamicResource SolidControl}").BorderBrush("{DynamicResource Accent}").BorderThickness("0,0,0,2").Padding("0")
+        searchBorder := mainGrid.Add("Border").Grid_Row(0).Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource Accent}").BorderThickness("0,0,0,2").Padding("0")
         searchGrid := searchBorder.Add("Grid")
         searchGrid.Cols("Auto", "*")
         searchGrid.Add("TextBlock").Text(Chr(0xE721)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Foreground("{DynamicResource Accent}").FontSize(14).VerticalAlignment("Center").Margin("14,0,0,0").IsHitTestVisible("False")
@@ -2799,14 +2894,18 @@ class XCommandPalette {
                 shortcutText := String(shortcutText)
 
             ; Build XAML for the result item
-            highlightBg := isHighlighted ? "{DynamicResource SolidBorder}" : "Transparent"
+            highlightBg := isHighlighted ? "{DynamicResource ControlBorder}" : "Transparent"
 
             shortcutBlock := ""
             if (shortcutText != "") {
-                shortcutBlock := '<Border Background="{DynamicResource SolidControl}" CornerRadius="3" Padding="6,2" VerticalAlignment="Center"><TextBlock Text="' shortcutText '" Foreground="{DynamicResource TextSub}" FontSize="11" FontFamily="Consolas, Segoe UI"/></Border>'
+                shortcutBlock := '<StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">'
+                for keyPart in StrSplit(shortcutText, "+") {
+                    shortcutBlock .= '<Border Background="{DynamicResource ControlBg}" BorderBrush="{DynamicResource ControlBorder}" BorderThickness="1" CornerRadius="3" Padding="4,2" Margin="2,0"><TextBlock Text="' Trim(keyPart) '" Foreground="{DynamicResource TextSub}" FontSize="10" FontFamily="Segoe UI" FontWeight="SemiBold"/></Border>'
+                }
+                shortcutBlock .= '</StackPanel>'
             }
 
-            xamlStr := '<Button xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Name="' btnId '" Background="' highlightBg '" BorderThickness="0" HorizontalContentAlignment="Stretch" Cursor="Hand" Margin="0,1"><Button.Template><ControlTemplate TargetType="Button"><Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="4" Padding="10,7"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bg" Property="Background" Value="{DynamicResource SolidBorder}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Grid.Column="0" Text="' iconText '" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' item.label '" Foreground="{DynamicResource TextMain}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>' shortcutBlock '</Grid></Button>'
+            xamlStr := '<Button xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Name="' btnId '" Background="' highlightBg '" BorderThickness="0" HorizontalContentAlignment="Stretch" Cursor="Hand" Margin="0,1"><Button.Template><ControlTemplate TargetType="Button"><Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="4" Padding="10,7"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bg" Property="Background" Value="{DynamicResource ControlBorder}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Grid.Column="0" Text="' iconText '" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{DynamicResource Accent}" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"/><TextBlock Grid.Column="1" Text="' item.label '" Foreground="{DynamicResource TextMain}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>' shortcutBlock '</Grid></Button>'
 
             this.ui.Update(this.id "_Results", "AddXamlItem", xamlStr)
 
@@ -2901,4 +3000,81 @@ class XCommandPalette {
 XAMLElement.Prototype.DefineProp("CommandPalette", { Call: _CommandPalette })
 _CommandPalette(this, name := "") {
     return XCommandPalette(this, name)
+}
+
+; ==============================================================================
+; CAROUSEL / MOSAIC
+; ==============================================================================
+
+class XCarousel {
+    __New(parentXAML, name := "") {
+        this.id := name != "" ? name : "Carousel_" XCarousel.Count()
+        this.cards := []
+        this.ui := ""
+
+        this.sv := parentXAML.Add("ScrollViewer").HorizontalScrollBarVisibility("Auto").VerticalScrollBarVisibility("Disabled").Padding("0,0,0,10").Tag("PassScroll")
+        this.sp := this.sv.Add("StackPanel").Orientation("Horizontal").Name(this.id)
+    }
+
+    AddCard(title, subtitle, imageUrl := "", width := "160", height := "200") {
+        idx := this.cards.Length + 1
+        cardId := this.id "_Card_" idx
+
+        ; Outer container with animation support on hover
+        bdr := this.sp.Add("Button").Name(cardId).Width(width).Height(height).Margin("0,0,20,0").Cursor("Hand").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").HorizontalContentAlignment("Stretch").VerticalContentAlignment("Stretch")
+        
+        bdr.InjectResources('<Style TargetType="Button"><Setter Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="1" ScaleY="1" CenterX="' (width/2) '" CenterY="' (height/2) '"/></Setter.Value></Setter><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bg" Property="Background" Value="#15FFFFFF"/><Setter TargetName="bg" Property="BorderBrush" Value="#40FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
+
+        grid := bdr.Add("Grid")
+        grid.Rows("*", "Auto")
+
+        ; Image area
+        imgBdr := grid.Add("Border").Grid_Row(0).CornerRadius("8,8,0,0").ClipToBounds("True")
+        if (imageUrl != "") {
+            imgBdr.Add("Image").Source(imageUrl).Stretch("UniformToFill")
+        } else {
+            ; Fallback gradient
+            imgBdr.Background("#1A1A1A")
+            imgBdr.Add("TextBlock").Text(Chr(0xE8D6)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("40").Foreground("#444").HorizontalAlignment("Center").VerticalAlignment("Center")
+        }
+
+        ; Text area
+        textBdr := grid.Add("Border").Grid_Row(1).Background("Transparent").Padding("12,10")
+        textSp := textBdr.Add("StackPanel")
+        textSp.Add("TextBlock").Text(title).Foreground("{DynamicResource TextMain}").FontWeight("SemiBold").FontSize("14").TextTrimming("CharacterEllipsis").Margin("0,0,0,4")
+        textSp.Add("TextBlock").Text(subtitle).Foreground("{DynamicResource TextSub}").FontSize("12").TextTrimming("CharacterEllipsis")
+
+        cardObj := { Title: title, Id: cardId, Index: idx }
+        this.cards.Push(cardObj)
+        return cardObj
+    }
+
+    Bind(ui) {
+        this.ui := ui
+        for card in this.cards {
+            ui.Update(card.Id, "BindEvent", "MouseLeftButtonUp")
+            ui.OnEvent(card.Id, "MouseLeftButtonUp", ObjBindMethod(this, "OnCardClicked", card.Id))
+        }
+    }
+
+    OnCardClicked(cardId, state, ctrl, event) {
+        if (HasMethod(this, "OnCardSelected")) {
+            for card in this.cards {
+                if (card.Id == cardId) {
+                    this.OnCardSelected(card.Id, card.Title)
+                    break
+                }
+            }
+        }
+    }
+
+    static Count() {
+        static counter := 0
+        return ++counter
+    }
+}
+
+XAMLElement.Prototype.DefineProp("Carousel", { Call: _Carousel })
+_Carousel(this, name := "") {
+    return XCarousel(this, name)
 }

@@ -378,8 +378,10 @@ SelectTab(tabName) {
         ui.Update("BtnTab_" t, "BorderBrush", brdCol)
         ui.Update("TxtTab_" t, "Foreground", txtCol)
 
-        ui.Update("BtnNode_" t, "Background", isSelected ? currentThemeMap["SolidBorder"] : "Transparent")
-        ui.Update("TxtNode_" t, "Foreground", txtCol)
+        if (t != "README" && t != "Settings") {
+            ui.Update("BtnNode_" t, "Background", isSelected ? currentThemeMap["SolidBorder"] : "Transparent")
+            ui.Update("TxtNode_" t, "Foreground", txtCol)
+        }
     }
 
     ; Auto-scroll to the selected tab
@@ -422,8 +424,10 @@ CloseTab(tabName) {
             ui.Update("IniEditorScreen", "Visibility", "Collapsed")
             ui.Update("SettingsScreen", "Visibility", "Collapsed")
             for t in fileKeys {
-                ui.Update("BtnNode_" t, "Background", "Transparent")
-                ui.Update("TxtNode_" t, "Foreground", "{DynamicResource TextSub}")
+                if (t != "README" && t != "Settings") {
+                    ui.Update("BtnNode_" t, "Background", "Transparent")
+                    ui.Update("TxtNode_" t, "Foreground", "{DynamicResource TextSub}")
+                }
             }
         }
     }

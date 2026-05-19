@@ -1,7 +1,6 @@
 #Requires AutoHotkey v2.0
 #Include "XAML_Host.ahk"
 #Include "XAML_Generator.ahk"
-
 ; ==============================================================================
 ; SIMPLE COMPONENTS (Prototype Extensions)
 ; ==============================================================================
@@ -1479,7 +1478,7 @@ _Avatar(this, imagePath, initials, statusColor := "") {
     grid.Add("TextBlock").Text(initials).Foreground("{DynamicResource TextSub}").FontWeight("Bold").FontSize(14).HorizontalAlignment("Center").VerticalAlignment("Center")
 
     if (imagePath != "") {
-        imgBrush := grid.Add("Ellipse.Fill").Add("ImageBrush").ImageSource(imagePath).Stretch("UniformToFill")
+        grid.Add("Border").CornerRadius(20).ClipToBounds("True").Add("Image").Source(imagePath).Stretch("UniformToFill")
     }
 
     if (statusColor != "") {
@@ -2154,7 +2153,8 @@ _EmojiPicker(this, id, opts := {}) {
         allEmoji.Push(e)
 
     ; Toggle button to open the picker
-    btn := this.Add("ToggleButton").Name(id "_Btn").Content(btnText).Width(45).Height(35).FontSize(18).FontFamily("Segoe UI Emoji").Use("IconBtn").Cursor("Hand")
+    btn := this.Add("ToggleButton").Name(id "_Btn").Width(45).Height(35).Use("IconBtn").Cursor("Hand").Padding("6")
+    btn.Add("Image").Name(id "_BtnImg").Source(_GetTwemojiUrl(btnText)).Width(24).Height(24).Stretch("Uniform")
 
     pop := btn.AddRichPopover()
 
@@ -2167,14 +2167,18 @@ _EmojiPicker(this, id, opts := {}) {
     emojiGrid := wrap.Add("WrapPanel").Width(280)
 
     for i, emoji in allEmoji {
-        emojiGrid.Add("Button").Content(emoji).Name(id "_E_" i).Width(35).Height(35).FontSize(18).FontFamily("Segoe UI Emoji").Background("Transparent").BorderThickness("0").Cursor("Hand").Padding("0").Margin("1")
+        url := _GetTwemojiUrl(emoji)
+
+        btn := emojiGrid.Add("Button").Name(id "_E_" i).Width(35).Height(35).Background("Transparent").BorderThickness("0").Cursor("Hand").Padding("6").Margin("1").ToolTip(emoji)
+        btn.Add("Image").Source(url).Stretch("Uniform")
     }
 
     ; Selected display
     selBdr := pop.Add("Border").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,1,0,0").Margin("0,8,0,0").Padding("0,8,0,0")
     selSp := selBdr.Add("StackPanel").Orientation("Horizontal")
-    selSp.Add("TextBlock").Text("Selected: ").Foreground("{DynamicResource TextSub}").FontSize(12).VerticalAlignment("Center")
-    selSp.Add("TextBlock").Name(id "_Selected").Text("None").Foreground("{DynamicResource TextMain}").FontSize(16).FontFamily("Segoe UI Emoji").VerticalAlignment("Center")
+    selSp.Add("TextBlock").Text("Selected: ").Foreground("{DynamicResource TextSub}").FontSize(12).VerticalAlignment("Center").Margin("0,0,5,0")
+    selSp.Add("Image").Name(id "_SelectedImg").Width(20).Height(20).VerticalAlignment("Center").Visibility("Collapsed")
+    selSp.Add("TextBlock").Name(id "_Selected").Text("None").Foreground("{DynamicResource TextMain}").FontSize(16).FontFamily("Segoe UI Emoji").VerticalAlignment("Center").Margin("5,0,0,0")
 
     ; Store metadata
     btn.DefineProp("EmojiId", { Get: (*) => id })
@@ -2200,6 +2204,34 @@ _BindEmojiBtn(uiHost, id, i, emoji, targetName) {
 
 _EmojiSelect(uiHost, id, emoji, targetName) {
     uiHost.Update(id "_Selected", "Text", emoji)
+
+    url := _GetTwemojiUrl(emoji)
+
+    uiHost.Update(id "_SelectedImg", "Source", url)
+    uiHost.Update(id "_SelectedImg", "Visibility", "Visible")
+
+    ; Update main toggle button image
+    uiHost.Update(id "_BtnImg", "Source", url)
+
     if (targetName != "")
         uiHost.Update(targetName, "Text", emoji)
+}
+
+_GetTwemojiUrl(emoji) {
+    hex := ""
+    pos := 1
+    len := StrLen(emoji)
+    while (pos <= len) {
+        c := Ord(SubStr(emoji, pos, 2))
+        if (c == 0xFE0F) {
+            pos++
+            continue
+        }
+        if (c > 0xFFFF)
+            pos += 2
+        else
+            pos += 1
+        hex .= Format("{:x}", c) "-"
+    }
+    return "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" RTrim(hex, "-") ".png"
 }
