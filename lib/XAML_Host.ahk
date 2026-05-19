@@ -95,6 +95,7 @@ class XAMLHost {
     static daemonReceiver := 0
 
     __New(xaml := "", exePath := "", ownerHwnd := 0) {
+        XAMLHost.RestoreWebView2Dlls()
         this.id := "WPF_" A_TickCount "_" Random(1000, 9999)
         XAMLHost._instances[this.id] := this
         this.xaml := xaml
@@ -174,6 +175,7 @@ class XAMLHost {
             if !FileExist(targetExe)
                 FileCopy(sharedExe, targetExe, 1)
 
+            XAMLHost.RestoreWebView2Dlls()
             if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {
                 SplitPath(targetExe, , &targetDir)
                 if FileExist(libDir "\WebView2\WebView2Loader.dll") {
@@ -463,6 +465,7 @@ class XAMLHost {
     }
 
     static CompileEngine(libDir, sharedExe) {
+        XAMLHost.RestoreWebView2Dlls()
         errLog := A_Temp "\AhkWpf\AhkWpfError.log"
         sourceCs := libDir "\XAML_AHK_Bridge.cs"
         if !FileExist(sourceCs) {
@@ -480,8 +483,15 @@ class XAMLHost {
         wvRefs := ""
         wvDef := ""
         if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {
-            wvRefs := ' /reference:"' libDir '\WebView2\Microsoft.Web.WebView2.Core.dll" /reference:"' libDir '\WebView2\Microsoft.Web.WebView2.Wpf.dll"'
-            wvDef := ' /define:ENABLE_WEBVIEW'
+            coreDll := libDir "\WebView2\Microsoft.Web.WebView2.Core.dll"
+            wpfDll := libDir "\WebView2\Microsoft.Web.WebView2.Wpf.dll"
+            if (FileExist(coreDll) && FileExist(wpfDll)) {
+                wvRefs := ' /reference:"' coreDll '" /reference:"' wpfDll '"'
+                wvDef := ' /define:ENABLE_WEBVIEW'
+            } else {
+                ToolTip("WebView2 DLLs not found in lib\WebView2. Compiling without WebView2 support.")
+                SetTimer(() => ToolTip(), -4000)
+            }
         }
 
         cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' sharedExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll' wvRefs wvDef ' "' sourceCs '" > "' errLog '" 2>&1"'
@@ -517,6 +527,7 @@ class XAMLHost {
             if !FileExist(targetExe)
                 FileCopy(sharedExe, targetExe, 1)
 
+            XAMLHost.RestoreWebView2Dlls()
             if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {
                 SplitPath(targetExe, , &targetDir)
                 if FileExist(libDir "\WebView2\WebView2Loader.dll") {
@@ -940,6 +951,44 @@ class XAMLHost {
         SetTimer(() => ToolTip(), -3000)
         
         SetTimer(() => this.Show(), -10)
+    }
+
+    static RestoreWebView2Dlls() {
+        libDir := ""
+        SplitPath(A_LineFile, , &libDir)
+        wvDir := libDir "\WebView2"
+        
+        if (FileExist(wvDir "\Microsoft.Web.WebView2.Core.dll") && 
+            FileExist(wvDir "\Microsoft.Web.WebView2.Wpf.dll") && 
+            FileExist(wvDir "\WebView2Loader.dll")) {
+            return false
+        }
+        
+        nativeDomDir := "C:\projects\NativeDOM\examples\webview\plugin\sdk"
+        sourceCore := nativeDomDir "\lib\net45\Microsoft.Web.WebView2.Core.dll"
+        sourceWpf  := nativeDomDir "\lib\net45\Microsoft.Web.WebView2.Wpf.dll"
+        sourceLoader := nativeDomDir "\build\native\x64\WebView2Loader.dll"
+        
+        if (FileExist(sourceCore) && FileExist(sourceWpf) && FileExist(sourceLoader)) {
+            if (!DirExist(wvDir)) {
+                DirCreate(wvDir)
+            }
+            try {
+                FileCopy(sourceCore, wvDir "\Microsoft.Web.WebView2.Core.dll", 1)
+                FileCopy(sourceWpf, wvDir "\Microsoft.Web.WebView2.Wpf.dll", 1)
+                FileCopy(sourceLoader, wvDir "\WebView2Loader.dll", 1)
+                
+                try FileDelete(libDir "\ahk-xaml-webview.dll")
+                try FileDelete(A_Temp "\AhkWpf\ahk-xaml-webview.dll")
+                
+                ToolTip("WebView2 DLLs successfully restored from NativeDOM!")
+                SetTimer(() => ToolTip(), -4000)
+                return true
+            } catch as err {
+                ; Silently fail
+            }
+        }
+        return false
     }
 }
 
