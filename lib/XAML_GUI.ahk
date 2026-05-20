@@ -85,7 +85,8 @@ class XAML_GUI {
     }
 
     BuildSidebar(container) {
-        sp := container.Add("StackPanel").Margin("25,35,25,25")
+        sv := container.Add("ScrollViewer").VerticalScrollBarVisibility("Auto").HorizontalScrollBarVisibility("Disabled")
+        sp := sv.Add("StackPanel").Margin("25,35,25,25")
         sp.SetDefaults("TextBlock", { Foreground: "{DynamicResource TextSub}", FontSize: 11, FontWeight: "Bold", Margin: "0,0,0,12" })
 
         sp.Add("TextBlock").Name("TxtLogo").Text("SETTINGS").FontSize(22).FontWeight("Black").Foreground("{DynamicResource TextMain}").Margin("0,0,0,40")
@@ -176,6 +177,7 @@ class XAML_GUI {
         } else {
             this.xamlString := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", this.titleBarHeight)
             this.xamlString := StrReplace(this.xamlString, "%app%", this.X.Compile())
+            this.xamlString := StrReplace(this.xamlString, "%resources%", "")
             this.host := XAMLHost(this.xamlString, outFile, options*)
         }
         this.BindBaseEvents()
@@ -289,8 +291,10 @@ class XAML_GUI {
                         this.host.Update("Window", "DWM", val)
                     else if (InStr(key, "Resource_") == 1)
                         this.host.Update("Resource", SubStr(key, 10), val)
-                    else if (InStr(key, "LogList_") == 1)
-                        this.host.Update("LogList", SubStr(key, 9), val)
+                    else if (InStr(key, "LogList_") == 1) {
+                        if (InStr(this.host.xaml, 'Name="LogList"'))
+                            this.host.Update("LogList", SubStr(key, 9), val)
+                    }
                 }
             }
         } catch {

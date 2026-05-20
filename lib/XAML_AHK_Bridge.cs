@@ -37,6 +37,19 @@ public class AhkWpfEngine {
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
     
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MARGINS {
+        public int leftWidth;
+        public int rightWidth;
+        public int topHeight;
+        public int bottomHeight;
+        public MARGINS(int left, int right, int top, int bottom) {
+            leftWidth = left; rightWidth = right; topHeight = top; bottomHeight = bottom;
+        }
+    }
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
+    
     [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
     private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
@@ -55,6 +68,26 @@ public class AhkWpfEngine {
         return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
     }
     
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    private static ITaskbarList _taskbarList = null;
+    public static void SetTaskbarPresence(IntPtr hwnd, bool show) {
+        try {
+            if (_taskbarList == null) {
+                _taskbarList = (ITaskbarList)new TaskbarList();
+                _taskbarList.HrInit();
+            }
+            if (show) {
+                _taskbarList.AddTab(hwnd);
+            } else {
+                _taskbarList.DeleteTab(hwnd);
+            }
+        } catch { }
+    }
+    
     [DllImport("psapi.dll")]
     public static extern int EmptyWorkingSet(IntPtr hwProc);
     
@@ -70,6 +103,26 @@ public class AhkWpfEngine {
     public static extern IntPtr MonitorFromWindow(IntPtr handle, int flags);
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessage", CharSet = CharSet.Auto)]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", EntryPoint = "GetClassLong")]
+    public static extern uint GetClassLong32(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetClassLongPtr")]
+    public static extern IntPtr GetClassLongPtr64(IntPtr hWnd, int nIndex);
+
+    public static IntPtr GetClassLongPtr(IntPtr hWnd, int nIndex) {
+        if (IntPtr.Size == 4) return new IntPtr(GetClassLong32(hWnd, nIndex));
+        return GetClassLongPtr64(hWnd, nIndex);
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    public static extern uint ExtractIconEx(string szFileName, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);
 
     string winId; IntPtr ahkHwnd; string[] tracked; Window win;
     System.Collections.Generic.Dictionary<string, string> canvasModes = new System.Collections.Generic.Dictionary<string, string>();
@@ -112,15 +165,18 @@ public class AhkWpfEngine {
             if (sender is ScrollViewer) sv = (ScrollViewer)sender;
             else sv = FindVisualChild<ScrollViewer>(sender as DependencyObject);
             
+            if (sv == null) return;
+            if (IsEventForNestedOrPopup(args.OriginalSource as DependencyObject, sv)) return;
+            
             bool canScroll = false;
-            if (sv != null && sv.ComputedVerticalScrollBarVisibility == Visibility.Visible) {
+            if (sv.ComputedVerticalScrollBarVisibility == Visibility.Visible) {
                 if (args.Delta > 0 && sv.VerticalOffset > 0) canScroll = true;
                 else if (args.Delta < 0 && sv.VerticalOffset < sv.ScrollableHeight) canScroll = true;
             }
             
-            string tag = sv != null ? (sv.Tag as string) : "";
-            bool passScroll = (tag != null && tag.Contains("PassScroll"));
-            bool containScroll = (tag != null && tag.Contains("ContainScroll"));
+            string tag = sv.Tag as string ?? "";
+            bool passScroll = tag.Contains("PassScroll");
+            bool containScroll = tag.Contains("ContainScroll");
             
             if (!canScroll || passScroll) {
                 args.Handled = true;
@@ -135,6 +191,25 @@ public class AhkWpfEngine {
                 if (parent != null) parent.RaiseEvent(eventArg);
             }
         }
+    }
+    
+    private static bool IsEventForNestedOrPopup(DependencyObject originalSource, ScrollViewer currentScrollViewer) {
+        if (originalSource == null || currentScrollViewer == null) return false;
+        DependencyObject d = originalSource;
+        while (d != null && d != currentScrollViewer) {
+            if (d is System.Windows.Controls.Primitives.Popup || d.GetType().Name == "PopupRoot") {
+                return true;
+            }
+            if (d is ScrollViewer && d != currentScrollViewer) {
+                return true;
+            }
+            if (d is System.Windows.Media.Visual || d is System.Windows.Media.Media3D.Visual3D) {
+                d = System.Windows.Media.VisualTreeHelper.GetParent(d);
+            } else {
+                d = LogicalTreeHelper.GetParent(d);
+            }
+        }
+        return false;
     }
     
     private static T FindVisualChild<T>(DependencyObject obj) where T : DependencyObject {
@@ -243,8 +318,38 @@ public class AhkWpfEngine {
                     Application app = new Application();
                     app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                     
-                    // Force JIT compilation of WPF rendering engine in the background
+                    try {
+                        string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                        string exeDir = System.IO.Path.GetDirectoryName(exePath);
+                        string componentsPath = System.IO.Path.Combine(exeDir, "xaml.components.xaml");
+                        if (System.IO.File.Exists(componentsPath)) {
+                            string componentsXaml = System.IO.File.ReadAllText(componentsPath, Encoding.UTF8);
+                            if (componentsXaml.Contains("<Window.Resources>")) {
+                                componentsXaml = componentsXaml.Replace("<Window.Resources>", "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" xmlns:sys=\"clr-namespace:System;assembly=mscorlib\" xmlns:primitives=\"clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework\">");
+                                componentsXaml = componentsXaml.Replace("</Window.Resources>", "</ResourceDictionary>");
+                            }
+                            using (var stream = new System.IO.MemoryStream(Encoding.UTF8.GetBytes(componentsXaml))) {
+                                ResourceDictionary dict = (ResourceDictionary)XamlReader.Load(stream);
+                                app.Resources.MergedDictionaries.Add(dict);
+                            }
+                        }
+                    } catch (Exception ex) {
+                        try {
+                            string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                            string exeDir = System.IO.Path.GetDirectoryName(exePath);
+                            System.IO.File.AppendAllText(System.IO.Path.Combine(exeDir, "daemon_error.txt"), "Error loading components: " + ex.ToString() + "\n");
+                        } catch { }
+                    }
+                    
+                    // Force JIT compilation of WPF rendering engine and core control templates in the background
                     var dummy = new Window { Width = 0, Height = 0, WindowStyle = WindowStyle.None, ShowInTaskbar = false, AllowsTransparency = true, Opacity = 0 };
+                    var prewarmPanel = new StackPanel();
+                    prewarmPanel.Children.Add(new Button { Content = "Prewarm" });
+                    prewarmPanel.Children.Add(new TextBox { Text = "Prewarm" });
+                    prewarmPanel.Children.Add(new CheckBox { Content = "Prewarm" });
+                    prewarmPanel.Children.Add(new ListBox());
+                    prewarmPanel.Children.Add(new TreeView());
+                    dummy.Content = prewarmPanel;
                     dummy.Show();
                     dummy.Hide();
 #if ENABLE_WEBVIEW
@@ -383,6 +488,7 @@ public class AhkWpfEngine {
             HwndSource.FromHwnd(hwndVal).AddHook(WndProc);
             SendToAhk("EVENT|" + winId + "|Window|LoadedHwnd|" + hwndVal.ToString() + "\n");
             UpdateSnapState(win);
+            InheritWindowIconAndTitle(win, ownerHwndStr);
             DumpState("Window", "Loaded");
         };
         win.Closing += (s, e) => { 
@@ -409,11 +515,13 @@ public class AhkWpfEngine {
             try {
                 IntPtr oHwnd = new IntPtr(long.Parse(ownerHwndStr));
                 if (oHwnd != IntPtr.Zero) {
+                    win.Resources["OriginalNativeOwner"] = oHwnd;
                     new WindowInteropHelper(win).Owner = oHwnd;
                 }
             } catch { }
         }
         
+        InheritWindowIconAndTitle(win, ownerHwndStr);
         if (isDaemon) {
             win.Show();
         } else {
@@ -618,6 +726,7 @@ public class AhkWpfEngine {
             HwndSource.FromHwnd(hwnd).AddHook(WndProc);
             SendToAhk("EVENT|" + winId + "|Window|LoadedHwnd|" + hwnd.ToString() + "\n");
             UpdateSnapState(win);
+            InheritWindowIconAndTitle(win, ownerHwndStr);
             DumpState("Window", "Loaded");
             
 #if ENABLE_WEBVIEW
@@ -691,6 +800,7 @@ public class AhkWpfEngine {
             try {
                 IntPtr oHwnd = new IntPtr(long.Parse(ownerHwndStr));
                 if (oHwnd != IntPtr.Zero) {
+                    win.Resources["OriginalNativeOwner"] = oHwnd;
                     new System.Windows.Interop.WindowInteropHelper(win).Owner = oHwnd;
                 }
             } catch { }
@@ -698,6 +808,7 @@ public class AhkWpfEngine {
         
         eventsContent = null;
         
+        InheritWindowIconAndTitle(win, ownerHwndStr);
         if (isDaemon) {
             win.Show();
         } else {
@@ -705,9 +816,129 @@ public class AhkWpfEngine {
         }
     }
 
+    private void WalkLogicalOrVisualTree(DependencyObject parent, Action<DependencyObject> callback) {
+        if (parent == null) return;
+        callback(parent);
+        
+        try {
+            foreach (object child in LogicalTreeHelper.GetChildren(parent)) {
+                if (child is DependencyObject) {
+                    WalkLogicalOrVisualTree((DependencyObject)child, callback);
+                }
+            }
+        } catch { }
+        
+        try {
+            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++) {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                WalkLogicalOrVisualTree(child, callback);
+            }
+        } catch { }
+    }
+
+    private void InheritWindowIconAndTitle(Window win, string ownerHwndStr) {
+        try {
+            if (string.IsNullOrEmpty(win.Title)) {
+                string extractedTitle = null;
+                var dragArea = win.FindName("DragArea") as FrameworkElement;
+                if (dragArea != null) {
+                    WalkLogicalOrVisualTree(dragArea, (DependencyObject d) => {
+                        if (extractedTitle != null) return;
+                        if (d is TextBlock) {
+                            var tb = (TextBlock)d;
+                            if (!string.IsNullOrEmpty(tb.Text)) {
+                                extractedTitle = tb.Text;
+                            }
+                        }
+                    });
+                }
+                if (string.IsNullOrEmpty(extractedTitle)) {
+                    WalkLogicalOrVisualTree(win, (DependencyObject d) => {
+                        if (extractedTitle != null) return;
+                        if (d is TextBlock) {
+                            var tb = (TextBlock)d;
+                            if (tb.Name == "TitleText" || tb.Name == "WindowTitle" || tb.Name == "HeaderTitle" || tb.Name == "DialogTitle") {
+                                extractedTitle = tb.Text;
+                            }
+                        }
+                    });
+                }
+                
+                if (!string.IsNullOrEmpty(extractedTitle)) {
+                    win.Title = extractedTitle;
+                } else if (ownerHwndStr != "0") {
+                    try {
+                        IntPtr oHwnd = new IntPtr(long.Parse(ownerHwndStr));
+                        if (oHwnd != IntPtr.Zero) {
+                            StringBuilder sb = new StringBuilder(256);
+                            GetWindowText(oHwnd, sb, sb.Capacity);
+                            if (sb.Length > 0) {
+                                win.Title = sb.ToString();
+                            }
+                        }
+                    } catch { }
+                }
+            }
+            
+            if (win.Icon == null) {
+                IntPtr hIcon = IntPtr.Zero;
+                
+                if (ownerHwndStr != "0") {
+                    try {
+                        IntPtr oHwnd = new IntPtr(long.Parse(ownerHwndStr));
+                        if (oHwnd != IntPtr.Zero) {
+                            hIcon = SendMessage(oHwnd, 0x007F /* WM_GETICON */, new IntPtr(1 /* ICON_BIG */), IntPtr.Zero);
+                            if (hIcon == IntPtr.Zero) {
+                                hIcon = SendMessage(oHwnd, 0x007F /* WM_GETICON */, new IntPtr(0 /* ICON_SMALL */), IntPtr.Zero);
+                            }
+                            if (hIcon == IntPtr.Zero) {
+                                hIcon = GetClassLongPtr(oHwnd, -14 /* GCLP_HICON */);
+                            }
+                            if (hIcon == IntPtr.Zero) {
+                                hIcon = GetClassLongPtr(oHwnd, -34 /* GCLP_HICONSM */);
+                            }
+                        }
+                    } catch { }
+                }
+                
+                if (hIcon == IntPtr.Zero) {
+                    try {
+                        var proc = System.Diagnostics.Process.GetCurrentProcess();
+                        IntPtr mainHwnd = proc.MainWindowHandle;
+                        if (mainHwnd != IntPtr.Zero) {
+                            hIcon = SendMessage(mainHwnd, 0x007F /* WM_GETICON */, new IntPtr(1 /* ICON_BIG */), IntPtr.Zero);
+                            if (hIcon == IntPtr.Zero) {
+                                hIcon = GetClassLongPtr(mainHwnd, -14 /* GCLP_HICON */);
+                            }
+                        }
+                        if (hIcon == IntPtr.Zero) {
+                            string exePath = proc.MainModule.FileName;
+                            IntPtr[] largeIcons = new IntPtr[1] { IntPtr.Zero };
+                            uint extracted = ExtractIconEx(exePath, 0, largeIcons, null, 1);
+                            if (extracted > 0 && largeIcons[0] != IntPtr.Zero) {
+                                hIcon = largeIcons[0];
+                            }
+                        }
+                    } catch { }
+                }
+                
+                if (hIcon != IntPtr.Zero) {
+                    win.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                        hIcon,
+                        System.Windows.Int32Rect.Empty,
+                        System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions()
+                    );
+                }
+            }
+        } catch { }
+    }
+
     private void UpdateSnapState(Window win) {
         CornerRadius baseRad = new CornerRadius(0);
-        if (win.Resources.Contains("BaseWindowRadius")) {
+        if (win.Resources.Contains("PanelRadius")) {
+            baseRad = (CornerRadius)win.Resources["PanelRadius"];
+        } else if (win.Resources.Contains("BaseWindowRadius")) {
             baseRad = (CornerRadius)win.Resources["BaseWindowRadius"];
         }
         bool wantsRound = baseRad.TopLeft > 0;
@@ -727,13 +958,15 @@ public class AhkWpfEngine {
                 hr = DwmSetWindowAttribute(hwnd, 33, ref cornerPref, 4);
             }
         } catch { }
-
-        // On Windows 11, if DwmSetWindowAttribute(33) succeeds, DWM rounds the physical window to exactly 8px.
+        // On Windows 11, if DwmSetWindowAttribute(33) succeeds, DWM rounds the physical window to exactly the requested radius.
         // On Windows 10, it fails, and the physical window remains square (0px).
-        double actualRadius = (!isSnappedOrMax && wantsRound && hr == 0) ? 8 : 0;
+        double actualRadius = (!isSnappedOrMax && wantsRound && hr == 0) ? baseRad.TopLeft : 0;
 
         win.Resources["WindowRadius"] = new CornerRadius(actualRadius);
         win.Resources["CloseBtnRadius"] = new CornerRadius(0, actualRadius, 0, 0);
+        if (win.Resources.Contains("PanelRadius")) {
+            win.Resources["PanelRadius"] = new CornerRadius(actualRadius);
+        }
         
         var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(win);
         if (chrome != null) {
@@ -962,24 +1195,65 @@ public class AhkWpfEngine {
         if (parts[0] == "Window" && parts[1] == "DWM") {
             string[] p = parts[2].Split(',');
             int backdrop = int.Parse(p[0]), dark = int.Parse(p[1]);
+            win.Resources["DWM_Backdrop"] = backdrop;
+            win.Resources["DWM_Dark"] = dark;
             DwmSetWindowAttribute(hwnd, 20, ref dark, 4);
             DwmSetWindowAttribute(hwnd, 38, ref backdrop, 4);
             int borderColor = -2; // DWMWA_COLOR_NONE (0xFFFFFFFE)
             DwmSetWindowAttribute(hwnd, 34, ref borderColor, 4);
+            
+            // Re-apply shadow policy if glass frame thickness was set to prevent theme change override
+            if (win.Resources.Contains("GlassFrameThicknessVal")) {
+                double val = (double)win.Resources["GlassFrameThicknessVal"];
+                int policy = (val == 0) ? 1 : 2;
+                DwmSetWindowAttribute(hwnd, 2, ref policy, 4);
+                
+                MARGINS margins = (val == 0) ? new MARGINS(0, 0, 0, 0) : new MARGINS(-1, -1, -1, -1);
+                DwmExtendFrameIntoClientArea(hwnd, ref margins);
+                SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0037);
+            }
         } else if (parts[0] == "Window" && parts[1] == "NativeOwner") {
             try {
                 IntPtr ownerHwnd = new IntPtr(long.Parse(parts[2]));
-                new System.Windows.Interop.WindowInteropHelper(win).Owner = ownerHwnd;
+                if (ownerHwnd != IntPtr.Zero) {
+                    win.Resources["OriginalNativeOwner"] = ownerHwnd;
+                }
+                IntPtr hwndVal = new WindowInteropHelper(win).Handle;
+                if (hwndVal != IntPtr.Zero) {
+                    SetWindowLong(hwndVal, -8, ownerHwnd);
+                }
+                InheritWindowIconAndTitle(win, parts[2]);
             } catch { }
         } else if (parts[0] == "Window" && parts[1] == "GlassFrameThickness") {
             var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(win);
             if (chrome != null) {
                 double val = double.Parse(parts[2]);
+                win.Resources["GlassFrameThicknessVal"] = val;
                 chrome.GlassFrameThickness = new Thickness(val);
                 if (val == 0) {
                     chrome.ResizeBorderThickness = new Thickness(6);
                 } else {
                     chrome.ResizeBorderThickness = new Thickness(0);
+                }
+                IntPtr hwndVal = new WindowInteropHelper(win).Handle;
+                if (hwndVal != IntPtr.Zero) {
+                    int policy = (val == 0) ? 1 : 2; // 1 = DWMNCRP_DISABLED (No Shadow), 2 = DWMNCRP_ENABLED (Shadow)
+                    DwmSetWindowAttribute(hwndVal, 2, ref policy, 4); // DWMWA_NCRENDERING_POLICY = 2
+                    
+                    MARGINS margins = (val == 0) ? new MARGINS(0, 0, 0, 0) : new MARGINS(-1, -1, -1, -1);
+                    DwmExtendFrameIntoClientArea(hwndVal, ref margins);
+                    
+                    SetWindowPos(hwndVal, IntPtr.Zero, 0, 0, 0, 0, 0x0037); // SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER
+                    
+                    if (win.Resources.Contains("DWM_Backdrop") && win.Resources.Contains("DWM_Dark")) {
+                        int backdrop = (int)win.Resources["DWM_Backdrop"];
+                        int dark = (int)win.Resources["DWM_Dark"];
+                        DwmSetWindowAttribute(hwndVal, 20, ref dark, 4);
+                        DwmSetWindowAttribute(hwndVal, 38, ref backdrop, 4);
+                        int borderColor = -2; // DWMWA_COLOR_NONE
+                        DwmSetWindowAttribute(hwndVal, 34, ref borderColor, 4);
+                    }
+                    UpdateSnapState(win);
                 }
             }
         } else if (parts[0] == "Window" && parts[1] == "ApplyVisibilityStyles") {
@@ -990,19 +1264,66 @@ public class AhkWpfEngine {
                 
                 IntPtr hwndVal = new WindowInteropHelper(win).Handle;
                 if (hwndVal != IntPtr.Zero) {
-                    int exStyle = GetWindowLong(hwndVal, -20); // GWL_EXSTYLE = -20
+                    bool wasVisible = IsWindowVisible(hwndVal);
+                    if (wasVisible) {
+                        ShowWindow(hwndVal, 0); // SW_HIDE = 0
+                    }
+                    
+                    IntPtr originalOwner = IntPtr.Zero;
+                    if (win.Resources.Contains("OriginalNativeOwner")) {
+                        originalOwner = (IntPtr)win.Resources["OriginalNativeOwner"];
+                    }
+                    
                     if (showInAltTab) {
-                        exStyle &= ~0x80; // Remove WS_EX_TOOLWINDOW
+                        SetWindowLong(hwndVal, -8, IntPtr.Zero);
                     } else {
+                        SetWindowLong(hwndVal, -8, originalOwner);
+                    }
+                    
+                    int exStyle = GetWindowLong(hwndVal, -20); // GWL_EXSTYLE = -20
+                    if (showInAltTab && showInTaskbar) {
+                        exStyle &= ~0x80; // Remove WS_EX_TOOLWINDOW
+                        exStyle |= 0x40000; // Add WS_EX_APPWINDOW
+                    } else if (showInAltTab && !showInTaskbar) {
+                        exStyle &= ~0x80; // Remove WS_EX_TOOLWINDOW
+                        exStyle &= ~0x40000; // Remove WS_EX_APPWINDOW
+                    } else if (!showInAltTab && showInTaskbar) {
+                        exStyle &= ~0x80; // Remove WS_EX_TOOLWINDOW
+                        exStyle &= ~0x40000; // Remove WS_EX_APPWINDOW
+                    } else { // !showInAltTab && !showInTaskbar
+                        exStyle &= ~0x40000; // Remove WS_EX_APPWINDOW
                         exStyle |= 0x80; // Add WS_EX_TOOLWINDOW
                     }
-                    if (showInTaskbar) {
-                        exStyle |= 0x40000; // Add WS_EX_APPWINDOW
-                    } else {
-                        exStyle &= ~0x40000; // Remove WS_EX_APPWINDOW
-                    }
+                    
                     SetWindowLong(hwndVal, -20, new IntPtr(exStyle));
+                    
+                    SetTaskbarPresence(hwndVal, showInTaskbar);
+                    
                     SetWindowPos(hwndVal, IntPtr.Zero, 0, 0, 0, 0, 0x0037); // SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER
+                    
+                    if (wasVisible) {
+                        ShowWindow(hwndVal, 8); // SW_SHOWNA = 8
+                    }
+                    
+                    // Re-apply DWM attributes after recreate
+                    if (win.Resources.Contains("DWM_Backdrop") && win.Resources.Contains("DWM_Dark")) {
+                        int backdrop = (int)win.Resources["DWM_Backdrop"];
+                        int dark = (int)win.Resources["DWM_Dark"];
+                        DwmSetWindowAttribute(hwndVal, 20, ref dark, 4);
+                        DwmSetWindowAttribute(hwndVal, 38, ref backdrop, 4);
+                        int borderColor = -2; // DWMWA_COLOR_NONE
+                        DwmSetWindowAttribute(hwndVal, 34, ref borderColor, 4);
+                    }
+                    
+                    if (win.Resources.Contains("GlassFrameThicknessVal")) {
+                        double val = (double)win.Resources["GlassFrameThicknessVal"];
+                        int policy = (val == 0) ? 1 : 2;
+                        DwmSetWindowAttribute(hwndVal, 2, ref policy, 4);
+                        MARGINS margins = (val == 0) ? new MARGINS(0, 0, 0, 0) : new MARGINS(-1, -1, -1, -1);
+                        DwmExtendFrameIntoClientArea(hwndVal, ref margins);
+                    }
+                    
+                    UpdateSnapState(win);
                 }
             } catch { }
         } else if (parts[0] == "Resource") {
@@ -1024,6 +1345,7 @@ public class AhkWpfEngine {
                             if (chrome != null) {
                                 chrome.CornerRadius = (CornerRadius)win.Resources["PanelRadius"];
                             }
+                            UpdateSnapState(win);
                         }
                     }
                 }
@@ -1300,6 +1622,7 @@ public class AhkWpfEngine {
                     tb.CaretIndex = idx + parts[2].Length;
                 } else if (parts[1] == "NativeOwner" && ctrl is Window) {
                     new System.Windows.Interop.WindowInteropHelper((Window)ctrl).Owner = new IntPtr(long.Parse(parts[2]));
+                    InheritWindowIconAndTitle((Window)ctrl, parts[2]);
                 } else if (parts[1] == "Focus" && ctrl is UIElement) {
                     if (parts[2].ToLower() == "true") ((UIElement)ctrl).Focus();
                     else System.Windows.Input.Keyboard.ClearFocus();
@@ -2027,4 +2350,22 @@ public class AhkWpfEngine {
         }
         return null;
     }
+}
+
+[ComImport]
+[Guid("56FDF342-FD6D-11d0-958A-006097C9A090")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITaskbarList
+{
+    void HrInit();
+    void AddTab(IntPtr hwnd);
+    void DeleteTab(IntPtr hwnd);
+    void ActivateTab(IntPtr hwnd);
+    void SetActiveAlt(IntPtr hwnd);
+}
+
+[ComImport]
+[Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
+public class TaskbarList
+{
 }
