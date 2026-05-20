@@ -13,3 +13,8 @@ WebView2
 *.json
 scratch*
 old/
+*.events
+*.xaml
+!xaml.components.xaml
+*.baml
+!xaml.components.baml
