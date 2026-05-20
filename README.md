@@ -23,29 +23,31 @@ Here is a minimal implementation to show how a UI is constructed and launched.
 #Requires AutoHotkey v2.0
 #Include "lib\XAML_GUI.ahk"
 
-; Define Dev Mode vs Production Mode
+; Toggle this flag for Development vs Production modes
 global XAML_FORCE_DYNAMIC_COMPILE := true
 
 ; 1. Initialize the Main App Window
 app := XAML_GUI("My Application", 800, 600)
 
-; 2. Build the UI using the generator syntax
-app.Add("TextBlock").Text("Hello, World!").FontSize(24).Foreground("{DynamicResource TextMain}").HorizontalAlignment("Center").Margin("0,20,0,0")
-
-btn := app.Add("Button").Content("Click Me!").Width(120).Height(40).Margin("0,20,0,0").Cursor("Hand")
-
-; 3. Compile or Load the compiled UI
 if (XAML_FORCE_DYNAMIC_COMPILE) {
+    ; 2. Build the UI using the generator syntax (Only needed in Development!)
+    #Include "lib\XAML_Generator.ahk"
+    
+    app.Add("TextBlock").Text("Hello, World!").FontSize(24).Foreground("{DynamicResource TextMain}").HorizontalAlignment("Center").Margin("0,20,0,0")
+    app.Add("Button").Name("BtnClickMe").Content("Click Me!").Width(120).Height(40).Margin("0,20,0,0").Cursor("Hand")
+
+    ; 3a. Compile the dynamic UI into the memory host
     ui := app.Compile()
 } else {
+    ; 3b. Or load it instantly from a pre-compiled, standalone DLL bundle!
     ui := app.Load("gui.dll")
 }
 
-; 4. Bind events to AHK callbacks
-app.Events.OnEvent("BtnClickMe", "Click", (state, ctrl, event) => MsgBox("Button Clicked!"))
-btn.Name("BtnClickMe") ; Assign the name so the engine can track it
+; 4. Bind events to AHK callbacks (Required in both modes)
+ui.OnEvent("BtnClickMe", "Click", (state, ctrl, event) => MsgBox("Button Clicked!"))
 
 ; 5. Bundle everything into an ultra-fast standalone DLL in Dev Mode
+; (Must be done AFTER bindings so that your events are serialized in the bundle)
 if (XAML_FORCE_DYNAMIC_COMPILE) {
     app.ExportBundle("gui.dll")
 }
