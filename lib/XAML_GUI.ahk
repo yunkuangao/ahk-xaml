@@ -93,7 +93,7 @@ class XAML_GUI {
         sp.Add("TextBlock").Text("THEME ENGINE").Margin("0,0,0,5")
         themeCombo := sp.Add("ComboBox").Name("ComboTheme").Height(35).Margin("0,0,0,15")
         try {
-            iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
+            iniPath := FindThemesIni()
             Loop Parse, IniRead(iniPath), "`n", "`r"
                 themeCombo.Add("ComboBoxItem").Content(A_LoopField)
         }
@@ -105,6 +105,15 @@ class XAML_GUI {
         scaleCombo.Add("ComboBoxItem").Content("Balanced")
         scaleCombo.Add("ComboBoxItem").Content("Chunky")
 
+        sp.Add("TextBlock").Text("BORDER RADIUS").Margin("0,15,0,5")
+        radiusCombo := sp.Add("ComboBox").Name("ComboRadius").Height(35).Margin("0,0,0,15")
+        radiusCombo.Add("ComboBoxItem").Content("Sharp (0)")
+        radiusCombo.Add("ComboBoxItem").Content("Rounded (4)")
+        radiusCombo.Add("ComboBoxItem").Content("Smooth (8)")
+        radiusCombo.Add("ComboBoxItem").Content("Extra Smooth (12)")
+        radiusCombo.Add("ComboBoxItem").Content("Fluid (16)")
+        radiusCombo.SelectedIndex(2) ; Default to Smooth (8)
+
         ; Expose for customization
         this.sidebarPanel := sp
     }
@@ -115,7 +124,11 @@ class XAML_GUI {
         leftSp := grid.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").Margin("15,0,0,0")
 
         if (this.showBurger) {
-            leftSp.Add("ToggleButton").Name("BtnToggleSidebar").Style("{StaticResource HamburgerButton}").WindowChrome_IsHitTestVisibleInChrome("True").ToolTip("Toggle Sidebar (Ctrl+B)").Margin("0,0,10,0")
+            burgerSize := Min(40, this.titleBarHeight - 8)
+            if (burgerSize < 20)
+                burgerSize := 20
+            burgerFontSize := Min(16, Max(10, Round(burgerSize * 0.45)))
+            leftSp.Add("ToggleButton").Name("BtnToggleSidebar").Style("{StaticResource HamburgerButton}").Width(burgerSize).Height(burgerSize).FontSize(burgerFontSize).WindowChrome_IsHitTestVisibleInChrome("True").ToolTip("Toggle Sidebar (Ctrl+B)").Margin("0,0,10,0")
         }
 
         titleSp := leftSp.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center").IsHitTestVisible("False")
@@ -201,6 +214,7 @@ class XAML_GUI {
 
         this.host.OnEvent("ComboTheme", "SelectionChanged", ObjBindMethod(this, "ThemeChanged"))
         this.host.OnEvent("ComboScale", "SelectionChanged", ObjBindMethod(this, "ScaleChanged"))
+        this.host.OnEvent("ComboRadius", "SelectionChanged", ObjBindMethod(this, "RadiusChanged"))
 
         if (this.showBurger) {
             this.host.OnEvent("BtnToggleSidebar", "Click", ObjBindMethod(this, "OnSidebarClick"))
@@ -209,6 +223,7 @@ class XAML_GUI {
 
         this.host.Track("ComboTheme")
         this.host.Track("ComboScale")
+        this.host.Track("ComboRadius")
 
         ; Keyboard hooks for bound components
         this.InitKeyboardHooks()
@@ -246,6 +261,7 @@ class XAML_GUI {
 
         this.ThemeChanged(state, ctrl, event)
         this.ScaleChanged(state, ctrl, event)
+        this.RadiusChanged(state, ctrl, event)
 
         for _, tok in this.tokenizers {
             tok.RenderTags()
@@ -262,7 +278,7 @@ class XAML_GUI {
             return
         theme := state["ComboTheme"]
         try {
-            iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
+            iniPath := FindThemesIni()
             themeData := IniRead(iniPath, theme)
             Loop Parse, themeData, "`n", "`r" {
                 parts := StrSplit(A_LoopField, "=", " `t", 2)
@@ -295,6 +311,22 @@ class XAML_GUI {
         } else if (scale == "Chunky") {
             this.host.Update("AppScale", "ScaleX", "1.15")
             this.host.Update("AppScale", "ScaleY", "1.15")
+        }
+    }
+
+    RadiusChanged(state, ctrl, event) {
+        radText := state.Has("ComboRadius") ? state["ComboRadius"] : "Smooth (8)"
+        RegExMatch(radText, "\((\d+)\)", &match)
+        radius := match ? match[1] : "8"
+        
+        ; Apply to window resources
+        this.host.Update("Resource", "WindowRadius", "CornerRadius:" radius)
+        
+        ; Apply to DWM for Win11 styling
+        if (this.host.wpfHwnd) {
+            cornerPref := Buffer(4)
+            NumPut("Int", radius == "0" ? 1 : 0, cornerPref)
+            DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", this.host.wpfHwnd, "UInt", 33, "Ptr", cornerPref.Ptr, "UInt", 4)
         }
     }
 
@@ -442,4 +474,21 @@ class XAML_GUI {
             this.host.Update("AppGrid", "Focus", "True")
         }
     }
+}
+
+FindThemesIni() {
+    paths := [
+        "themes.ini",
+        A_ScriptDir "\themes.ini",
+        A_ScriptDir "\..\themes.ini",
+        A_ScriptDir "\..\..\themes.ini",
+        A_LineFile "\..\themes.ini",
+        A_LineFile "\..\..\themes.ini",
+        A_LineFile "\..\..\..\themes.ini"
+    ]
+    for p in paths {
+        if FileExist(p)
+            return p
+    }
+    return "themes.ini"
 }

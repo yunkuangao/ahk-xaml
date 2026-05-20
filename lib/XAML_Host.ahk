@@ -520,12 +520,17 @@ class XAMLHost {
         if (A_IsCompiled && FileExist(A_ScriptDir "\" baseDllName)) {
             targetExe := A_ScriptDir "\" baseDllName
         } else if (!A_IsCompiled) {
+            sourceCs := libDir "\XAML_AHK_Bridge.cs"
+            if (FileExist(sourceCs) && FileExist(sharedExe) && FileGetTime(sourceCs) > FileGetTime(sharedExe)) {
+                try FileDelete(sharedExe)
+            }
             if !FileExist(sharedExe) {
                 if !XAMLHost.CompileEngine(libDir, sharedExe)
                     return ""
             }
-            if !FileExist(targetExe)
-                FileCopy(sharedExe, targetExe, 1)
+            if (!FileExist(targetExe) || FileGetTime(sharedExe) != FileGetTime(targetExe)) {
+                try FileCopy(sharedExe, targetExe, 1)
+            }
 
             XAMLHost.RestoreWebView2Dlls()
             if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {

@@ -58,6 +58,8 @@ app.Show()
 
 ```
 ahk-xaml/
+├── docs/
+│   └── production-steps.md       # Steps for packaging/exporting to production
 ├── lib/
 │   ├── XAML_Host.ahk             # Core IPC bridge, engine compilation, message dispatch
 │   ├── XAML_Generator.ahk        # Chainable AST → XAML compiler
@@ -68,20 +70,31 @@ ahk-xaml/
 │   ├── XAML_Dialog.ahk           # Modal dialog system (XDialog)
 │   ├── XAML_AHK_Bridge.cs        # C# WPF engine source (compiled at runtime)
 │   ├── xaml.components.xaml       # WPF ResourceDictionary (all control templates & styles)
-│   ├── ahk-xaml.dll              # Compiled WPF engine binary (cached)
 │   └── WebView2/                 # WebView2 runtime DLLs (optional)
 ├── examples/
-│   ├── example.ahk               # Full showcase with all component tabs
-│   ├── example_advanced.ahk      # NodeGraph, Media, SVG, Code Editor, etc.
-│   ├── example_docking.ahk       # Multi-panel docking workspace
-│   ├── example_webview.ahk       # WebView2 browser demo
-│   ├── example_basic.ahk         # Minimal starter
-│   └── ribbon_example.ahk        # Office-style ribbon toolbar
-├── README.md
-├── Components.md
-├── SyntaxAndPrinciples.md
-└── ARCHITECTURE.md
+│   ├── basic/                    # Starter & helper scripts
+│   │   ├── clean_modern.ahk      # Modern styling template
+│   │   ├── ribbon_example.ahk    # Office-style ribbon toolbar
+│   │   └── minimal_wrapper.ahk   # Core minimum implementation
+│   ├── clones/                   # Premium replicas of popular UIs
+│   │   ├── win11_settings.ahk    # Full Windows 11 Settings app clone
+│   │   ├── vscode.ahk            # VS Code layout and sidebar clone
+│   │   ├── spotify.ahk           # Spotify media player interface clone
+│   │   ├── steam_launcher.ahk    # Steam games browser layout clone
+│   │   └── chat_app.ahk          # Fluent chat and messaging UI clone
+│   ├── showcase/                 # Rich component galleries & layouts
+│   │   ├── basic_components.ahk  # All standard controls showcase
+│   │   ├── advanced_components.ahk # Sparklines, clocks, gauges, and graphs
+│   │   └── docking.ahk           # Multi-panel workspaces & window snapping
+│   ├── data/                     # Mock data utilities
+│   │   └── MockData.ahk          # Utility to feed lists, grids, and charts
+│   └── themes.ini                # Application colors and styles definition file
+├── README.md                     # Framework overview and quick start guide
+├── Components.md                 # 50+ UI Components visual API dictionary
+├── SyntaxAndPrinciples.md        # Lifetime, event flow, and syntax rules
+└── ARCHITECTURE.md               # Core engine, compilation pipeline, and C# bridge
 ```
+
 
 ## Further Reading
 

@@ -37,6 +37,24 @@ public class AhkWpfEngine {
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
     
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+    private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
+    private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    public static int GetWindowLong(IntPtr hWnd, int nIndex) {
+        if (IntPtr.Size == 4) return GetWindowLong32(hWnd, nIndex);
+        return (int)(long)GetWindowLongPtr64(hWnd, nIndex);
+    }
+    public static IntPtr SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong) {
+        if (IntPtr.Size == 4) return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
+        return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
+    }
+    
     [DllImport("psapi.dll")]
     public static extern int EmptyWorkingSet(IntPtr hwProc);
     
@@ -719,7 +737,11 @@ public class AhkWpfEngine {
         
         var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(win);
         if (chrome != null) {
-            chrome.CornerRadius = (CornerRadius)win.Resources["WindowRadius"];
+            if (win.Resources.Contains("PanelRadius")) {
+                chrome.CornerRadius = (CornerRadius)win.Resources["PanelRadius"];
+            } else {
+                chrome.CornerRadius = (CornerRadius)win.Resources["WindowRadius"];
+            }
         }
         
         if (Application.Current != null) {
@@ -735,7 +757,7 @@ public class AhkWpfEngine {
 
     private void BindEvent(string ctrlName, string eventName) {
         try {
-            var ctrl = win.FindName(ctrlName);
+            object ctrl = ctrlName == "Window" ? (object)win : win.FindName(ctrlName);
             if (ctrl == null) return;
             var evt = ctrl.GetType().GetEvent(eventName);
             if (evt == null) return;
@@ -944,6 +966,45 @@ public class AhkWpfEngine {
             DwmSetWindowAttribute(hwnd, 38, ref backdrop, 4);
             int borderColor = -2; // DWMWA_COLOR_NONE (0xFFFFFFFE)
             DwmSetWindowAttribute(hwnd, 34, ref borderColor, 4);
+        } else if (parts[0] == "Window" && parts[1] == "NativeOwner") {
+            try {
+                IntPtr ownerHwnd = new IntPtr(long.Parse(parts[2]));
+                new System.Windows.Interop.WindowInteropHelper(win).Owner = ownerHwnd;
+            } catch { }
+        } else if (parts[0] == "Window" && parts[1] == "GlassFrameThickness") {
+            var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(win);
+            if (chrome != null) {
+                double val = double.Parse(parts[2]);
+                chrome.GlassFrameThickness = new Thickness(val);
+                if (val == 0) {
+                    chrome.ResizeBorderThickness = new Thickness(6);
+                } else {
+                    chrome.ResizeBorderThickness = new Thickness(0);
+                }
+            }
+        } else if (parts[0] == "Window" && parts[1] == "ApplyVisibilityStyles") {
+            try {
+                string[] sub = parts[2].Split(',');
+                bool showInAltTab = sub[0] == "1";
+                bool showInTaskbar = sub[1] == "1";
+                
+                IntPtr hwndVal = new WindowInteropHelper(win).Handle;
+                if (hwndVal != IntPtr.Zero) {
+                    int exStyle = GetWindowLong(hwndVal, -20); // GWL_EXSTYLE = -20
+                    if (showInAltTab) {
+                        exStyle &= ~0x80; // Remove WS_EX_TOOLWINDOW
+                    } else {
+                        exStyle |= 0x80; // Add WS_EX_TOOLWINDOW
+                    }
+                    if (showInTaskbar) {
+                        exStyle |= 0x40000; // Add WS_EX_APPWINDOW
+                    } else {
+                        exStyle &= ~0x40000; // Remove WS_EX_APPWINDOW
+                    }
+                    SetWindowLong(hwndVal, -20, new IntPtr(exStyle));
+                    SetWindowPos(hwndVal, IntPtr.Zero, 0, 0, 0, 0, 0x0037); // SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER
+                }
+            } catch { }
         } else if (parts[0] == "Resource") {
             string[] rParts = parts[2].Split(new[] { ':' }, 2);
             if (rParts.Length == 2 && (rParts[0] == "Brush" || rParts[0] == "Thickness" || rParts[0] == "CornerRadius" || rParts[0] == "Double")) {
@@ -958,11 +1019,31 @@ public class AhkWpfEngine {
                         UpdateSnapState(win);
                     } else {
                         win.Resources[parts[1]] = new System.Windows.CornerRadiusConverter().ConvertFromString(val);
+                        if (parts[1] == "PanelRadius") {
+                            var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(win);
+                            if (chrome != null) {
+                                chrome.CornerRadius = (CornerRadius)win.Resources["PanelRadius"];
+                            }
+                        }
                     }
                 }
                 else if (type == "Double") win.Resources[parts[1]] = double.Parse(val);
             } else {
-                win.Resources[parts[1]] = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]);
+                try {
+                    win.Resources[parts[1]] = new System.Windows.Media.BrushConverter().ConvertFromString(parts[2]);
+                } catch {
+                    try {
+                        win.Resources[parts[1]] = new System.Windows.CornerRadiusConverter().ConvertFromString(parts[2]);
+                    } catch {
+                        try {
+                            win.Resources[parts[1]] = new System.Windows.ThicknessConverter().ConvertFromString(parts[2]);
+                        } catch {
+                            try {
+                                win.Resources[parts[1]] = double.Parse(parts[2]);
+                            } catch { }
+                        }
+                    }
+                }
             }
             if (Application.Current != null) Application.Current.Resources[parts[1]] = win.Resources[parts[1]];
             // Force-apply ScrollBarWidth to all ScrollBar elements in the visual tree

@@ -10,30 +10,43 @@
 ; Demonstrates how to create a multi-window IDE-like environment
 ; with floating "tear-off" panels that remember their size, position, and visibility across sessions.
 
-INI_FILE := A_ScriptDir "\docking_layout.ini"
+global INI_FILE := A_ScriptDir "\docking_layout.ini"
+global isAppReady := false
+
+Trace(msg) {
+    try FileAppend(msg "`n", A_Temp "\AhkWpf\AhkTrace.log", "UTF-8")
+}
+
+try FileDelete(A_Temp "\AhkWpf\AhkTrace.log")
+Trace("1. Global Script Start")
 
 class PanelManager {
     static Panels := Map()
     static MainWindow := ""
     static CurrentTheme := "Dark Mica (Win 11)"
+    static IsFocusingAll := false
 
-    static Init(mainHwnd) {
-        this.MainWindow := mainHwnd
+    static Init(mainInstance) {
+        Trace("6. PanelManager.Init Start Hwnd: " mainInstance.wpfHwnd)
+        this.MainInstance := mainInstance
+        this.MainWindow := mainInstance.wpfHwnd
 
         ; Register known panels (IDs, Titles, initial bounds)
         this.RegisterPanel("Terminal", "Terminal Output", 100, 100, 600, 300)
         this.RegisterPanel("Properties", "Object Properties", 750, 100, 300, 500)
         this.RegisterPanel("Toolbox", "Component Toolbox", 100, 450, 250, 400)
 
-        SetTimer(() => this.Magnetize(), 30)
-        SetTimer(() => this.UpdateGlobalSnappedState(), 200)
+        SetTimer(ObjBindMethod(this, "Magnetize"), 30)
+        SetTimer(ObjBindMethod(this, "UpdateGlobalSnappedState"), 200)
 
         ; Show panels that were open last time
+        Trace("7. PanelManager.Init before ShowPanel loop")
         for id, p in this.Panels {
             if (this.GetSavedState(id, "Visible", "0") == "1") {
                 this.ShowPanel(id)
             }
         }
+        Trace("7b. PanelManager.Init end")
     }
 
     static RegisterPanel(id, title, defaultX, defaultY, defaultW, defaultH) {
@@ -71,7 +84,7 @@ class PanelManager {
 
                     if (hwnd) {
                         ; Delayed lock to override WPF DragMove
-                        SetTimer(() => WinMove(finalX, finalY, finalW, finalH, "ahk_id " hwnd), -50)
+                        SetTimer(WinMove.Bind(finalX, finalY, finalW, finalH, "ahk_id " hwnd), -50)
                     }
                 }
                 this.dragStates := Map()
@@ -328,12 +341,13 @@ class PanelManager {
                 pInfo.Snapped := isSnapped
                 this.SaveState(id, "Snapped", isSnapped ? "1" : "0")
 
-                forceSquare := this.GetSavedState("Global", "SquarePanes", "0") == "1"
-                isSquare := forceSquare || isSnapped
-
-                cornerPref := isSquare ? 1 : 0
-                DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", pInfo.GuiHwnd, "UInt", 33, "Int*", cornerPref, "UInt", 4)
-                pInfo.Instance.Update("Resource", "PanelRadius", isSquare ? "0" : "8")
+                radius := isSnapped ? "0" : IniRead(INI_FILE, "Global", "PanelRadius", "0")
+                if (pInfo.GuiHwnd) {
+                    cornerPref := Buffer(4)
+                    NumPut("Int", radius == "0" ? 1 : 0, cornerPref)
+                    DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", pInfo.GuiHwnd, "UInt", 33, "Ptr", cornerPref.Ptr, "UInt", 4)
+                }
+                pInfo.Instance.Update("Resource", "PanelRadius", "CornerRadius:" radius)
             }
         }
     }
@@ -361,6 +375,12 @@ class PanelManager {
 
         ; Build the panel UI with theme support
         main := XAML_Generator("Grid").Background("{DynamicResource BgColor}")
+        savedScale := IniRead(INI_FILE, "Global", "Scale", "Balanced")
+        scaleVal := "1.0"
+        if (savedScale == "Thin")
+            scaleVal := "0.9"
+        else if (savedScale == "Chunky") scaleVal := "1.15"
+        main.Add("Grid.LayoutTransform").Add("ScaleTransform").SetProp("x:Name", "AppScale").ScaleX(scaleVal).ScaleY(scaleVal)
         main.Rows(titleHeight, "*")
 
         ; Titlebar (Must be a Border for XAML_Host DragArea logic)
@@ -408,12 +428,19 @@ class PanelManager {
 
         ; Initialize XAML Host for this panel (No owner, so Z-order is standard)
         tmp := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", titleHeight)
+        Trace("8. Creating XAMLHost for panel: " id)
         ui := XAMLHost(StrReplace(tmp, "%app%", main.ToString()), "", "")
+        Trace("8b. Created XAMLHost for panel: " id)
+
+        showInTaskbar := IniRead(INI_FILE, "Global", "ShowInTaskbar", "0") == "1"
+        initShowInTaskbar := showInTaskbar ? "True" : "False"
 
         ; Replace template dimensions, add title/taskbar visibility, remove CenterScreen, and use dynamic PanelRadius
-        ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Title="' pInfo.Title '" ShowInTaskbar="False" Width="' w '" Height="' h '" Left="' x '" Top="' y '"')
+        ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Title="' pInfo.Title '" ShowInTaskbar="' initShowInTaskbar '" Width="' w '" Height="' h '" Left="' x '" Top="' y '"')
         ui.xaml := StrReplace(ui.xaml, 'WindowStartupLocation="CenterScreen"', 'WindowStartupLocation="Manual"')
         ui.xaml := StrReplace(ui.xaml, 'CornerRadius="{DynamicResource WindowRadius}"', 'CornerRadius="{DynamicResource PanelRadius}"')
+        initialRadius := pInfo.Snapped ? "0" : IniRead(INI_FILE, "Global", "PanelRadius", "0")
+        ui.xaml := StrReplace(ui.xaml, '<CornerRadius x:Key="WindowRadius">8</CornerRadius>', '<CornerRadius x:Key="WindowRadius">8</CornerRadius><CornerRadius x:Key="PanelRadius">' initialRadius '</CornerRadius>')
 
         noShadows := this.GetSavedState("Global", "NoShadows", "0") == "1"
         if (noShadows) {
@@ -425,7 +452,9 @@ class PanelManager {
         ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => this.OnPanelLoaded(id, ui))
         ui.OnEvent("Window", "Closing", (state, ctrl, event) => this.OnPanelClosing(id))
 
+        Trace("8c. Showing panel: " id)
         ui.Show()
+        Trace("8d. Panel shown: " id)
 
         this.Panels[id].Instance := ui
         this.SaveState(id, "Visible", "1")
@@ -436,7 +465,7 @@ class PanelManager {
             return
 
         try {
-            iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
+            iniPath := FindThemesIni()
             themeData := IniRead(iniPath, themeName)
             Loop Parse, themeData, "`n", "`r" {
                 parts := StrSplit(A_LoopField, "=", " `t", 2)
@@ -449,18 +478,18 @@ class PanelManager {
                         pInfo.Instance.Update("Resource", SubStr(key, 10), val)
                 }
             }
+        } catch as err {
+            ; Silence or log
         }
 
-        ; Apply Snapped/Square Radius
-        forceSquare := this.GetSavedState("Global", "SquarePanes", "0") == "1"
-        isSquare := forceSquare || pInfo.Snapped
-
-        radius := isSquare ? "0" : "8"
-        pInfo.Instance.Update("Resource", "PanelRadius", radius)
+        ; Apply Snap/Saved Radius Option
+        radius := pInfo.Snapped ? "0" : IniRead(INI_FILE, "Global", "PanelRadius", "0")
+        pInfo.Instance.Update("Resource", "PanelRadius", "CornerRadius:" radius)
 
         if (pInfo.GuiHwnd) {
-            cornerPref := isSquare ? 1 : 0
-            DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", pInfo.GuiHwnd, "UInt", 33, "Int*", cornerPref, "UInt", 4)
+            cornerPref := Buffer(4)
+            NumPut("Int", radius == "0" ? 1 : 0, cornerPref)
+            DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", pInfo.GuiHwnd, "UInt", 33, "Ptr", cornerPref.Ptr, "UInt", 4)
         }
     }
 
@@ -471,12 +500,104 @@ class PanelManager {
         }
     }
 
+    static UpdateRadius(radius) {
+        for id, pInfo in this.Panels {
+            if (pInfo.Instance != "" && pInfo.GuiHwnd) {
+                effectiveRadius := pInfo.Snapped ? "0" : radius
+                pInfo.Instance.Update("Resource", "PanelRadius", "CornerRadius:" effectiveRadius)
+                cornerPref := Buffer(4)
+                NumPut("Int", effectiveRadius == "0" ? 1 : 0, cornerPref)
+                DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", pInfo.GuiHwnd, "UInt", 33, "Ptr", cornerPref.Ptr, "UInt", 4)
+            }
+        }
+    }
+
+    static UpdateScale(scale) {
+        scaleVal := "1.0"
+        if (scale == "Thin")
+            scaleVal := "0.9"
+        else if (scale == "Chunky") scaleVal := "1.15"
+
+        for id, pInfo in this.Panels {
+            if (pInfo.Instance != "" && pInfo.GuiHwnd) {
+                try {
+                    pInfo.Instance.Update("AppScale", "ScaleX", scaleVal)
+                    pInfo.Instance.Update("AppScale", "ScaleY", scaleVal)
+                }
+            }
+        }
+    }
+
+    static UpdateShadows(enabled) {
+        valStr := enabled ? "-1" : "0"
+        if (this.MainInstance) {
+            try this.MainInstance.Update("Window", "GlassFrameThickness", valStr)
+        }
+        for id, pInfo in this.Panels {
+            if (pInfo.Instance != "" && pInfo.GuiHwnd) {
+                try pInfo.Instance.Update("Window", "GlassFrameThickness", valStr)
+            }
+        }
+    }
+
+    static ApplyPanelVisibility(id) {
+        pInfo := this.Panels[id]
+        if (pInfo.Instance == "" || !pInfo.GuiHwnd)
+            return
+
+        showInAltTab := IniRead(INI_FILE, "Global", "ShowInAltTab", "0") == "1"
+        showInTaskbar := IniRead(INI_FILE, "Global", "ShowInTaskbar", "0") == "1"
+
+        try {
+            valStr := (showInAltTab ? "1" : "0") "," (showInTaskbar ? "1" : "0")
+            pInfo.Instance.Update("Window", "ApplyVisibilityStyles", valStr)
+        }
+    }
+
+    static ApplyVisibilityStyles() {
+        for id, pInfo in this.Panels {
+            if (pInfo.Instance != "" && pInfo.GuiHwnd) {
+                this.ApplyPanelVisibility(id)
+            }
+        }
+    }
+
     static OnPanelLoaded(id, ui) {
         this.Panels[id].GuiHwnd := ui.wpfHwnd
+
+        ; Set native owner to prevent orphaned panels
+        if (this.MainWindow) {
+            try ui.Update("Window", "NativeOwner", String(this.MainWindow))
+        }
+
+        ; Robustly inherit parent window icon
+        hIcon := DllCall("user32\SendMessage", "Ptr", this.MainWindow, "UInt", 0x007F, "Ptr", 1, "Ptr", 0, "Ptr") ; WM_GETICON (ICON_BIG)
+        if (!hIcon)
+            hIcon := DllCall("user32\SendMessage", "Ptr", this.MainWindow, "UInt", 0x007F, "Ptr", 0, "Ptr", 0, "Ptr") ; WM_GETICON (ICON_SMALL)
+        if (!hIcon) {
+            if (A_PtrSize == 8)
+                hIcon := DllCall("user32\GetClassLongPtr", "Ptr", this.MainWindow, "Int", -14, "Ptr") ; GCLP_HICON
+            else
+                hIcon := DllCall("user32\GetClassLong", "Ptr", this.MainWindow, "Int", -14, "Ptr")
+        }
+        if (hIcon)
+            ui.Update("Window", "Icon", "HICON:" hIcon)
+
+        ; Robustly set title
+        ui.Update("Window", "Title", this.Panels[id].Title)
+
+        ; Apply shadows
+        noShadows := IniRead(INI_FILE, "Global", "NoShadows", "0") == "1"
+        valStr := noShadows ? "0" : "-1"
+        try ui.Update("Window", "GlassFrameThickness", valStr)
+
+        ; Apply dynamic visibility styles (Alt-Tab style & frame change)
+        this.ApplyPanelVisibility(id)
+
         this.ApplyThemeToPanel(this.Panels[id], this.CurrentTheme)
 
         ; Hook the exit size move to save coordinates
-        SetTimer(() => this.CheckPanelMoved(id), 1000)
+        SetTimer(ObjBindMethod(this, "CheckPanelMoved", id), 1000)
     }
 
     static CheckPanelMoved(id) {
@@ -508,7 +629,26 @@ class PanelManager {
 
 
 ; --- Main Application ---
-app := XAML_GUI("IDE Docking Manager Example")
+app := XAML_GUI("IDE Docking Manager Example", { Sidebar: true, BurgerMenu: true, TitleBarHeight: 28, AppIcon: true })
+
+; Load saved settings
+savedRadius := IniRead(INI_FILE, "Global", "PanelRadius", "0")
+savedShowAllOnFocus := IniRead(INI_FILE, "Global", "ShowAllOnFocus", "0")
+savedShowInAltTab := IniRead(INI_FILE, "Global", "ShowInAltTab", "0")
+savedShowInTaskbar := IniRead(INI_FILE, "Global", "ShowInTaskbar", "0")
+savedNoShadows := IniRead(INI_FILE, "Global", "NoShadows", "0")
+
+; Add settings directly to sidebar
+app.sidebarPanel.Add("TextBlock").Text("WINDOW OPTIONS").Margin("0,15,0,5")
+chkFocus := app.sidebarPanel.Add("CheckBox").Name("ChkShowAllOnFocus").Content("Show all on focus").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10")
+chkAltTab := app.sidebarPanel.Add("CheckBox").Name("ChkShowInAltTab").Content("Show panels in Alt-Tab").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10")
+chkTaskbar := app.sidebarPanel.Add("CheckBox").Name("ChkShowInTaskbar").Content("Show panels in Taskbar").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10")
+chkShadows := app.sidebarPanel.Add("CheckBox").Name("ChkEnableShadows").Content("Enable window shadows").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10")
+
+chkFocus.IsChecked(savedShowAllOnFocus == "1" ? "True" : "False")
+chkAltTab.IsChecked(savedShowInAltTab == "1" ? "True" : "False")
+chkTaskbar.IsChecked(savedShowInTaskbar == "1" ? "True" : "False")
+chkShadows.IsChecked(savedNoShadows == "0" ? "True" : "False")
 
 contentPanel := app.main.Add("StackPanel").Grid_Row(1).Margin("40")
 
@@ -521,6 +661,10 @@ btnSp.Add("Button").Name("BtnOpenProperties").Content("Toggle Properties").Margi
 btnSp.Add("Button").Name("BtnOpenToolbox").Content("Toggle Toolbox")
 
 ui := app.Compile()
+ui.Track("ChkShowAllOnFocus")
+ui.Track("ChkShowInAltTab")
+ui.Track("ChkShowInTaskbar")
+ui.Track("ChkEnableShadows")
 ui.xaml := StrReplace(ui.xaml, 'Name="BtnMaximize"', 'Name="BtnAppMaximize"')
 
 ; Restore Main Window Position
@@ -543,15 +687,76 @@ ui.OnEvent("BtnOpenProperties", "Click", (*) => PanelManager.ShowPanel("Properti
 ui.OnEvent("BtnOpenToolbox", "Click", (*) => PanelManager.ShowPanel("Toolbox"))
 ui.OnEvent("ComboTheme", "SelectionChanged", (state, ctrl, event) => (
     app.ThemeChanged(state, ctrl, event),
+    IniWrite(state["ComboTheme"], INI_FILE, "Global", "Theme"),
     PanelManager.UpdateTheme(state["ComboTheme"])
 ))
-ui.OnEvent("Window", "Closing", (*) => ExitApp())
+ui.OnEvent("ComboScale", "SelectionChanged", (state, ctrl, event) => (
+    app.ScaleChanged(state, ctrl, event),
+    IniWrite(state["ComboScale"], INI_FILE, "Global", "Scale"),
+    PanelManager.UpdateScale(state["ComboScale"])
+))
+ui.OnEvent("ComboRadius", "SelectionChanged", (state, ctrl, event) => OnRadiusChanged(state))
+ui.OnEvent("ChkShowAllOnFocus", "Click", (state, ctrl, event) => OnFocusToggle(state))
+ui.OnEvent("ChkShowInAltTab", "Click", (state, ctrl, event) => OnAltTabToggle(state))
+ui.OnEvent("ChkShowInTaskbar", "Click", (state, ctrl, event) => OnTaskbarToggle(state))
+ui.OnEvent("ChkEnableShadows", "Click", (state, ctrl, event) => OnShadowsToggle(state))
+ui.OnEvent("Window", "Closing", (*) => OnMainClosing())
 
 app.Show()
 
 OnMainLoaded() {
-    PanelManager.Init(ui.wpfHwnd)
+    global INI_FILE, isAppReady
+    savedTheme := IniRead(INI_FILE, "Global", "Theme", "Dark Mica (Win 11)")
+    savedScale := IniRead(INI_FILE, "Global", "Scale", "Balanced")
+    savedRadius := IniRead(INI_FILE, "Global", "PanelRadius", "0")
+
+    radiusIdx := 0
+    switch savedRadius {
+        case "0": radiusIdx := 0
+        case "4": radiusIdx := 1
+        case "8": radiusIdx := 2
+        case "12": radiusIdx := 3
+        case "16": radiusIdx := 4
+        default: radiusIdx := 2
+    }
+
+    themeIdx := 0
+    try {
+        iniPath := FindThemesIni()
+        Loop Parse, IniRead(iniPath), "`n", "`r" {
+            if (A_LoopField == savedTheme) {
+                break
+            }
+            themeIdx++
+        }
+    } catch {
+        themeIdx := 0
+    }
+
+    scaleIdx := savedScale == "Thin" ? 0 : (savedScale == "Balanced" ? 1 : 2)
+
+    PanelManager.Init(ui)
+    RegisterFocusHook()
+
+    SetTimer(ApplyInitialSelections.Bind(radiusIdx, themeIdx, scaleIdx), -50)
     SetTimer(CheckMainMoved, 1000)
+}
+
+ApplyInitialSelections(rIdx, tIdx, sIdx) {
+    global isAppReady, ui
+    isAppReady := true
+    try {
+        ui.Update("ComboRadius", "SelectedIndex", String(rIdx))
+    } catch {
+    }
+    try {
+        ui.Update("ComboTheme", "SelectedIndex", String(tIdx))
+    } catch {
+    }
+    try {
+        ui.Update("ComboScale", "SelectedIndex", String(sIdx))
+    } catch {
+    }
 }
 
 CheckMainMoved() {
@@ -569,4 +774,175 @@ CheckMainMoved() {
             IniWrite(h, "docking_layout.ini", "MainWindow", "H")
         }
     }
+}
+
+OnRadiusChanged(state) {
+    global INI_FILE, isAppReady, app
+    if (!isAppReady || !state.Has("ComboRadius"))
+        return
+    radText := state["ComboRadius"]
+    RegExMatch(radText, "\((\d+)\)", &match)
+    radius := match ? match[1] : "0"
+    
+    IniWrite(radius, INI_FILE, "Global", "PanelRadius")
+    
+    ; Apply to main window
+    try app.RadiusChanged(state, "", "")
+    
+    ; Apply to panels
+    PanelManager.UpdateRadius(radius)
+}
+
+OnFocusToggle(state) {
+    global INI_FILE, isAppReady
+    if (!isAppReady)
+        return
+    val := state["ChkShowAllOnFocus"] == "True" ? "1" : "0"
+    IniWrite(val, INI_FILE, "Global", "ShowAllOnFocus")
+    if (val == "1") {
+        activeHwnd := WinExist("A")
+        if (activeHwnd)
+            OnWindowActivated(activeHwnd)
+    }
+}
+
+OnAltTabToggle(state) {
+    global INI_FILE, isAppReady
+    if (!isAppReady)
+        return
+    val := state["ChkShowInAltTab"] == "True" ? "1" : "0"
+    IniWrite(val, INI_FILE, "Global", "ShowInAltTab")
+    PanelManager.ApplyVisibilityStyles()
+}
+
+OnTaskbarToggle(state) {
+    global INI_FILE, isAppReady
+    if (!isAppReady)
+        return
+    val := state["ChkShowInTaskbar"] == "True" ? "1" : "0"
+    IniWrite(val, INI_FILE, "Global", "ShowInTaskbar")
+    PanelManager.ApplyVisibilityStyles()
+}
+
+
+OnShadowsToggle(state) {
+    global INI_FILE, isAppReady
+    if (!isAppReady)
+        return
+    val := state["ChkEnableShadows"] == "True" ? "0" : "1"
+    IniWrite(val, INI_FILE, "Global", "NoShadows")
+    PanelManager.UpdateShadows(val == "0")
+}
+
+OnWindowActivated(activeHwnd) {
+    global INI_FILE, isAppReady
+    if (!isAppReady || PanelManager.IsFocusingAll)
+        return
+
+    try {
+        if (IniRead(INI_FILE, "Global", "ShowAllOnFocus", "0") != "1")
+            return
+    } catch {
+        return
+    }
+
+    PanelManager.IsFocusingAll := true
+
+    ; Restore main window if minimized and not active
+    if (PanelManager.MainWindow && WinExist("ahk_id " PanelManager.MainWindow)) {
+        if (PanelManager.MainWindow != activeHwnd) {
+            if (DllCall("user32\IsIconic", "Ptr", PanelManager.MainWindow)) {
+                try PanelManager.MainInstance.Update("Window", "WindowState", "Normal")
+            }
+            DllCall("user32\SetWindowPos", "Ptr", PanelManager.MainWindow, "Ptr", 0, "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x0013) ; SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE
+        }
+    }
+
+    ; Restore panels if minimized and not active
+    for id, pInfo in PanelManager.Panels {
+        if (pInfo.Instance != "" && pInfo.GuiHwnd && WinExist("ahk_id " pInfo.GuiHwnd)) {
+            if (pInfo.GuiHwnd != activeHwnd) {
+                if (DllCall("user32\IsIconic", "Ptr", pInfo.GuiHwnd)) {
+                    try pInfo.Instance.Update("Window", "WindowState", "Normal")
+                }
+                DllCall("user32\SetWindowPos", "Ptr", pInfo.GuiHwnd, "Ptr", 0, "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x0013) ; SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE
+            }
+        }
+    }
+    
+    ; Ensure the active window stays at the very top and active
+    if (activeHwnd && WinExist("ahk_id " activeHwnd)) {
+        try {
+            if (DllCall("user32\IsIconic", "Ptr", activeHwnd)) {
+                if (activeHwnd == PanelManager.MainWindow) {
+                    try PanelManager.MainInstance.Update("Window", "WindowState", "Normal")
+                } else {
+                    for id, pInfo in PanelManager.Panels {
+                        if (pInfo.GuiHwnd == activeHwnd) {
+                            try pInfo.Instance.Update("Window", "WindowState", "Normal")
+                            break
+                        }
+                    }
+                }
+            }
+            WinActivate("ahk_id " activeHwnd)
+        }
+    }
+
+    ; Absorb the event storm by holding the flag for 300ms
+    SetTimer(() => (PanelManager.IsFocusingAll := false), -300)
+}
+
+global hFocusHook := 0
+
+RegisterFocusHook() {
+    global hFocusHook
+    if (hFocusHook)
+        return
+    hFocusHook := DllCall("user32\SetWinEventHook"
+        , "UInt", 0x0003  ; EVENT_SYSTEM_FOREGROUND
+        , "UInt", 0x0003  ; EVENT_SYSTEM_FOREGROUND
+        , "Ptr", 0
+        , "Ptr", CallbackCreate(OnForegroundChanged, "", 7)
+        , "UInt", 0
+        , "UInt", 0
+        , "UInt", 0)      ; WINEVENT_OUTOFCONTEXT
+}
+
+OnForegroundChanged(hWinEventHook, event, hwnd, idObject, idChild, dwEventThread, dwmsEventTime) {
+    global isAppReady
+    if (!isAppReady || PanelManager.IsFocusingAll)
+        return
+    
+    if (!hwnd)
+        return
+
+    ; Get the top-level root window
+    rootHwnd := DllCall("user32\GetAncestor", "Ptr", hwnd, "UInt", 2, "Ptr") ; GA_ROOT = 2
+    if (!rootHwnd)
+        rootHwnd := hwnd
+
+    isOurs := false
+    if (rootHwnd == PanelManager.MainWindow) {
+        isOurs := true
+    } else {
+        for id, pInfo in PanelManager.Panels {
+            if (pInfo.GuiHwnd == rootHwnd) {
+                isOurs := true
+                break
+            }
+        }
+    }
+    
+    if (isOurs) {
+        OnWindowActivated(rootHwnd)
+    }
+}
+
+OnMainClosing() {
+    global hFocusHook
+    if (hFocusHook) {
+        DllCall("user32\UnhookWinEvent", "Ptr", hFocusHook)
+    }
+    ExitApp()
 }
