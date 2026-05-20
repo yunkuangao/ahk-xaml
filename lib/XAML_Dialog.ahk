@@ -126,7 +126,7 @@ class XDialog {
 
         ; --- INIT LOGIC ---
         exePath := ""
-        if (IsSet(XAML_DEBUG) && !XAML_DEBUG && options.HasProp("Id")) {
+        if (IsSet(XAML_FORCE_DYNAMIC_COMPILE) && !XAML_FORCE_DYNAMIC_COMPILE && options.HasProp("Id")) {
             exePath := options.Id "_dialog.dll"
         }
 

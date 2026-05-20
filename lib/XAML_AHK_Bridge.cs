@@ -224,6 +224,74 @@ public class AhkWpfEngine {
         return null;
     }
 
+    /// <summary>
+    /// Three-tier component style loader for ultra-fast startup:
+    /// 1. BAML binary from embedded resource (fastest — no XML parsing)
+    /// 2. Embedded XAML text resource (fast — no disk I/O)
+    /// 3. Disk file fallback (legacy — reads from exe directory)
+    /// </summary>
+    private static void LoadComponentStyles(Application app) {
+        var asm = System.Reflection.Assembly.GetExecutingAssembly();
+        
+        // Tier 1: Try loading pre-compiled BAML from embedded resource
+        var bamlStream = asm.GetManifestResourceStream("xaml.components.baml");
+        if (bamlStream != null) {
+            try {
+                using (bamlStream) {
+                    var reader = new System.Windows.Baml2006.Baml2006Reader(bamlStream);
+                    var writer = new System.Xaml.XamlObjectWriter(reader.SchemaContext);
+                    while (reader.Read()) {
+                        writer.WriteNode(reader);
+                    }
+                    ResourceDictionary dict = (ResourceDictionary)writer.Result;
+                    app.Resources.MergedDictionaries.Add(dict);
+                }
+                return; // BAML loaded successfully — fastest path
+            } catch {
+                // BAML load failed — fall through to text-based loading
+            }
+        }
+        
+        // Tier 2: Try loading XAML text from embedded resource (no disk I/O)
+        var xamlStream = asm.GetManifestResourceStream("xaml.components.xaml");
+        if (xamlStream != null) {
+            try {
+                string componentsXaml;
+                using (xamlStream)
+                using (var reader = new System.IO.StreamReader(xamlStream, Encoding.UTF8)) {
+                    componentsXaml = reader.ReadToEnd();
+                }
+                if (componentsXaml.Contains("<Window.Resources>")) {
+                    componentsXaml = componentsXaml.Replace("<Window.Resources>", "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" xmlns:sys=\"clr-namespace:System;assembly=mscorlib\" xmlns:primitives=\"clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework\">");
+                    componentsXaml = componentsXaml.Replace("</Window.Resources>", "</ResourceDictionary>");
+                }
+                using (var stream = new System.IO.MemoryStream(Encoding.UTF8.GetBytes(componentsXaml))) {
+                    ResourceDictionary dict = (ResourceDictionary)XamlReader.Load(stream);
+                    app.Resources.MergedDictionaries.Add(dict);
+                }
+                return; // Embedded XAML loaded successfully
+            } catch {
+                // Embedded XAML failed — fall through to disk
+            }
+        }
+        
+        // Tier 3: Fallback to disk file (legacy / development override)
+        string exePath = asm.Location;
+        string exeDir = System.IO.Path.GetDirectoryName(exePath);
+        string componentsPath = System.IO.Path.Combine(exeDir, "xaml.components.xaml");
+        if (System.IO.File.Exists(componentsPath)) {
+            string diskXaml = System.IO.File.ReadAllText(componentsPath, Encoding.UTF8);
+            if (diskXaml.Contains("<Window.Resources>")) {
+                diskXaml = diskXaml.Replace("<Window.Resources>", "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" xmlns:sys=\"clr-namespace:System;assembly=mscorlib\" xmlns:primitives=\"clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework\">");
+                diskXaml = diskXaml.Replace("</Window.Resources>", "</ResourceDictionary>");
+            }
+            using (var stream = new System.IO.MemoryStream(Encoding.UTF8.GetBytes(diskXaml))) {
+                ResourceDictionary dict = (ResourceDictionary)XamlReader.Load(stream);
+                app.Resources.MergedDictionaries.Add(dict);
+            }
+        }
+    }
+
     [STAThread]
     public static void Main(string[] args) {
         try {
@@ -319,20 +387,7 @@ public class AhkWpfEngine {
                     app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                     
                     try {
-                        string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-                        string exeDir = System.IO.Path.GetDirectoryName(exePath);
-                        string componentsPath = System.IO.Path.Combine(exeDir, "xaml.components.xaml");
-                        if (System.IO.File.Exists(componentsPath)) {
-                            string componentsXaml = System.IO.File.ReadAllText(componentsPath, Encoding.UTF8);
-                            if (componentsXaml.Contains("<Window.Resources>")) {
-                                componentsXaml = componentsXaml.Replace("<Window.Resources>", "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" xmlns:sys=\"clr-namespace:System;assembly=mscorlib\" xmlns:primitives=\"clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework\">");
-                                componentsXaml = componentsXaml.Replace("</Window.Resources>", "</ResourceDictionary>");
-                            }
-                            using (var stream = new System.IO.MemoryStream(Encoding.UTF8.GetBytes(componentsXaml))) {
-                                ResourceDictionary dict = (ResourceDictionary)XamlReader.Load(stream);
-                                app.Resources.MergedDictionaries.Add(dict);
-                            }
-                        }
+                        LoadComponentStyles(app);
                     } catch (Exception ex) {
                         try {
                             string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
@@ -536,6 +591,7 @@ public class AhkWpfEngine {
         string xamlContent = "";
         string eventsContent = "";
         bool isBin = !string.IsNullOrEmpty(xamlFilePath) && xamlFilePath.EndsWith(".bin", StringComparison.OrdinalIgnoreCase);
+        bool isBaml = !string.IsNullOrEmpty(xamlFilePath) && xamlFilePath.EndsWith(".baml", StringComparison.OrdinalIgnoreCase);
 
         if (xamlFilePath == "STREAM") {
             HwndSourceParameters parameters = new HwndSourceParameters("MessageReceiver", 0, 0);
@@ -611,28 +667,127 @@ public class AhkWpfEngine {
             } catch { }
         }
         
-        if (!isBin && xamlFilePath != "STREAM" && !string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
+        if (!isBin && !isBaml && xamlFilePath != "STREAM" && !string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
             try { System.IO.File.Delete(xamlFilePath); } catch { }
         }
         
-        byte[] xamlBytes;
-        if (string.IsNullOrWhiteSpace(xamlContent)) {
-            xamlBytes = Encoding.UTF8.GetBytes("<Window xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" />");
+        // BAML fast path — load pre-compiled binary directly, bypass XML parsing entirely
+        if (isBaml && !string.IsNullOrEmpty(xamlFilePath) && System.IO.File.Exists(xamlFilePath)) {
+            if (Application.Current == null) new Application();
+            try {
+                using (var bamlStream = System.IO.File.OpenRead(xamlFilePath)) {
+                    var bamlReader = new System.Windows.Baml2006.Baml2006Reader(bamlStream);
+                    var objWriter = new System.Xaml.XamlObjectWriter(bamlReader.SchemaContext);
+                    while (bamlReader.Read()) {
+                        objWriter.WriteNode(bamlReader);
+                    }
+                    win = (Window)objWriter.Result;
+                }
+                // Baml2006Reader doesn't wire up NameScope properly — FindName() fails.
+                // Force a fresh NameScope and recursively register all named FrameworkElements.
+                var ns = new NameScope();
+                NameScope.SetNameScope(win, ns);
+                int nameCount = 0;
+                var visited = new System.Collections.Generic.HashSet<object>();
+                Action<object> registerAll = null;
+                registerAll = (object obj) => {
+                    if (obj == null || !visited.Add(obj)) return;
+                    var fe = obj as FrameworkElement;
+                    if (fe != null) {
+                        if (!string.IsNullOrEmpty(fe.Name)) {
+                            try { ns.RegisterName(fe.Name, fe); nameCount++; } catch { }
+                        }
+                    }
+                    var dobj = obj as DependencyObject;
+                    if (dobj != null) {
+                        // Walk logical tree children
+                        foreach (object child in LogicalTreeHelper.GetChildren(dobj)) {
+                            registerAll(child);
+                        }
+                        // Also walk explicit content properties that LogicalTreeHelper may miss
+                        var cc = dobj as System.Windows.Controls.ContentControl;
+                        if (cc != null && cc.Content != null) registerAll(cc.Content);
+                        var dec = dobj as System.Windows.Controls.Decorator;
+                        if (dec != null && dec.Child != null) registerAll(dec.Child);
+                        var panel = dobj as System.Windows.Controls.Panel;
+                        if (panel != null) {
+                            foreach (UIElement c in panel.Children) registerAll(c);
+                        }
+                        var ic = dobj as ItemsControl;
+                        if (ic != null) {
+                            foreach (object item in ic.Items) registerAll(item);
+                        }
+                    }
+                };
+                registerAll(win);
+                try {
+                    System.IO.File.AppendAllText(
+                        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf", "baml_debug.log"),
+                        DateTime.Now + " BAML NameScope: registered " + nameCount + " names. FindName test DGX_Table_List=" + (win.FindName("DGX_Table_List") != null) + "\n"
+                    );
+                } catch { }
+                foreach (System.Collections.DictionaryEntry entry in win.Resources) {
+                    Application.Current.Resources[entry.Key] = entry.Value;
+                }
+                // Re-apply WindowChrome (stripped during BAML compilation)
+                if (win.WindowStyle == WindowStyle.None) {
+                    var chrome = new System.Windows.Shell.WindowChrome();
+                    chrome.GlassFrameThickness = new Thickness(-1);
+                    chrome.CaptionHeight = 50;
+                    try { chrome.CornerRadius = (CornerRadius)Application.Current.Resources["WindowRadius"]; } catch { chrome.CornerRadius = new CornerRadius(12); }
+                    System.Windows.Shell.WindowChrome.SetWindowChrome(win, chrome);
+                    // Re-apply IsHitTestVisibleInChrome on known buttons
+                    foreach (string btnName in new[] { "BtnToggleSidebar", "BtnClose", "BtnMinimize", "BtnMaximize" }) {
+                        var el = win.FindName(btnName) as System.Windows.IInputElement;
+                        if (el != null) System.Windows.Shell.WindowChrome.SetIsHitTestVisibleInChrome(el, true);
+                    }
+                }
+                // Load companion event bindings (.events file)
+                string eventsPath = System.IO.Path.ChangeExtension(xamlFilePath, ".events");
+                if (System.IO.File.Exists(eventsPath)) {
+                    eventsContent = System.IO.File.ReadAllText(eventsPath, Encoding.UTF8);
+                }
+            } catch (Exception bamlEx) {
+                // BAML load failed — log and fall through to text-based loading
+                try {
+                    System.IO.File.AppendAllText(
+                        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf", "baml_err.log"),
+                        DateTime.Now + " BAML load failed: " + bamlEx.ToString() + "\n"
+                    );
+                } catch { }
+                // Try falling back to .xaml companion file
+                string fallbackXaml = System.IO.Path.ChangeExtension(xamlFilePath, ".xaml");
+                if (System.IO.File.Exists(fallbackXaml)) {
+                    xamlContent = System.IO.File.ReadAllText(fallbackXaml, Encoding.UTF8);
+                    byte[] fb = Encoding.UTF8.GetBytes(xamlContent);
+                    using (var stream = new System.IO.MemoryStream(fb)) {
+                        win = (Window)XamlReader.Load(stream);
+                    }
+                    foreach (System.Collections.DictionaryEntry entry in win.Resources) {
+                        Application.Current.Resources[entry.Key] = entry.Value;
+                    }
+                }
+            }
         } else {
-            xamlBytes = Encoding.UTF8.GetBytes(xamlContent);
-        }
-        if (Application.Current == null) new Application();
-        try {
-            using (var stream = new System.IO.MemoryStream(xamlBytes)) {
-                win = (Window)XamlReader.Load(stream);
+            // Text-based path (existing behavior)
+            byte[] xamlBytes;
+            if (string.IsNullOrWhiteSpace(xamlContent)) {
+                xamlBytes = Encoding.UTF8.GetBytes("<Window xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" />");
+            } else {
+                xamlBytes = Encoding.UTF8.GetBytes(xamlContent);
             }
-            foreach (System.Collections.DictionaryEntry entry in win.Resources) {
-                Application.Current.Resources[entry.Key] = entry.Value;
-            }
-            xamlContent = null;
-            xamlBytes = null;
-            GC.Collect();
-        } catch (XamlParseException ex) {
+            if (Application.Current == null) new Application();
+            try {
+                using (var stream = new System.IO.MemoryStream(xamlBytes)) {
+                    win = (Window)XamlReader.Load(stream);
+                }
+                foreach (System.Collections.DictionaryEntry entry in win.Resources) {
+                    Application.Current.Resources[entry.Key] = entry.Value;
+                }
+                xamlContent = null;
+                xamlBytes = null;
+                GC.Collect();
+            } catch (XamlParseException ex) {
             string[] xamlLines = Encoding.UTF8.GetString(xamlBytes).Replace("\r\n", "\n").Split('\n');
             string snippet = "Unknown";
             string ahkLine = "Unknown";
@@ -666,7 +821,7 @@ public class AhkWpfEngine {
             }
             throw new Exception("AHK_LINE:" + ahkLine + "\nXAML_SNIPPET:\n" + snippet + "\n\n" + ex.ToString());
         }
-
+        } // end text-based path
         if (!string.IsNullOrEmpty(scriptName)) {
             string dumpPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWpf", "AhkWpf_StateDump_" + scriptName + ".ini");
             if (System.IO.File.Exists(dumpPath)) {
@@ -778,21 +933,29 @@ public class AhkWpfEngine {
         };
         win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
 
-        if (isBin || xamlFilePath == "STREAM") {
-            if (!string.IsNullOrEmpty(eventsContent)) {
-                string[] pairs = eventsContent.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (string p in pairs) {
+        // Unified event binding — merge all event sources
+        // eventsContent may come from: inline data, .bin, or BAML companion .events file
+        // eventsFilePath may be: a file path, CSV event data, or "none"
+        string allEvents = eventsContent ?? "";
+        if (!string.IsNullOrEmpty(eventsFilePath) && eventsFilePath != "none") {
+            if (System.IO.File.Exists(eventsFilePath)) {
+                // It's a file path — read and delete
+                string fileEvents = System.IO.File.ReadAllText(eventsFilePath);
+                try { System.IO.File.Delete(eventsFilePath); } catch { }
+                allEvents = string.IsNullOrEmpty(allEvents) ? fileEvents : allEvents + "," + fileEvents;
+            } else if (eventsFilePath.Contains(":")) {
+                // It's inline CSV event data (e.g. "Window:Loaded,BtnClose:Click")
+                allEvents = string.IsNullOrEmpty(allEvents) ? eventsFilePath : allEvents + "," + eventsFilePath;
+            }
+        }
+        if (!string.IsNullOrEmpty(allEvents)) {
+            string[] pairs = allEvents.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            var bound = new System.Collections.Generic.HashSet<string>();
+            foreach (string p in pairs) {
+                if (bound.Add(p)) { // Deduplicate
                     string[] kv = p.Split(':');
                     if (kv.Length == 2) BindEvent(kv[0], kv[1]);
                 }
-            }
-        } else if (!string.IsNullOrEmpty(eventsFilePath) && System.IO.File.Exists(eventsFilePath)) {
-            string bindingsStr = System.IO.File.ReadAllText(eventsFilePath);
-            try { System.IO.File.Delete(eventsFilePath); } catch { }
-            string[] pairs = bindingsStr.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (string p in pairs) {
-                string[] kv = p.Split(':');
-                if (kv.Length == 2) BindEvent(kv[0], kv[1]);
             }
         }
 

@@ -179,12 +179,9 @@ class XAMLHost {
             if !FileExist(targetExe)
                 FileCopy(sharedExe, targetExe, 1)
 
-            SplitPath(targetExe, , &targetDir)
-            if FileExist(libDir "\xaml.components.xaml") {
-                try FileCopy(libDir "\xaml.components.xaml", targetDir "\xaml.components.xaml", 1)
-            }
 
             XAMLHost.RestoreWebView2Dlls()
+            SplitPath(targetExe, , &targetDir)
             if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {
                 if FileExist(libDir "\WebView2\WebView2Loader.dll") {
                     try FileCopy(libDir "\WebView2\WebView2Loader.dll", targetDir "\WebView2Loader.dll", 1)
@@ -229,7 +226,7 @@ class XAMLHost {
                 colNum := Integer(match[2])
             }
 
-            hasRetry := (XAML_DEBUG && lineNum > 0)
+            hasRetry := (XAML_DIAGNOSTICS_ENABLED && lineNum > 0)
             action := XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, err, hasRetry)
             if (action == "skip_property") {
                 this.SkipPropertyAndRetry(err, lineNum, colNum)
@@ -502,7 +499,16 @@ class XAMLHost {
             }
         }
 
-        cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' sharedExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll' wvRefs wvDef ' "' sourceCs '" > "' errLog '" 2>&1"'
+        ; Embed component resources directly into the DLL for zero-disk-IO loading
+        embeddedRes := ""
+        bamlPath := libDir "\xaml.components.baml"
+        xamlPath := libDir "\xaml.components.xaml"
+        if FileExist(bamlPath)
+            embeddedRes .= ' /resource:"' bamlPath '"'
+        if FileExist(xamlPath)
+            embeddedRes .= ' /resource:"' xamlPath '"'
+
+        cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' sharedExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll' wvRefs wvDef embeddedRes ' "' sourceCs '" > "' errLog '" 2>&1"'
         RunWait(cmd, "", "Hide")
 
         if !FileExist(sharedExe) {
@@ -552,12 +558,9 @@ class XAMLHost {
                 try FileCopy(sharedExe, targetExe, 1)
             }
 
-            SplitPath(targetExe, , &targetDir)
-            if FileExist(libDir "\xaml.components.xaml") {
-                try FileCopy(libDir "\xaml.components.xaml", targetDir "\xaml.components.xaml", 1)
-            }
 
             XAMLHost.RestoreWebView2Dlls()
+            SplitPath(targetExe, , &targetDir)
             if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {
                 if FileExist(libDir "\WebView2\WebView2Loader.dll") {
                     try FileCopy(libDir "\WebView2\WebView2Loader.dll", targetDir "\WebView2Loader.dll", 1)
@@ -623,8 +626,10 @@ class XAMLHost {
         trackedCsv := this._BuildTrackedCsv()
 
         if (assetPath != "") {
-            ; File-based asset path — use the old STREAM-free path
-            payload := "CREATE_WINDOW|" this.id "|" trackedCsv "|" A_ScriptName "|" String(this.ownerHwnd) "|" assetPath "|none"
+            ; File-based asset path (BAML or .bin)
+            ; Build event bindings from runtime registrations (includes events added after ExportBAML)
+            eventBindings := this._BuildEventBindings()
+            payload := "CREATE_WINDOW|" this.id "|" trackedCsv "|" A_ScriptName "|" String(this.ownerHwnd) "|" assetPath "|" eventBindings
             this._SendToEngine(payload)
         } else {
             ; Inline mode: embed XAML + events directly in the CREATE_WINDOW message
@@ -689,7 +694,7 @@ class XAMLHost {
                 colNum := Integer(match[2])
             }
 
-            hasRetry := (XAML_DEBUG && lineNum > 0)
+            hasRetry := (XAML_DIAGNOSTICS_ENABLED && lineNum > 0)
             action := XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, errorMsg, hasRetry)
             if (action == "skip_property") {
                 instance.SkipPropertyAndRetry(errorMsg, lineNum, colNum)

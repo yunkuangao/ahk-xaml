@@ -94,8 +94,8 @@ docArea.Add("TextBlock").Text("Your Excel spreadsheet or document goes here!").H
 ; ------------------------------------------------------------------------------
 ; XAML BUILD CONFIGURATION
 ; ------------------------------------------------------------------------------
-; Toggle XAML_DEBUG in lib\XAML_Config.ahk to switch between Dev and Prod!
-if (XAML_DEBUG) {
+; Toggle XAML_FORCE_DYNAMIC_COMPILE in lib\XAML_Config.ahk to switch between Dev and Prod!
+if (XAML_FORCE_DYNAMIC_COMPILE) {
     ; Development Mode: Generate the UI dynamically every time.
     ui := app.Compile()
 } else {

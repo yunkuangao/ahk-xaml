@@ -93,7 +93,17 @@
 
 ## 3. Compilation Pipeline
 
-### Development Mode (`XAML_DEBUG := true`)
+### Configuration Flags (`XAML_Config.ahk`)
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `XAML_FORCE_DYNAMIC_COMPILE` | `false` | Recompile the C# engine from source on every run |
+| `XAML_COMPONENTS_LOAD_MODE` | `"BAML"` | `"BAML"` for binary speed, `"XAML"` for live style editing |
+| `XAML_DIAGNOSTICS_ENABLED` | `true` | Show "Skip Element/Property" buttons in crash dialogs |
+| `XAML_ENABLE_TRACING` | `true` | Embed AHK source line comments in generated XAML |
+| `XAML_ENABLE_WEBVIEW` | `false` | Include WebView2 Chromium browser support |
+
+### Engine Compilation
 
 ```
 XAML_AHK_Bridge.cs ──▶ csc.exe (Framework64 v4.0.30319) ──▶ ahk-xaml.dll
@@ -101,12 +111,23 @@ XAML_AHK_Bridge.cs ──▶ csc.exe (Framework64 v4.0.30319) ──▶ ahk-xaml
                           ├─ /target:winexe
                           ├─ /reference: PresentationFramework, PresentationCore, WindowsBase, System.Xaml
                           ├─ /reference: UIAutomationProvider, UIAutomationTypes
+                          ├─ /resource: xaml.components.baml (pre-compiled binary styles)
+                          ├─ /resource: xaml.components.xaml (text fallback)
                           └─ [optional] /reference: WebView2 DLLs + /define:ENABLE_WEBVIEW
 ```
 
 The compiled DLL is cached in `lib/ahk-xaml.dll`. Subsequent runs skip compilation unless the DLL is deleted.
 
-### Production Mode (`XAML_DEBUG := false`)
+### BAML Precompilation (Component Styles)
+
+The 78KB `xaml.components.xaml` style dictionary is pre-compiled into a 41KB binary BAML (Binary Application Markup Language) file using MSBuild. Both are embedded inside `ahk-xaml.dll` as manifest resources.
+
+At daemon startup, the engine loads styles using a three-tier strategy:
+1. **Tier 1 (BAML binary):** Loads pre-tokenized binary directly — no XML parsing, no reflection overhead (~5ms).
+2. **Tier 2 (Embedded XAML text):** Falls back to parsing the embedded XAML string — no disk I/O (~150ms).
+3. **Tier 3 (Disk file):** Falls back to reading `xaml.components.xaml` from the exe directory — legacy compatibility.
+
+### Production Mode
 
 In production, the pre-compiled `ahk-xaml.dll` is bundled via `FileInstall`. No C# compiler or source code is needed on the target machine.
 
@@ -467,6 +488,7 @@ ahk-xaml/
 │   ├── XAML_Dialog.ahk           # Modal dialog system (XDialog)
 │   ├── XAML_AHK_Bridge.cs        # C# WPF engine source (compiled at runtime)
 │   ├── xaml.components.xaml       # WPF ResourceDictionary (all control templates & styles)
+│   ├── xaml.components.baml       # Pre-compiled binary BAML (generated via MSBuild)
 │   ├── ahk-xaml.dll              # Compiled WPF engine binary (cached)
 │   └── WebView2/                 # WebView2 runtime DLLs (optional)
 ├── examples/

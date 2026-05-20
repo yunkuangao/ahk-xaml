@@ -237,9 +237,107 @@ class XAML_GUI {
         this.host.Export(filePath)
     }
 
+    ExportBAML(filePath := "", force := false) {
+        if (!this.HasProp("host"))
+            this.Compile()
+
+        ; Default output path: <ScriptName>.baml in the script directory
+        if (filePath == "") {
+            SplitPath(A_ScriptName, , , , &nameNoExt)
+            filePath := A_ScriptDir "\" nameNoExt ".baml"
+        }
+
+        ; Skip if BAML already exists (use force=true to recompile)
+        if (!force && FileExist(filePath))
+            return true
+
+        ; Generate the clean XAML string (same as what Show() sends to the engine)
+        cleanXaml := StrReplace(this.host.xaml, "%resources%", "")
+        cleanXaml := StrReplace(cleanXaml, "%components%", "")
+
+        ; Save XAML to temp file for compilation
+        SplitPath(filePath, , , , &bamlName)
+        DirCreate(A_Temp "\AhkWpf")
+        tempXaml := A_Temp "\AhkWpf\" bamlName ".xaml"
+        try FileDelete(tempXaml)
+        FileAppend(cleanXaml, tempXaml, "UTF-8")
+
+        ; Find the compile_baml.ps1 tool
+        _thisDir := ""
+        SplitPath(A_LineFile, , &_thisDir)
+        toolPath := _thisDir "\..\tools\compile_baml.ps1"
+        if !FileExist(toolPath) {
+            MsgBox("compile_baml.ps1 not found at:`n" toolPath "`n`nEnsure tools/ directory exists.", "AHK-XAML BAML", "Iconx")
+            return false
+        }
+
+        ; The script writes a log to <OutputBaml>.log
+        logFile := filePath ".log"
+        try FileDelete(logFile)
+
+        ; Run MSBuild BAML compilation
+        cmd := 'powershell.exe -ExecutionPolicy Bypass -File "' toolPath '" -InputXaml "' tempXaml '" -OutputBaml "' filePath '"'
+        RunWait(cmd, "", "Hide")
+
+        ; Read the build log (always written by compile_baml.ps1)
+        buildLog := ""
+        try buildLog := FileRead(logFile, "UTF-8")
+
+        ; Check if BAML was produced
+        if !FileExist(filePath) {
+            errMsg := "BAML compilation failed.`n"
+            errMsg .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`n`n"
+            if (buildLog != "") {
+                errMsg .= buildLog
+            } else {
+                errMsg .= "No log file was generated.`n`n"
+                errMsg .= "Possible causes:`n"
+                errMsg .= "  • PowerShell execution policy blocked the script`n"
+                errMsg .= "  • MSBuild is not installed`n"
+                errMsg .= "  • The script path is incorrect: " toolPath "`n`n"
+                errMsg .= "Try running manually:`n"
+                errMsg .= '  powershell -ExecutionPolicy Bypass -File "' toolPath '" -InputXaml "' tempXaml '"'
+            }
+            MsgBox(errMsg, "AHK-XAML BAML Compilation", "Iconx")
+            return false
+        }
+
+        ; Save companion .events file with event binding data
+        eventsPath := RegExReplace(filePath, "\.baml$", ".events")
+        eventBindings := ""
+        for ctrlName, events in this.host.events {
+            for eventName, evtList in events {
+                eventBindings .= ctrlName ":" eventName ","
+            }
+        }
+        eventBindings := RTrim(eventBindings, ",")
+        try FileDelete(eventsPath)
+        FileAppend(eventBindings, eventsPath, "UTF-8")
+
+        ; Clean up temp file
+        try FileDelete(tempXaml)
+
+        ; Also save the XAML companion for fallback
+        xamlFallback := RegExReplace(filePath, "\.baml$", ".xaml")
+        try FileDelete(xamlFallback)
+        FileAppend(cleanXaml, xamlFallback, "UTF-8")
+
+        return true
+    }
+
     Show(assetPath := "") {
         if (!this.HasProp("host"))
             this.Compile()
+
+        ; Auto-detect precompiled BAML: if <ScriptName>.baml exists, load it instantly
+        if (assetPath == "") {
+            SplitPath(A_ScriptName, , , , &nameNoExt)
+            bamlPath := A_ScriptDir "\" nameNoExt ".baml"
+            if FileExist(bamlPath) {
+                assetPath := bamlPath
+            }
+        }
+
         this.host.Show(assetPath)
     }
 
