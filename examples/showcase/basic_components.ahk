@@ -16,8 +16,9 @@ global myGrid := ""
 global myDatePicker := ""
 global tabList := ["DEPLOYMENT", "DATA GRID", "DATAGRID EX", "UI COMPONENTS", "ADVANCED INPUTS", "FLUID DIALOGS", "RICH COMPONENTS", "ADVANCED UI"]
 
-; Toggle this flag for Dev vs Production
-global XAML_FORCE_DYNAMIC_COMPILE := false
+; Toggle these flags for Dev vs Production
+global XAML_FORCE_DYNAMIC_COMPILE := true
+global BUILD_DLL := false
 
 app := XAML_GUI("Fluid UI")
 
@@ -36,7 +37,7 @@ if (XAML_FORCE_DYNAMIC_COMPILE) {
 
 ; --- Bundle for Production ---
 ; Must be called AFTER binding events so they are embedded in the DLL!
-if (XAML_FORCE_DYNAMIC_COMPILE) {
+if (XAML_FORCE_DYNAMIC_COMPILE && BUILD_DLL) {
     app.ExportBundle("gui.dll")
 }
 
