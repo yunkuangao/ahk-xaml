@@ -291,7 +291,14 @@ nav.AddPage("Image Viewer", Chr(0xEB9F), imgViewerPage)
 ; ---------------------------------------------------------
 ; START APP
 ; ---------------------------------------------------------
-ui := app.Compile()
+global XAML_FORCE_DYNAMIC_COMPILE := true
+
+if (XAML_FORCE_DYNAMIC_COMPILE) {
+    ui := app.Compile()
+} else {
+    ui := app.Load("gui.dll")
+}
+
 nav.Bind(ui)
 
 SetTimer(LoadPreviewIcons, 1000)
@@ -502,6 +509,10 @@ _EnableDragComponents(state?, ctrl?, event?) {
     kb.EnableDrag(ui)
     ng.EnableDrag(ui)
     ic.EnableDrag(ui)
+}
+
+if (XAML_FORCE_DYNAMIC_COMPILE) {
+    app.ExportBundle("gui.dll")
 }
 
 app.Show()

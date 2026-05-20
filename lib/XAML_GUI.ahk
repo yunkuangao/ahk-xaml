@@ -298,7 +298,7 @@ class XAML_GUI {
                 errMsg .= "Try running manually:`n"
                 errMsg .= '  powershell -ExecutionPolicy Bypass -File "' toolPath '" -InputXaml "' tempXaml '"'
             }
-            MsgBox(errMsg, "AHK-XAML BAML Compilation", "Iconx")
+            MsgBox(errMsg, "AHK-XAML BAML Export", "Iconx")
             return false
         }
 
@@ -325,9 +325,49 @@ class XAML_GUI {
         return true
     }
 
+    ExportBundle(dllName := "") {
+        if (!this.HasProp("host")) {
+            MsgBox("Error: You must call app.Compile() before app.ExportBundle().", "AHK-XAML", "Iconx")
+            return false
+        }
+        
+        if (dllName == "") {
+            SplitPath(A_ScriptName, , , , &nameNoExt)
+            dllName := A_ScriptDir "\" nameNoExt "_bundled.dll"
+        }
+        
+        return this.host.BundleCustomEngine(dllName)
+    }
+
+    Load(assetPath, options*) {
+        this.assetPath := assetPath
+        this.xamlString := ""
+        this.host := XAMLHost("", assetPath, options*)
+        this.BindBaseEvents()
+        
+        for k, v in this.tokenizers {
+            this.host.OnEvent(v.inputName, "GotFocus", ObjBindMethod(this, "OnInputFocus"))
+            this.host.OnEvent(v.inputName, "LostFocus", ObjBindMethod(this, "OnInputBlur"))
+            v.Bind()
+        }
+        for k, v in this.numericInputs {
+            this.host.OnEvent(v.id, "GotFocus", ObjBindMethod(this, "OnInputFocus"))
+            this.host.OnEvent(v.id, "LostFocus", ObjBindMethod(this, "OnInputBlur"))
+            this.host.OnEvent("PART_UpButton", "Click", (s, c, e) => this.HandleSpinnerButton(v, true))
+            this.host.OnEvent("PART_DownButton", "Click", (s, c, e) => this.HandleSpinnerButton(v, false))
+            v.Bind()
+        }
+        
+        return this.host
+    }
+
     Show(assetPath := "") {
         if (!this.HasProp("host"))
             this.Compile()
+
+        if (assetPath == "" && this.HasProp("assetPath")) {
+            assetPath := this.assetPath
+        }
 
         ; Auto-detect precompiled BAML: if <ScriptName>.baml exists, load it instantly
         if (assetPath == "") {

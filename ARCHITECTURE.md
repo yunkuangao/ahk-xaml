@@ -134,19 +134,19 @@ In production, the pre-compiled `ahk-xaml.dll` is bundled via `FileInstall`. No 
 ### Asset Export Pipeline
 
 ```
-XAML String + Event Bindings
+XAML String
          │
          ▼
-   gui_temp.txt (UTF-8)
+    gui_temp.xaml (UTF-8)
          │
          ▼
-   ahk-xaml.dll --compress (GZip)
+    MSBuild (local .NET framework)
          │
          ▼
-   gui.bin (compressed binary asset)
+    <ScriptName>.baml (native WPF compiled binary)
 ```
 
-The `.bin` file can be loaded directly at startup, bypassing XAML streaming.
+The `.baml` file can be loaded directly at startup using `Baml2006Reader`, bypassing XAML string parsing completely.
 
 ---
 
@@ -451,12 +451,13 @@ C#  → EVENT|...|WebMessageReceived|<Base64Msg>   // Delivered to AHK callback
 ### Export Workflow
 
 ```ahk
-app.Export("gui.bin")
+app.ExportBAML()
 ```
 
-1. Serializes XAML + event bindings to a temp file.
-2. Invokes `ahk-xaml.dll --compress` to GZip-compress the payload.
-3. Outputs `gui.bin`.
+1. Serializes XAML to a temporary `<ScriptName>.xaml` file wrapped in a `<ResourceDictionary>`.
+2. Creates a temporary MSBuild project file (`.csproj`).
+3. Invokes the local MSBuild toolchain (bundled with Windows/Visual Studio) to compile the XAML to a native WPF `.baml` file.
+4. Outputs `<ScriptName>.baml` to the script directory.
 
 ### Distribution Model
 
@@ -464,13 +465,14 @@ A production deployment consists of:
 ```
 MyApp.exe          ← Compiled AHK script
 ahk-xaml.dll       ← Pre-compiled WPF engine (via FileInstall)
-gui.bin            ← GZip-compressed UI assets
+MyApp.baml         ← Compiled UI binary resource
 ```
 
 At runtime:
 1. AHK extracts `ahk-xaml.dll` from resources if needed.
-2. Launches the engine with `gui.bin` as the asset path.
-3. The engine decompresses and loads the UI instantly — no C# compiler required.
+2. AHK runs in "production mode" by skipping the `XAML_Generator` GUI building code completely.
+3. Launches the engine with `<ScriptName>.baml` as the asset path.
+4. The engine loads the UI instantly natively using `Baml2006Reader` — no C# compiler required and no XML parsing overhead.
 
 ---
 

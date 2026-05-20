@@ -194,7 +194,8 @@ class XAMLHost {
                 FileInstall("ahk-xaml.dll", targetExe, 1)
         }
 
-        Run('"' targetExe '" --daemon "' ProcessExist() '" "' String(XAMLHost.daemonReceiver.Hwnd) '"', "", "Hide")
+        logArg := (IsSet(XAML_ENABLE_LOGGING) && !XAML_ENABLE_LOGGING) ? ' --no-log' : ''
+        Run('"' targetExe '" --daemon "' ProcessExist() '" "' String(XAMLHost.daemonReceiver.Hwnd) '"' logArg, "", "Hide")
     }
 
     CheckForCrashes() {
@@ -469,7 +470,7 @@ class XAMLHost {
             FileDelete(tempTxt)
     }
 
-    static CompileEngine(libDir, sharedExe) {
+    static CompileEngine(libDir, sharedExe, extraResources := []) {
         XAMLHost.RestoreWebView2Dlls()
         errLog := A_Temp "\AhkWpf\AhkWpfError.log"
         sourceCs := libDir "\XAML_AHK_Bridge.cs"
@@ -508,6 +509,11 @@ class XAMLHost {
         if FileExist(xamlPath)
             embeddedRes .= ' /resource:"' xamlPath '"'
 
+        for _, res in extraResources {
+            if FileExist(res)
+                embeddedRes .= ' /resource:"' res '"'
+        }
+
         cmd := A_ComSpec ' /c ""' cscPath '" /nologo /target:winexe /out:"' sharedExe '" /lib:"' wpfDir '" /reference:System.dll /reference:System.Core.dll /reference:System.Xml.dll /reference:PresentationFramework.dll /reference:PresentationCore.dll /reference:WindowsBase.dll /reference:System.Xaml.dll /reference:UIAutomationProvider.dll /reference:UIAutomationTypes.dll' wvRefs wvDef embeddedRes ' "' sourceCs '" > "' errLog '" 2>&1"'
         RunWait(cmd, "", "Hide")
 
@@ -517,6 +523,70 @@ class XAMLHost {
             return false
         }
         return true
+    }
+
+    BundleCustomEngine(targetExe) {
+        cleanXaml := StrReplace(this.xaml, "%resources%", "")
+        cleanXaml := StrReplace(cleanXaml, "%components%", "")
+        
+        tempDir := A_Temp "\AhkWpf"
+        if !DirExist(tempDir)
+            DirCreate(tempDir)
+            
+        tempXaml := tempDir "\app_payload.xaml"
+        tempBaml := tempDir "\app_payload.baml"
+        tempEvents := tempDir "\app_payload.events"
+        
+        try FileDelete(tempXaml)
+        try FileDelete(tempBaml)
+        try FileDelete(tempEvents)
+        
+        FileAppend(cleanXaml, tempXaml, "UTF-8")
+        
+        SplitPath(A_LineFile, , &libDir)
+        toolPath := libDir "\..\tools\compile_baml.ps1"
+        if FileExist(toolPath) {
+            cmd := 'powershell.exe -ExecutionPolicy Bypass -File "' toolPath '" -InputXaml "' tempXaml '" -OutputBaml "' tempBaml '"'
+            RunWait(cmd, "", "Hide")
+        }
+        
+        eventsStr := ""
+        for ctrlName, evtMap in this.events {
+            for evtName, arr in evtMap {
+                eventsStr .= ctrlName ":" evtName ","
+            }
+        }
+        eventsStr := Trim(eventsStr, ",")
+        if (eventsStr != "") {
+            FileAppend(eventsStr, tempEvents, "UTF-8")
+        }
+        
+        resList := []
+        if FileExist(tempBaml) {
+            resList.Push(tempBaml)
+        } else {
+            MsgBox("Failed to compile BAML during bundle export! Check the compiler log.", "AHK-XAML", "Iconx")
+            return false
+        }
+        
+        if FileExist(tempEvents)
+            resList.Push(tempEvents)
+            
+        try {
+            while ProcessExist(targetExe) {
+                ProcessClose(targetExe)
+                Sleep(50)
+            }
+            FileDelete(targetExe)
+        }
+            
+        success := XAMLHost.CompileEngine(libDir, targetExe, resList)
+        
+        try FileDelete(tempXaml)
+        try FileDelete(tempBaml)
+        try FileDelete(tempEvents)
+        
+        return success
     }
 
     _EnsureDaemon() {
@@ -554,10 +624,14 @@ class XAMLHost {
                 if !XAMLHost.CompileEngine(libDir, sharedExe)
                     return ""
             }
-            if (!FileExist(targetExe) || FileGetTime(sharedExe) != FileGetTime(targetExe)) {
-                try FileCopy(sharedExe, targetExe, 1)
+            if (this.exePath == "") {
+                if (!FileExist(targetExe) || FileGetTime(sharedExe) != FileGetTime(targetExe)) {
+                    try FileCopy(sharedExe, targetExe, 1)
+                }
+            } else if (!FileExist(targetExe)) {
+                MsgBox("Custom Engine DLL not found: " targetExe, "AHK-XAML", "Iconx")
+                return ""
             }
-
 
             XAMLHost.RestoreWebView2Dlls()
             SplitPath(targetExe, , &targetDir)
@@ -651,7 +725,8 @@ class XAMLHost {
 
         lpData := NumGet(lParam, A_PtrSize * 2, "Ptr")
         payload := StrGet(lpData, "UTF-8")
-        try FileAppend("OnCopyData: " payload "`n", A_Temp "\AhkWpf\AhkTrace.log", "UTF-8")
+        if (!IsSet(XAML_ENABLE_LOGGING) || XAML_ENABLE_LOGGING)
+            try FileAppend("OnCopyData: " payload "`n", A_Temp "\AhkWpf\AhkTrace.log", "UTF-8")
         if (!InStr(payload, "EVENT|") && !InStr(payload, "DAEMON|"))
             return 0
             
@@ -778,7 +853,8 @@ class XAMLHost {
                 str := ""
                 for k, v in stateMap
                     str .= k "=" v ", "
-                FileAppend("OnCopyData SelectionBox: " str "`n", A_ScriptDir "\debug.log")
+            if (!IsSet(XAML_ENABLE_LOGGING) || XAML_ENABLE_LOGGING)
+                try FileAppend("OnCopyData SelectionBox: " str "`n", A_ScriptDir "\debug.log")
             }
             evtList := instance.events[ctrlName][baseEventName]
             for evtObj in evtList {

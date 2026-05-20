@@ -13,7 +13,7 @@ By combining the speed of AHK with the rendering power of a compiled C# WPF engi
 - **Dynamic Theming:** Supports hot-swapping themes by injecting WPF `ResourceDictionaries`. Fully integrates with Windows DWM (Desktop Window Manager) for native Mica/Acrylic effects and rounded corners.
 - **Hot Reload:** Automatic state persistence across script restarts — text inputs, toggle states, slider values, and combo selections are saved and restored seamlessly.
 - **Crash Diagnostics:** Rich error dialogs that trace WPF parsing errors back to the originating AHK source line, with XAML snippet context.
-- **Production Builds:** Export your UI as a compressed `.bin` asset for zero-compilation deployment.
+- **Production Builds:** Export your UI as a compiled `.baml` native WPF asset for zero-compilation deployment.
 
 ## Quick Start Example
 
@@ -23,6 +23,9 @@ Here is a minimal implementation to show how a UI is constructed and launched.
 #Requires AutoHotkey v2.0
 #Include "lib\XAML_GUI.ahk"
 
+; Define Dev Mode vs Production Mode
+global XAML_FORCE_DYNAMIC_COMPILE := true
+
 ; 1. Initialize the Main App Window
 app := XAML_GUI("My Application", 800, 600)
 
@@ -31,11 +34,23 @@ app.Add("TextBlock").Text("Hello, World!").FontSize(24).Foreground("{DynamicReso
 
 btn := app.Add("Button").Content("Click Me!").Width(120).Height(40).Margin("0,20,0,0").Cursor("Hand")
 
-; 3. Bind events to AHK callbacks
+; 3. Compile or Load the compiled UI
+if (XAML_FORCE_DYNAMIC_COMPILE) {
+    ui := app.Compile()
+} else {
+    ui := app.Load("gui.dll")
+}
+
+; 4. Bind events to AHK callbacks
 app.Events.OnEvent("BtnClickMe", "Click", (state, ctrl, event) => MsgBox("Button Clicked!"))
 btn.Name("BtnClickMe") ; Assign the name so the engine can track it
 
-; 4. Show the Window
+; 5. Bundle everything into an ultra-fast standalone DLL in Dev Mode
+if (XAML_FORCE_DYNAMIC_COMPILE) {
+    app.ExportBundle("gui.dll")
+}
+
+; 6. Show the Window
 app.Show()
 ```
 
@@ -59,7 +74,7 @@ app.Show()
 ```
 ahk-xaml/
 ├── docs/
-│   └── production-steps.md       # Steps for packaging/exporting to production
+│   └── production-steps.md       # Steps for packaging/exporting to production (.baml)
 ├── lib/
 │   ├── XAML_Host.ahk             # Core IPC bridge, engine compilation, message dispatch
 │   ├── XAML_Generator.ahk        # Chainable AST → XAML compiler

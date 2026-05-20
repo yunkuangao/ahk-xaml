@@ -2,14 +2,6 @@
 ; ==============================================================================
 ; FLUID UI WORKBENCH — basic_components.ahk
 ; ==============================================================================
-;
-; HOW TO SWITCH TO PRODUCTION:
-;   1. Run once with the DEV section active to generate the .baml
-;   2. Comment out the ~~~ DEV ONLY ~~~ block
-;   3. Uncomment the ~~~ PRODUCTION ONLY ~~~ block
-;   4. Done — the app now loads from precompiled BAML (instant startup)
-;
-; ==============================================================================
 
 ; --- Core Libraries (always needed) ---
 #Include "../../lib/XAML_Host.ahk"
@@ -24,29 +16,29 @@ global myGrid := ""
 global myDatePicker := ""
 global tabList := ["DEPLOYMENT", "DATA GRID", "DATAGRID EX", "UI COMPONENTS", "ADVANCED INPUTS", "FLUID DIALOGS", "RICH COMPONENTS", "ADVANCED UI"]
 
+; Toggle this flag for Dev vs Production
+global XAML_FORCE_DYNAMIC_COMPILE := false
+
 app := XAML_GUI("Fluid UI")
 
-; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-; ~~~ DEV ONLY — Comment out this entire block for production ~~~~~~~~~~~~~~~~~~
-; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#Include "../../lib/XAML_Generator.ahk"
-#Include "basic_components/basic_components_gui.ahk"
-BuildFullGUI(app)
-
-; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-; ~~~ PRODUCTION RUN — Uncomment this line for production, run once, ~~~~~~~~~~~
-; ~~~~~~~~~~~~~~~~~~~~ then comment out "DEV ONLY" and "PRODUCTION RUN" ~~~~~~~~
-; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-; ~~~~~~~~~~ For more control, control the flags in XAML_Config.ahk ~~~~~~~~~~~~
-; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-;app.ExportBAML()
-; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-ui := app.Compile()
+if (XAML_FORCE_DYNAMIC_COMPILE) {
+    ;; you can comment out these includes in production and just use the pre-compiled DLL
+    #Include "../../lib/XAML_Generator.ahk"
+    #Include "basic_components/basic_components_gui.ahk"
+    BuildFullGUI(app)
+    ui := app.Compile()
+} else {
+    ui := app.Load("gui.dll")
+}
 
 ; --- Event Handlers (always needed) ---
 #Include "basic_components/basic_components_events.ahk"
+
+; --- Bundle for Production ---
+; Must be called AFTER binding events so they are embedded in the DLL!
+if (XAML_FORCE_DYNAMIC_COMPILE) {
+    app.ExportBundle("gui.dll")
+}
 
 ; --- Launch ---
 app.Show()

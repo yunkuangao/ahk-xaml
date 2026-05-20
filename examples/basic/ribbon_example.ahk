@@ -91,18 +91,8 @@ winStack.AddSmallBtn("BtnSplit", "Split", 0xE8A6)
 docArea := mainContent.Add("Border").Name("DocArea").Grid_Row(1).Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,1,0,0")
 docArea.Add("TextBlock").Text("Your Excel spreadsheet or document goes here!").HorizontalAlignment("Center").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}").FontSize(16)
 
-; ------------------------------------------------------------------------------
-; XAML BUILD CONFIGURATION
-; ------------------------------------------------------------------------------
-; Toggle XAML_FORCE_DYNAMIC_COMPILE in lib\XAML_Config.ahk to switch between Dev and Prod!
-if (XAML_FORCE_DYNAMIC_COMPILE) {
-    ; Development Mode: Generate the UI dynamically every time.
-    ui := app.Compile()
-} else {
-    ; Production Mode: Compile into a standalone DLL on first run,
-    ; then bypass XAML generation and boot straight from the DLL instantly!
-    ui := app.Compile("ribbon_example_compiled.dll")
-}
+
+ui := app.Compile()
 
 ; Bind Events
 ribbon.BindEvents(ui)
@@ -110,6 +100,12 @@ ui.OnEvent("BtnPaste", "Click", (*) => app.ShowSnackbar("Pasted content!"))
 ui.OnEvent("BtnBold", "Click", (*) => app.ShowSnackbar("Toggled Bold!"))
 ui.OnEvent("BtnTable", "Click", (*) => app.ShowSnackbar("Inserted Table!"))
 ui.OnEvent("DocArea", "PreviewMouseLeftButtonDown", OnDocClick)
+
+; --- EXPORT BUNDLE ---
+; If in Dev mode, bundle everything (Engine + BAML + Events) into one ultra-fast DLL!
+if (XAML_FORCE_DYNAMIC_COMPILE) {
+    app.ExportBundle("gui.dll")
+}
 
 ; Show the Window!
 app.Show()
