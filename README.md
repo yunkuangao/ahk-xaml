@@ -2,6 +2,9 @@
 
 The modern, object-oriented framework for building native WPF (Windows Presentation Foundation) interfaces entirely within AutoHotkey v2.
 
+[![Architecture Diagram](images/architecture.png)](ahk-xaml%20-%20Architecture.pdf)
+*(Click diagram to view high-resolution PDF)*
+
 By combining the speed of AHK with the rendering power of a compiled C# WPF engine, `ahk-xaml` allows you to create incredibly rich, hardware-accelerated, themable UIs without writing a single line of raw XML or dealing with complex thread-blocking UI code.
 
 ## Core Features

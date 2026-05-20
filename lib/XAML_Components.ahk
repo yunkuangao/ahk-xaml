@@ -737,6 +737,11 @@ class XRibbon {
     __New(parentXAML) {
         this.container := parentXAML.Name("RibbonMainContainer")
         this.tabCtrl := parentXAML.Add("TabControl").Name("RibbonTabs").Style("{StaticResource RibbonTabControl}")
+        
+        ; Crucial fix: If the Ribbon is positioned up in the title bar (Grid_Row 0), 
+        ; we must explicitly tell WindowChrome that it can be clicked!
+        this.tabCtrl.WindowChrome_IsHitTestVisibleInChrome("True")
+        
         this.tabs := []
         this.isPinned := true
         this.container.ClipToBounds("False")

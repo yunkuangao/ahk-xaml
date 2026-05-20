@@ -101,12 +101,6 @@ ui.OnEvent("BtnBold", "Click", (*) => app.ShowSnackbar("Toggled Bold!"))
 ui.OnEvent("BtnTable", "Click", (*) => app.ShowSnackbar("Inserted Table!"))
 ui.OnEvent("DocArea", "PreviewMouseLeftButtonDown", OnDocClick)
 
-; --- EXPORT BUNDLE ---
-; If in Dev mode, bundle everything (Engine + BAML + Events) into one ultra-fast DLL!
-if (XAML_FORCE_DYNAMIC_COMPILE) {
-    app.ExportBundle("gui.dll")
-}
-
 ; Show the Window!
 app.Show()
 
