@@ -31,10 +31,15 @@
 │                    AHK Process                          │
 │                                                         │
 │  ┌──────────────┐   ┌─────────────────┐                 │
-│  │ XAML_GUI.ahk │──>│ XAML_Generator  │                 │
-│  │ (App Shell)  │   │ (AST → XAML)    │                 │
-│  └──────┬───────┘   └────────┬────────┘                 │
-│         │                    │                          │
+│  │ .axml File   │──>│ AXML Parser     │                 │
+│  └──────────────┘   └────────┬────────┘                 │
+│                              │                          │
+│  ┌──────────────┐            ▼                          │
+│  │ XAML_GUI.ahk │──>┌─────────────────┐                 │
+│  │ (App Shell)  │   │ XAML_Generator  │                 │
+│  └──────┬───────┘   │ (AST → XAML)    │                 │
+│         │           └────────┬────────┘                 │
+│         ▼                    ▼                          │
 │         ▼                    ▼                          │
 │  ┌──────────────────────────────────┐                   │
 │  │          XAML_Host.ahk           │                   │
@@ -71,7 +76,7 @@
 ### Process Lifecycle
 
 1. **AHK starts** → `XAML_GUI.__New()` creates the generator AST.
-2. **User code** calls `.Add()`, `.AddTab()`, etc. to build the tree.
+2. **User code** loads an `.axml` file via the AXML parser, or calls `.Add()`, `.AddTab()`, etc. to build the tree programmatically.
 3. **`app.Show()`** triggers:
    - `XAML_Generator.Compile()` serializes the AST to a XAML string.
    - `XAML_Host.CompileEngine()` invokes `csc.exe` to compile `XAML_AHK_Bridge.cs` into `ahk-xaml.dll` (first run only).
@@ -102,6 +107,23 @@
 | `XAML_DIAGNOSTICS_ENABLED` | `true` | Show "Skip Element/Property" buttons in crash dialogs |
 | `XAML_ENABLE_TRACING` | `true` | Embed AHK source line comments in generated XAML |
 | `XAML_ENABLE_WEBVIEW` | `false` | Include WebView2 Chromium browser support |
+
+### AXML Parsing Pipeline
+
+```
+.axml File (AHK-XAML Markup)
+         │
+         ▼
+    AXML Parser (Regex/Indentation Tokenizer)
+         │
+         ▼
+    Abstract Syntax Tree (AST)
+         │
+         ▼
+    XAML_Generator (AST → XAML Compiler)
+```
+
+The AXML parser reads the custom YAML-like indentation syntax, resolves shorthand property mappings (e.g. `TextBlock: "Hello"` → `Text="Hello"`), and seamlessly constructs the AST in the exact same manner as traditional programmatic `ui.Add()` calls.
 
 ### Engine Compilation
 

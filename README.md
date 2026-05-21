@@ -18,6 +18,30 @@ By combining the speed of AHK with the rendering power of a compiled C# WPF engi
 - **Crash Diagnostics:** Rich error dialogs that trace WPF parsing errors back to the originating AHK source line, with XAML snippet context.
 - **Production Builds:** Export your UI as a compiled `.baml` native WPF asset for zero-compilation deployment.
 
+## The AXML System
+
+AXML (AutoHotkey XAML) is a custom, declarative markup language designed specifically for this framework. It provides a clean, concise, YAML-like syntax to define UI structures, fully replacing raw programmatic `ui.Add()` calls while still seamlessly mapping to the underlying AST.
+
+- **Clean Syntax**: Indentation-based nesting, eliminating the need for bulky closing tags.
+- **Auto-Mapping**: Properties like `Text`, `Content`, or `Value` can be passed without explicitly naming them (e.g., `TextBlock: "Hello World"`).
+- **Native Support**: Handled natively by the `XAML_Generator`, transforming `.axml` files straight into your dynamic, interactable UI.
+
+**Example AXML**:
+```yaml
+Border (MyPanel):
+  Background: "{DynamicResource ControlBg}"
+  CornerRadius: 8
+  
+  StackPanel:
+    TextBlock: "Welcome!"
+      FontSize: 24
+      FontWeight: "Bold"
+      
+    Button (BtnClickMe): "Submit"
+      Width: 120
+      Cursor: "Hand"
+```
+
 ## Quick Start Example
 
 Here is a minimal implementation to show how a UI is constructed and launched.

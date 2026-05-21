@@ -38,6 +38,7 @@
 
     % --- Nodes: AHK Side (Controller) [x = 0] ---
     \node[process] (app) at (0, 0) {\textbf{XAML\_GUI.ahk}\\App Shell \& User Logic};
+    \node[process, draw=green!60!black, fill=green!5] (axml) at (-13.5, -1.75) {\textbf{.axml File}\\AHK-XAML Markup};
     \node[process] (gen) at (0, -3.5) {\textbf{XAML\_Generator}\\AST $\rightarrow$ XAML Compiler};
     \node[process] (ahkhost) at (0, -7.5) {\textbf{XAML\_Host.ahk}\\AHK IPC Bridge \& Event Loop};
 
@@ -51,10 +52,10 @@
     % --- Background Process Containers ---
     \begin{pgfonlayer}{background}
         % AHK Process Box
-        \coordinate (ahk_tl) at (-5.0, 2.5);
+        \coordinate (ahk_tl) at (-10.0, 2.5);
         \coordinate (ahk_br) at (3.5, -9.5);
         \draw[draw=blue!20, thick, rounded corners=8mm, fill=blue!4, fill opacity=0.5] (ahk_tl) rectangle (ahk_br);
-        \node[title, text=blue!80!black, anchor=north] at (-0.75, 2.2) {AutoHotkey Process (Controller)};
+        \node[title, text=blue!80!black, anchor=north] at (-3.25, 2.2) {AutoHotkey Process (Controller)};
 
         % WPF Process Box
         \coordinate (wpf_tl) at (9.5, 2.5);
@@ -65,6 +66,9 @@
 
     % --- Phase 1: Creation & Initialization (Gray) ---
     \draw[arrow] (app) -- node[label_style, right] {1. Define UI \& Bind Hooks\\(\texttt{ui.Add}, \texttt{ui.OnEvent})} (gen);
+    
+    \draw[arrow] (axml) |- node[label_style, near start, right, pos=0.5, left=-30mm] {Parse to AST} (gen.170);
+    \draw[arrow] (app) -| node[label_style, above, near end, pos=.5, left=-30mm] {Load} (axml);
     
     \draw[arrow] (gen) -- node[label_style, right] {2. Serialize to XAML\\(Or Compile to BAML DLL)} (ahkhost);
     
