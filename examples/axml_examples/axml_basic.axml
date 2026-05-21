@@ -1,0 +1,45 @@
+@Template SettingCard:
+  Border:
+    CornerRadius: 8
+    Background: "{DynamicResource DropdownBg}"
+    Padding: "20"
+    BorderThickness: 1
+    BorderBrush: "{DynamicResource ControlBorder}"
+    Margin: "0,0,0,10"
+    
+    StackPanel:
+      TextBlock:
+        Text: "{{Title}}"
+        FontSize: 16
+        Margin: "0,0,0,10"
+        
+      Slider (SldBrightness):
+        Minimum: 0
+        Maximum: 100
+        Value: $Brightness
+        IsSnapToTickEnabled: "True"
+        TickFrequency: 1
+        Tag: "Throttle:50"
+        OnValueChanged: HandleBrightnessChanged
+        
+      TextBlock (TxtBrightnessOut):
+        Text: $Brightness
+        Margin: "0,10,0,0"
+
+StackPanel:
+  Margin: "20"
+  
+  TextBlock:
+    Text: "AXML God Tier Test"
+    FontSize: 24
+    FontWeight: "SemiBold"
+    Margin: "0,0,0,20"
+    
+  SettingCard (MyCard):
+    Title: "State Binding Test using Templates!"
+    
+  Button (BtnReset):
+    Content: "Reset to 50"
+    Padding: "15,5,15,5"
+    Margin: "0,15,0,0"
+    OnClick: HandleResetClick

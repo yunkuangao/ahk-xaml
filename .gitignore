@@ -18,3 +18,7 @@ old/
 !xaml.components.xaml
 *.baml
 !xaml.components.baml
+!axml_examples/*
+node_modules/
+out/
+vscode-axml/

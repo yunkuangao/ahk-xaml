@@ -117,6 +117,20 @@ class XAMLElement {
         return this._Parent
     }
 
+    ; Find a descendant element by its Name or x:Name
+    Find(name) {
+        if (this._Props.Has("Name") && this._Props["Name"] == name)
+            return this
+        if (this._Props.Has("x:Name") && this._Props["x:Name"] == name)
+            return this
+            
+        for child in this._Children {
+            if (found := child.Find(name))
+                return found
+        }
+        return ""
+    }
+
     ; Intercept unknown methods to dynamically set properties
     __Call(name, params) {
         this._TrackCaller()

@@ -343,6 +343,13 @@ class XAML_GUI {
         this.assetPath := assetPath
         this.xamlString := ""
         this.host := XAMLHost("", assetPath, options*)
+        
+        ; If auto-prewarm is enabled, immediately start booting the bundled engine in the background
+        ; This masks the ~300ms WPF cold-boot time while the AHK script continues executing!
+        if (IsSet(XAML_AUTO_PREWARM) && XAML_AUTO_PREWARM) {
+            SetTimer(() => XAMLHost.Prewarm(assetPath), -10)
+        }
+        
         this.BindBaseEvents()
         
         for k, v in this.tokenizers {
@@ -633,4 +640,13 @@ FindThemesIni() {
             return p
     }
     return "themes.ini"
+}
+
+; Auto-Prewarm the generic engine in Dev Mode if configured
+; By kicking this off during the script's Auto-Execute phase, the background daemon 
+; will be fully booted and ready by the time the user calls app.Show()!
+if (IsSet(XAML_FORCE_DYNAMIC_COMPILE) && XAML_FORCE_DYNAMIC_COMPILE) {
+    if (IsSet(XAML_AUTO_PREWARM) && XAML_AUTO_PREWARM) {
+        SetTimer(() => XAMLHost.Prewarm(), -10)
+    }
 }

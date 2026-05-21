@@ -1284,11 +1284,29 @@ public class AhkWpfEngine {
         DumpState(cName, eName);
     }
 
+    private System.Collections.Generic.Dictionary<string, DateTime> lastEventSendTimes = new System.Collections.Generic.Dictionary<string, DateTime>();
+
     private void DumpState(string cName, string eName) {
         var ctrl = win.FindName(cName) as FrameworkElement;
         if (ctrl != null) {
-            if (eName == "TextChanged" && !ctrl.IsKeyboardFocusWithin) return;
-            if (eName == "ValueChanged" && !ctrl.IsMouseOver && !ctrl.IsKeyboardFocusWithin && !ctrl.IsMouseCaptured) return;
+            string tag = ctrl.Tag as string ?? "";
+            
+            if (eName == "TextChanged" && !ctrl.IsKeyboardFocusWithin && !tag.Contains("AllowPassive")) return;
+            if (eName == "ValueChanged" && !ctrl.IsMouseOver && !ctrl.IsKeyboardFocusWithin && !ctrl.IsMouseCaptured && !tag.Contains("AllowPassive")) return;
+            
+            if (tag.Contains("Throttle")) {
+                int delay = 50;
+                var match = System.Text.RegularExpressions.Regex.Match(tag, @"Throttle:(\d+)");
+                if (match.Success) delay = int.Parse(match.Groups[1].Value);
+                
+                string key = cName + "|" + eName;
+                if (lastEventSendTimes.ContainsKey(key)) {
+                    if ((DateTime.Now - lastEventSendTimes[key]).TotalMilliseconds < delay) {
+                        return;
+                    }
+                }
+                lastEventSendTimes[key] = DateTime.Now;
+            }
         }
 
         if (eName == "MouseMove" || eName == "PreviewMouseMove") {
@@ -1297,7 +1315,18 @@ public class AhkWpfEngine {
         }
         var sb = new StringBuilder("EVENT|" + winId + "|" + cName + "|" + eName + "\n");
         sb.Append(CollectState());
-        SendToAhk(sb.ToString());
+        SendToAhkAsync(sb.ToString());
+    }
+
+    private void SendToAhkAsync(string text) {
+        System.Threading.ThreadPool.QueueUserWorkItem(_ => {
+            byte[] bytes = Encoding.UTF8.GetBytes(text);
+            var cds = new COPYDATASTRUCT { cbData = bytes.Length + 1, lpData = Marshal.AllocHGlobal(bytes.Length + 1) };
+            Marshal.Copy(bytes, 0, cds.lpData, bytes.Length);
+            Marshal.WriteByte(cds.lpData, bytes.Length, 0);
+            SendMessage(ahkHwnd, 0x004A, IntPtr.Zero, ref cds);
+            Marshal.FreeHGlobal(cds.lpData);
+        });
     }
 
     private void SendToAhk(string text) {
@@ -1983,8 +2012,47 @@ public class AhkWpfEngine {
         };
     }
     
+    private void EnableElementDrag(FrameworkElement element, string options) {
+        if (element.Tag != null && element.Tag.ToString() == "DragEnabled") return;
+        element.Tag = "DragEnabled";
+        
+        bool snapToGrid = options.Contains("grid");
+        bool boxDragging = false;
+        Point boxDragStart = new Point();
+        double boxStartLeft = 0, boxStartTop = 0;
+        
+        element.MouseLeftButtonDown += (s, e) => {
+            boxDragging = true;
+            boxDragStart = e.GetPosition((UIElement)element.Parent);
+            boxStartLeft = Canvas.GetLeft(element);
+            boxStartTop = Canvas.GetTop(element);
+            if (double.IsNaN(boxStartLeft)) boxStartLeft = 0;
+            if (double.IsNaN(boxStartTop)) boxStartTop = 0;
+            element.CaptureMouse();
+            e.Handled = true;
+        };
+        element.MouseMove += (s, e) => {
+            if (!boxDragging) return;
+            var pos = e.GetPosition((UIElement)element.Parent);
+            double newX = boxStartLeft + (pos.X - boxDragStart.X);
+            double newY = boxStartTop + (pos.Y - boxDragStart.Y);
+            if (snapToGrid) {
+                newX = Math.Round(newX / 10) * 10;
+                newY = Math.Round(newY / 10) * 10;
+            }
+            Canvas.SetLeft(element, newX);
+            Canvas.SetTop(element, newY);
+            e.Handled = true;
+        };
+        element.MouseLeftButtonUp += (s, e) => {
+            if (!boxDragging) return;
+            boxDragging = false;
+            element.ReleaseMouseCapture();
+            e.Handled = true;
+        };
+    }
+    
     private void EnableCropDrag(FrameworkElement box, string boxName) {
-        // Box drag (move the crop area)
         bool boxDragging = false;
         Point boxDragStart = new Point();
         double boxStartLeft = 0, boxStartTop = 0;
@@ -2013,7 +2081,6 @@ public class AhkWpfEngine {
             e.Handled = true;
         };
         
-        // Find handles inside the box by name convention
         string baseName = boxName.Replace("_Box", "");
         var hSE = win.FindName(baseName + "_HSE") as FrameworkElement;
         if (hSE != null) {
@@ -2089,7 +2156,9 @@ public class AhkWpfEngine {
     }
     
     private void EnableCanvasZoomPan(Canvas canvas) {
-        // Apply a TransformGroup to the canvas for zoom + pan
+        if (canvas.Tag != null && canvas.Tag.ToString() == "ZoomPanEnabled") return;
+        canvas.Tag = "ZoomPanEnabled";
+        
         var scaleTransform = new System.Windows.Media.ScaleTransform(1, 1);
         var translateTransform = new System.Windows.Media.TranslateTransform(0, 0);
         var tg = new System.Windows.Media.TransformGroup();
@@ -2098,311 +2167,314 @@ public class AhkWpfEngine {
         canvas.RenderTransform = tg;
         canvas.RenderTransformOrigin = new Point(0, 0);
         
-        // Zoom via mouse wheel
         var parent = canvas.Parent as FrameworkElement;
-        if (parent != null) {
-            parent.PreviewMouseWheel += (s, e) => {
-                double zoom = e.Delta > 0 ? 1.1 : 0.9;
-                double scaleX = scaleTransform.ScaleX;
-                double newScale = scaleX * zoom;
-                if (newScale < 0.2) newScale = 0.2;
-                if (newScale > 5.0) newScale = 5.0;
-                
-                // Zoom keeping mouse position invariant
-                var canvasPos = e.GetPosition(canvas);
-                translateTransform.X = translateTransform.X + canvasPos.X * (scaleX - newScale);
-                translateTransform.Y = translateTransform.Y + canvasPos.Y * (scaleX - newScale);
-                
-                scaleTransform.ScaleX = newScale;
-                scaleTransform.ScaleY = newScale;
+
+        canvas.PreviewMouseWheel += (s, e) => {
+            System.IO.File.AppendAllText("ahk_pan_debug.log", "PreviewMouseWheel fired! Delta: " + e.Delta + "\n");
+            double zoom = e.Delta > 0 ? 1.1 : 0.9;
+            double scaleX = scaleTransform.ScaleX;
+            double newScale = scaleX * zoom;
+            if (newScale < 0.2) newScale = 0.2;
+            if (newScale > 5.0) newScale = 5.0;
+            
+            var canvasPos = e.GetPosition(canvas);
+            translateTransform.X = translateTransform.X + canvasPos.X * (scaleX - newScale);
+            translateTransform.Y = translateTransform.Y + canvasPos.Y * (scaleX - newScale);
+            
+            scaleTransform.ScaleX = newScale;
+            scaleTransform.ScaleY = newScale;
+            e.Handled = true;
+        };
+        
+        bool isPanning = false;
+        bool panMoved = false;
+        Point panStart = new Point();
+        double panStartTX = 0, panStartTY = 0;
+        
+        bool isKnifing = false;
+        System.Windows.Shapes.Path tempKnife = null;
+        Point knifeStart = new Point();
+        Point lastKnifePos = new Point();
+        string lastSelectionSet = "";
+        
+        canvas.PreviewMouseDown += (s, e) => {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Middle) {
+                System.IO.File.AppendAllText("ahk_pan_debug.log", "Middle PreviewMouseDown fired! Starting pan.\n");
+                isPanning = true;
+                panMoved = false;
+                panStart = e.GetPosition(parent != null ? parent : canvas);
+                panStartTX = translateTransform.X;
+                panStartTY = translateTransform.Y;
+                canvas.CaptureMouse();
+                canvas.Cursor = System.Windows.Input.Cursors.Hand;
                 e.Handled = true;
-            };
+            }
+        };
             
-            // Pan via middle-click drag
-            bool isPanning = false;
-            bool panMoved = false;
-            Point panStart = new Point();
-            double panStartTX = 0, panStartTY = 0;
-            
-            bool isKnifing = false;
-            System.Windows.Shapes.Path tempKnife = null;
-            Point knifeStart = new Point();
-            Point lastKnifePos = new Point();
-            string lastSelectionSet = "";
-            
-            parent.MouseDown += (s, e) => {
-                if (e.ChangedButton == System.Windows.Input.MouseButton.Middle) {
-                    isPanning = true;
-                    panMoved = false;
-                    panStart = e.GetPosition(parent);
-                    panStartTX = translateTransform.X;
-                    panStartTY = translateTransform.Y;
-                    parent.CaptureMouse();
-                    parent.Cursor = System.Windows.Input.Cursors.Hand;
-                    e.Handled = true;
+        canvas.PreviewMouseRightButtonDown += (s, e) => {
+            var pos = e.GetPosition(canvas);
+            string coords = pos.X.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," + pos.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ContextMenuOpened|" + Convert.ToBase64String(Encoding.UTF8.GetBytes(coords)) + "\n");
+        };
+        
+        // Mode logic: Left click on empty space (Canvas) triggers Pan or Select
+        canvas.MouseLeftButtonDown += (s, e) => {
+            var el = e.OriginalSource as FrameworkElement;
+            if (el != null && el.Name != null && el.Name.StartsWith("Port_")) {
+                connectionSourcePort = el;
+                if (tempConnection == null) {
+                    tempConnection = new System.Windows.Shapes.Path {
+                        Stroke = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(96, 160, 255)),
+                        StrokeThickness = 2.5,
+                        Opacity = 0.8,
+                        IsHitTestVisible = false
+                    };
+                    System.Windows.Controls.Panel.SetZIndex(tempConnection, -1);
+                    canvas.Children.Add(tempConnection);
                 }
-            };
+                tempConnection.Visibility = Visibility.Visible;
+                canvas.CaptureMouse();
+                e.Handled = true;
+                return;
+            }
             
-            parent.PreviewMouseRightButtonDown += (s, e) => {
+            // If the user clicked on a node or anything else, let it handle its own drag
+            if (e.OriginalSource != canvas) return;
+            
+            string mode = "Pan";
+            if (canvasModes.ContainsKey(canvas.Name)) mode = canvasModes[canvas.Name];
+            System.IO.File.AppendAllText("ahk_pan_debug.log", "MouseLeftButtonDown fired! Mode: " + mode + "\n");
+            
+            if (mode == "Pan") {
+                isPanning = true;
+                panMoved = false;
+                panStart = e.GetPosition(parent != null ? parent : canvas);
+                panStartTX = translateTransform.X;
+                panStartTY = translateTransform.Y;
+                canvas.CaptureMouse();
+                canvas.Cursor = System.Windows.Input.Cursors.Hand;
+                e.Handled = true;
+            } else if (mode == "Select") {
+                selectionStart = e.GetPosition(canvas);
+                if (selectionBox == null) {
+                    selectionBox = new System.Windows.Shapes.Rectangle {
+                        Stroke = System.Windows.Media.Brushes.DodgerBlue,
+                        StrokeThickness = 1,
+                        Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(50, 30, 144, 255)),
+                        IsHitTestVisible = false
+                    };
+                    System.Windows.Controls.Panel.SetZIndex(selectionBox, 9999);
+                    canvas.Children.Add(selectionBox);
+                }
+                Canvas.SetLeft(selectionBox, selectionStart.X);
+                Canvas.SetTop(selectionBox, selectionStart.Y);
+                selectionBox.Width = 0;
+                selectionBox.Height = 0;
+                selectionBox.Visibility = Visibility.Visible;
+                lastSelectionSet = "FORCE_UPDATE";
+                canvas.CaptureMouse();
+                e.Handled = true;
+            } else if (mode == "Knife") {
+                isKnifing = true;
+                knifeStart = e.GetPosition(canvas);
+                lastKnifePos = knifeStart;
+                if (tempKnife == null) {
+                    tempKnife = new System.Windows.Shapes.Path {
+                        Stroke = System.Windows.Media.Brushes.Red,
+                        StrokeThickness = 2,
+                        StrokeDashArray = new System.Windows.Media.DoubleCollection(new double[] { 4, 4 }),
+                        IsHitTestVisible = false
+                    };
+                    System.Windows.Controls.Panel.SetZIndex(tempKnife, 9999);
+                    canvas.Children.Add(tempKnife);
+                }
+                tempKnife.Visibility = Visibility.Visible;
+                canvas.CaptureMouse();
+                e.Handled = true;
+            }
+        };
+        canvas.MouseMove += (s, e) => {
+            if (isPanning) {
+                var pos = e.GetPosition(parent != null ? parent : canvas);
+                if (Math.Abs(pos.X - panStart.X) > 2 || Math.Abs(pos.Y - panStart.Y) > 2) panMoved = true;
+                translateTransform.X = panStartTX + (pos.X - panStart.X);
+                translateTransform.Y = panStartTY + (pos.Y - panStart.Y);
+                System.IO.File.AppendAllText("ahk_pan_debug.log", "Canvas Moved! New TX: " + translateTransform.X + " TY: " + translateTransform.Y + " parent: " + (parent != null ? parent.Name : "null") + "\n");
+                e.Handled = true;
+            } else if (selectionBox != null && selectionBox.Visibility == Visibility.Visible) {
                 var pos = e.GetPosition(canvas);
-                string coords = pos.X.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," + pos.Y.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ContextMenuOpened|" + Convert.ToBase64String(Encoding.UTF8.GetBytes(coords)) + "\n");
-            };
-            
-            // Mode logic: Left click on empty space (Canvas) triggers Pan or Select
-            parent.MouseLeftButtonDown += (s, e) => {
-                var el = e.OriginalSource as FrameworkElement;
-                if (el != null && el.Name != null && el.Name.StartsWith("Port_")) {
-                    connectionSourcePort = el;
-                    if (tempConnection == null) {
-                        tempConnection = new System.Windows.Shapes.Path {
-                            Stroke = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(96, 160, 255)),
-                            StrokeThickness = 2.5,
-                            Opacity = 0.8,
-                            IsHitTestVisible = false
-                        };
-                        System.Windows.Controls.Panel.SetZIndex(tempConnection, -1);
-                        canvas.Children.Add(tempConnection);
+                double x = Math.Min(pos.X, selectionStart.X);
+                double y = Math.Min(pos.Y, selectionStart.Y);
+                double w = Math.Abs(pos.X - selectionStart.X);
+                double h = Math.Abs(pos.Y - selectionStart.Y);
+                Canvas.SetLeft(selectionBox, x);
+                Canvas.SetTop(selectionBox, y);
+                selectionBox.Width = w;
+                selectionBox.Height = h;
+                
+                var currentSelected = new System.Collections.Generic.List<string>();
+                foreach (UIElement child in canvas.Children) {
+                    var fe = child as FrameworkElement;
+                    if (fe != null && fe.Name != null && fe.Name.StartsWith("Node_")) {
+                        double nx = Canvas.GetLeft(fe);
+                        double ny = Canvas.GetTop(fe);
+                        if (double.IsNaN(nx)) nx = 0;
+                        if (double.IsNaN(ny)) ny = 0;
+                        double nw = fe.ActualWidth;
+                        double nh = fe.ActualHeight;
+                        if (nx < x + w && nx + nw > x && ny < y + h && ny + nh > y) {
+                            currentSelected.Add(fe.Name.Substring(5));
+                        }
                     }
-                    tempConnection.Visibility = Visibility.Visible;
-                    parent.CaptureMouse();
-                    e.Handled = true;
-                    return;
+                }
+                string newSet = string.Join(",", currentSelected);
+                if (newSet != lastSelectionSet) {
+                    lastSelectionSet = newSet;
+                    bool isCtrl = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
+                    string evName = isCtrl ? "CtrlSelectionBox" : "SelectionBox";
+                    SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|" + evName + "|" + 
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes(newSet)) + "\n");
+                }
+                e.Handled = true;
+            } else if (connectionSourcePort != null && tempConnection != null && tempConnection.Visibility == Visibility.Visible) {
+                var pos = e.GetPosition(canvas);
+                double startX = Canvas.GetLeft(connectionSourcePort) + connectionSourcePort.Width / 2;
+                double startY = Canvas.GetTop(connectionSourcePort) + connectionSourcePort.Height / 2;
+                if (double.IsNaN(startX)) startX = 0;
+                if (double.IsNaN(startY)) startY = 0;
+                double endX = pos.X;
+                double endY = pos.Y;
+                
+                // Allow dragging from out port to in port
+                double dx = Math.Max(40, Math.Abs(endX - startX) * 0.5);
+                double c1X = startX + dx;
+                double c2X = endX - dx;
+                if (connectionSourcePort.Name.StartsWith("Port_In")) {
+                    c1X = startX - dx;
+                    c2X = endX + dx;
                 }
                 
-                string mode = "Pan";
-                if (canvasModes.ContainsKey(canvas.Name)) mode = canvasModes[canvas.Name];
+                string geom = string.Format(System.Globalization.CultureInfo.InvariantCulture, "M{0},{1} C{2},{3} {4},{5} {6},{7}", startX, startY, c1X, startY, c2X, endY, endX, endY);
+                try { tempConnection.Data = System.Windows.Media.Geometry.Parse(geom); } catch { }
+                e.Handled = true;
+            } else if (isKnifing && tempKnife != null && tempKnife.Visibility == Visibility.Visible) {
+                var pos = e.GetPosition(canvas);
+                string geom = string.Format(System.Globalization.CultureInfo.InvariantCulture, "M{0},{1} L{2},{3}", knifeStart.X, knifeStart.Y, pos.X, pos.Y);
+                try { tempKnife.Data = System.Windows.Media.Geometry.Parse(geom); } catch { }
                 
-                if (mode == "Pan") {
-                    isPanning = true;
-                    panMoved = false;
-                    panStart = e.GetPosition(parent);
-                    panStartTX = translateTransform.X;
-                    panStartTY = translateTransform.Y;
-                    parent.CaptureMouse();
-                    parent.Cursor = System.Windows.Input.Cursors.Hand;
-                    e.Handled = true;
-                } else if (mode == "Select") {
-                    selectionStart = e.GetPosition(canvas);
-                    if (selectionBox == null) {
-                        selectionBox = new System.Windows.Shapes.Rectangle {
-                            Stroke = System.Windows.Media.Brushes.DodgerBlue,
-                            StrokeThickness = 1,
-                            Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(50, 30, 144, 255)),
-                            IsHitTestVisible = false
-                        };
-                        System.Windows.Controls.Panel.SetZIndex(selectionBox, 9999);
-                        canvas.Children.Add(selectionBox);
-                    }
-                    Canvas.SetLeft(selectionBox, selectionStart.X);
-                    Canvas.SetTop(selectionBox, selectionStart.Y);
-                    selectionBox.Width = 0;
-                    selectionBox.Height = 0;
-                    selectionBox.Visibility = Visibility.Visible;
-                    lastSelectionSet = "FORCE_UPDATE";
-                    parent.CaptureMouse();
-                    e.Handled = true;
-                } else if (mode == "Knife") {
-                    isKnifing = true;
-                    knifeStart = e.GetPosition(canvas);
-                    lastKnifePos = knifeStart;
-                    if (tempKnife == null) {
-                        tempKnife = new System.Windows.Shapes.Path {
-                            Stroke = System.Windows.Media.Brushes.Red,
-                            StrokeThickness = 2,
-                            StrokeDashArray = new System.Windows.Media.DoubleCollection(new double[] { 4, 4 }),
-                            IsHitTestVisible = false
-                        };
-                        System.Windows.Controls.Panel.SetZIndex(tempKnife, 9999);
-                        canvas.Children.Add(tempKnife);
-                    }
-                    tempKnife.Visibility = Visibility.Visible;
-                    parent.CaptureMouse();
-                    e.Handled = true;
-                }
-            };
-            parent.MouseMove += (s, e) => {
-                if (isPanning) {
-                    var pos = e.GetPosition(parent);
-                    if (Math.Abs(pos.X - panStart.X) > 2 || Math.Abs(pos.Y - panStart.Y) > 2) panMoved = true;
-                    translateTransform.X = panStartTX + (pos.X - panStart.X);
-                    translateTransform.Y = panStartTY + (pos.Y - panStart.Y);
-                    e.Handled = true;
-                } else if (selectionBox != null && selectionBox.Visibility == Visibility.Visible) {
-                    var pos = e.GetPosition(canvas);
-                    double x = Math.Min(pos.X, selectionStart.X);
-                    double y = Math.Min(pos.Y, selectionStart.Y);
-                    double w = Math.Abs(pos.X - selectionStart.X);
-                    double h = Math.Abs(pos.Y - selectionStart.Y);
-                    Canvas.SetLeft(selectionBox, x);
-                    Canvas.SetTop(selectionBox, y);
-                    selectionBox.Width = w;
-                    selectionBox.Height = h;
-                    
-                    var currentSelected = new System.Collections.Generic.List<string>();
-                    foreach (UIElement child in canvas.Children) {
-                        var fe = child as FrameworkElement;
-                        if (fe != null && fe.Name != null && fe.Name.StartsWith("Node_")) {
-                            double nx = Canvas.GetLeft(fe);
-                            double ny = Canvas.GetTop(fe);
-                            if (double.IsNaN(nx)) nx = 0;
-                            if (double.IsNaN(ny)) ny = 0;
-                            double nw = fe.ActualWidth;
-                            double nh = fe.ActualHeight;
-                            if (nx < x + w && nx + nw > x && ny < y + h && ny + nh > y) {
-                                currentSelected.Add(fe.Name.Substring(5));
-                            }
+                System.Windows.Media.VisualTreeHelper.HitTest(canvas, null,
+                    new System.Windows.Media.HitTestResultCallback((result) => {
+                        var hitEl = result.VisualHit as FrameworkElement;
+                        if (hitEl != null && hitEl.Name != null && hitEl.Name.Contains("_Path_") && hitEl.Visibility == Visibility.Visible) {
+                            hitEl.Visibility = Visibility.Collapsed;
+                            SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|DeleteConnection|" + 
+                                Convert.ToBase64String(Encoding.UTF8.GetBytes(hitEl.Name)) + "\n");
                         }
-                    }
-                    string newSet = string.Join(",", currentSelected);
-                    if (newSet != lastSelectionSet) {
-                        lastSelectionSet = newSet;
-                        bool isCtrl = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
-                        string evName = isCtrl ? "CtrlSelectionBox" : "SelectionBox";
-                        SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|" + evName + "|" + 
-                            Convert.ToBase64String(Encoding.UTF8.GetBytes(newSet)) + "\n");
-                    }
-                    e.Handled = true;
-                } else if (connectionSourcePort != null && tempConnection != null && tempConnection.Visibility == Visibility.Visible) {
-                    var pos = e.GetPosition(canvas);
-                    double startX = Canvas.GetLeft(connectionSourcePort) + connectionSourcePort.Width / 2;
-                    double startY = Canvas.GetTop(connectionSourcePort) + connectionSourcePort.Height / 2;
-                    if (double.IsNaN(startX)) startX = 0;
-                    if (double.IsNaN(startY)) startY = 0;
-                    double endX = pos.X;
-                    double endY = pos.Y;
-                    
-                    // Allow dragging from out port to in port
-                    double dx = Math.Max(40, Math.Abs(endX - startX) * 0.5);
-                    double c1X = startX + dx;
-                    double c2X = endX - dx;
-                    if (connectionSourcePort.Name.StartsWith("Port_In")) {
-                        c1X = startX - dx;
-                        c2X = endX + dx;
-                    }
-                    
-                    string geom = string.Format(System.Globalization.CultureInfo.InvariantCulture, "M{0},{1} C{2},{3} {4},{5} {6},{7}", startX, startY, c1X, startY, c2X, endY, endX, endY);
-                    try { tempConnection.Data = System.Windows.Media.Geometry.Parse(geom); } catch { }
-                    e.Handled = true;
-                } else if (isKnifing && tempKnife != null && tempKnife.Visibility == Visibility.Visible) {
-                    var pos = e.GetPosition(canvas);
-                    string geom = string.Format(System.Globalization.CultureInfo.InvariantCulture, "M{0},{1} L{2},{3}", knifeStart.X, knifeStart.Y, pos.X, pos.Y);
-                    try { tempKnife.Data = System.Windows.Media.Geometry.Parse(geom); } catch { }
-                    
-                    System.Windows.Media.VisualTreeHelper.HitTest(canvas, null,
-                        new System.Windows.Media.HitTestResultCallback((result) => {
-                            var hitEl = result.VisualHit as FrameworkElement;
-                            if (hitEl != null && hitEl.Name != null && hitEl.Name.Contains("_Path_") && hitEl.Visibility == Visibility.Visible) {
-                                hitEl.Visibility = Visibility.Collapsed;
-                                SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|DeleteConnection|" + 
-                                    Convert.ToBase64String(Encoding.UTF8.GetBytes(hitEl.Name)) + "\n");
-                            }
-                            return System.Windows.Media.HitTestResultBehavior.Continue;
-                        }),
-                        new System.Windows.Media.GeometryHitTestParameters(new System.Windows.Media.LineGeometry(lastKnifePos, pos))
-                    );
-                    lastKnifePos = pos;
-                    e.Handled = true;
-                }
-            };
-            parent.MouseUp += (s, e) => {
-                if (e.ChangedButton == System.Windows.Input.MouseButton.Middle && isPanning) {
-                    isPanning = false;
-                    parent.ReleaseMouseCapture();
-                    parent.Cursor = System.Windows.Input.Cursors.Arrow;
-                    e.Handled = true;
-                }
-            };
-            parent.MouseLeftButtonUp += (s, e) => {
-                if (isPanning) {
-                    isPanning = false;
-                    parent.ReleaseMouseCapture();
-                    parent.Cursor = System.Windows.Input.Cursors.Arrow;
-                    if (!panMoved) {
-                        SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ClearSelection|\n");
-                    }
-                    e.Handled = true;
-                } else if (selectionBox != null && selectionBox.Visibility == Visibility.Visible) {
-                    selectionBox.Visibility = Visibility.Collapsed;
-                    parent.ReleaseMouseCapture();
-                    if (lastSelectionSet == "FORCE_UPDATE") {
-                        SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ClearSelection|\n");
-                    }
-                    lastSelectionSet = "";
-                    e.Handled = true;
-                } else if (connectionSourcePort != null && tempConnection != null && tempConnection.Visibility == Visibility.Visible) {
-                    tempConnection.Visibility = Visibility.Collapsed;
-                    parent.ReleaseMouseCapture();
-                    Point dropPos = e.GetPosition(canvas);
-                    
-                    // Magnetic search for closest port
-                    FrameworkElement closestPort = null;
-                    double minDistance = 2500; // 50^2 for generous port snapping
-                    
-                    // First pass: check if dropped directly inside a Node body
-                    FrameworkElement targetNode = null;
-                    foreach (UIElement child in canvas.Children) {
-                        var fe = child as FrameworkElement;
-                        if (fe != null && fe.Name != null && fe.Name.StartsWith("Node_")) {
-                            double nx = Canvas.GetLeft(fe);
-                            double ny = Canvas.GetTop(fe);
-                            if (double.IsNaN(nx) || double.IsNaN(ny)) continue;
-                            if (dropPos.X >= nx && dropPos.X <= nx + fe.ActualWidth &&
-                                dropPos.Y >= ny && dropPos.Y <= ny + fe.ActualHeight) {
-                                targetNode = fe;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (targetNode != null) {
-                        // Extract node ID and find its complementary port
-                        string nodeId = targetNode.Name.Substring(5);
-                        string expectedPortName = connectionSourcePort.Name.StartsWith("Port_Out") ? "Port_In_" + nodeId : "Port_Out_" + nodeId;
-                        foreach (UIElement child in canvas.Children) {
-                            var fe = child as FrameworkElement;
-                            if (fe != null && fe.Name == expectedPortName) {
-                                closestPort = fe;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Second pass: if no direct node hit, do proximity search for ports
-                    if (closestPort == null) {
-                        foreach (UIElement child in canvas.Children) {
-                            var fe = child as FrameworkElement;
-                            if (fe != null && fe.Name != null && fe.Name.StartsWith("Port_") && fe != connectionSourcePort) {
-                                double px = Canvas.GetLeft(fe) + fe.Width / 2;
-                                double py = Canvas.GetTop(fe) + fe.Height / 2;
-                                if (double.IsNaN(px) || double.IsNaN(py)) continue;
-                                
-                                double distSq = (dropPos.X - px) * (dropPos.X - px) + (dropPos.Y - py) * (dropPos.Y - py);
-                                if (distSq < minDistance) {
-                                    minDistance = distSq;
-                                    closestPort = fe;
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (closestPort != null) {
-                        SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ConnectPorts|" + 
-                            Convert.ToBase64String(Encoding.UTF8.GetBytes(connectionSourcePort.Name + "," + closestPort.Name)) + "\n");
-                    }
-                    connectionSourcePort = null;
-                    e.Handled = true;
-                } else if (isKnifing && tempKnife != null && tempKnife.Visibility == Visibility.Visible) {
-                    tempKnife.Visibility = Visibility.Collapsed;
-                    isKnifing = false;
-                    parent.ReleaseMouseCapture();
-                    e.Handled = true;
-                } else {
-                    // Clicked empty space
+                        return System.Windows.Media.HitTestResultBehavior.Continue;
+                    }),
+                    new System.Windows.Media.GeometryHitTestParameters(new System.Windows.Media.LineGeometry(lastKnifePos, pos))
+                );
+                lastKnifePos = pos;
+                e.Handled = true;
+            }
+        };
+        canvas.MouseUp += (s, e) => {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Middle && isPanning) {
+                isPanning = false;
+                canvas.ReleaseMouseCapture();
+                canvas.Cursor = System.Windows.Input.Cursors.Arrow;
+                e.Handled = true;
+            }
+        };
+        canvas.MouseLeftButtonUp += (s, e) => {
+            if (isPanning) {
+                isPanning = false;
+                canvas.ReleaseMouseCapture();
+                canvas.Cursor = System.Windows.Input.Cursors.Arrow;
+                if (!panMoved) {
                     SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ClearSelection|\n");
                 }
-            };
-        }
+                e.Handled = true;
+            } else if (selectionBox != null && selectionBox.Visibility == Visibility.Visible) {
+                selectionBox.Visibility = Visibility.Collapsed;
+                canvas.ReleaseMouseCapture();
+                if (lastSelectionSet == "FORCE_UPDATE") {
+                    SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ClearSelection|\n");
+                }
+                lastSelectionSet = "";
+                e.Handled = true;
+            } else if (connectionSourcePort != null && tempConnection != null && tempConnection.Visibility == Visibility.Visible) {
+                tempConnection.Visibility = Visibility.Collapsed;
+                canvas.ReleaseMouseCapture();
+                Point dropPos = e.GetPosition(canvas);
+                
+                // Magnetic search for closest port
+                FrameworkElement closestPort = null;
+                double minDistance = 2500; // 50^2 for generous port snapping
+                
+                // First pass: check if dropped directly inside a Node body
+                FrameworkElement targetNode = null;
+                foreach (UIElement child in canvas.Children) {
+                    var fe = child as FrameworkElement;
+                    if (fe != null && fe.Name != null && fe.Name.StartsWith("Node_")) {
+                        double nx = Canvas.GetLeft(fe);
+                        double ny = Canvas.GetTop(fe);
+                        if (double.IsNaN(nx) || double.IsNaN(ny)) continue;
+                        if (dropPos.X >= nx && dropPos.X <= nx + fe.ActualWidth &&
+                            dropPos.Y >= ny && dropPos.Y <= ny + fe.ActualHeight) {
+                            targetNode = fe;
+                            break;
+                        }
+                    }
+                }
+
+                if (targetNode != null) {
+                    // Extract node ID and find its complementary port
+                    string nodeId = targetNode.Name.Substring(5);
+                    string expectedPortName = connectionSourcePort.Name.StartsWith("Port_Out") ? "Port_In_" + nodeId : "Port_Out_" + nodeId;
+                    foreach (UIElement child in canvas.Children) {
+                        var fe = child as FrameworkElement;
+                        if (fe != null && fe.Name == expectedPortName) {
+                            closestPort = fe;
+                            break;
+                        }
+                    }
+                }
+
+                // Second pass: if no direct node hit, do proximity search for ports
+                if (closestPort == null) {
+                    foreach (UIElement child in canvas.Children) {
+                        var fe = child as FrameworkElement;
+                        if (fe != null && fe.Name != null && fe.Name.StartsWith("Port_") && fe != connectionSourcePort) {
+                            double px = Canvas.GetLeft(fe) + fe.Width / 2;
+                            double py = Canvas.GetTop(fe) + fe.Height / 2;
+                            if (double.IsNaN(px) || double.IsNaN(py)) continue;
+                            
+                            double distSq = (dropPos.X - px) * (dropPos.X - px) + (dropPos.Y - py) * (dropPos.Y - py);
+                            if (distSq < minDistance) {
+                                minDistance = distSq;
+                                closestPort = fe;
+                            }
+                        }
+                    }
+                }
+                
+                if (closestPort != null) {
+                    SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ConnectPorts|" + 
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes(connectionSourcePort.Name + "," + closestPort.Name)) + "\n");
+                }
+                connectionSourcePort = null;
+                e.Handled = true;
+            } else if (isKnifing && tempKnife != null && tempKnife.Visibility == Visibility.Visible) {
+                tempKnife.Visibility = Visibility.Collapsed;
+                isKnifing = false;
+                canvas.ReleaseMouseCapture();
+                e.Handled = true;
+            } else {
+                // Clicked empty space
+                SendToAhk("EVENT|" + winId + "|" + canvas.Name + "|ClearSelection|\n");
+            }
+        };
     }
         
     private void ZoomAllCanvas(Canvas canvas) {
@@ -2416,14 +2488,15 @@ public class AhkWpfEngine {
                 double maxX = double.MinValue, maxY = double.MinValue;
                 
                 foreach (UIElement child in canvas.Children) {
-                    if (child is System.Windows.Shapes.Path) continue;
+                    var fe = child as FrameworkElement;
+                    if (fe == null || fe.Name == null || !fe.Name.StartsWith("Node_")) continue;
+                    
                     double left = Canvas.GetLeft(child);
                     double top = Canvas.GetTop(child);
                     if (double.IsNaN(left)) left = 0;
                     if (double.IsNaN(top)) top = 0;
                     
-                    var fe = child as FrameworkElement;
-                    if (fe != null && fe.ActualWidth > 0 && fe.ActualHeight > 0) {
+                    if (fe.ActualWidth > 0 && fe.ActualHeight > 0) {
                         minX = Math.Min(minX, left);
                         minY = Math.Min(minY, top);
                         maxX = Math.Max(maxX, left + fe.ActualWidth);

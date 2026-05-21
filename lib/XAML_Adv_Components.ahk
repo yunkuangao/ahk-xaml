@@ -344,7 +344,7 @@ class XNodeGraph {
 
         this.bdr := parentXAML.Add("Border").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").CornerRadius("8").ClipToBounds("True")
 
-        this.bdr.InjectResources('<DrawingBrush x:Key="GridPattern" Viewport="0,0,100,100" ViewportUnits="Absolute" TileMode="Tile"><DrawingBrush.Drawing><DrawingGroup><GeometryDrawing Geometry="M0,20 L100,20 M0,40 L100,40 M0,60 L100,60 M0,80 L100,80 M20,0 L20,100 M40,0 L40,100 M60,0 L60,100 M80,0 L80,100"><GeometryDrawing.Pen><Pen Brush="{DynamicResource ControlBorder}" Thickness="0.3"/></GeometryDrawing.Pen></GeometryDrawing><GeometryDrawing Geometry="M0,100 L100,100 M100,0 L100,100"><GeometryDrawing.Pen><Pen Brush="{DynamicResource ControlBorder}" Thickness="1.5"/></GeometryDrawing.Pen></GeometryDrawing></DrawingGroup></DrawingBrush.Drawing></DrawingBrush>')
+        this.bdr.InjectResources('<DrawingBrush x:Key="GridPattern" Viewport="0,0,100,100" ViewportUnits="Absolute" TileMode="Tile"><DrawingBrush.Drawing><DrawingGroup><GeometryDrawing Brush="#01000000"><GeometryDrawing.Geometry><RectangleGeometry Rect="0,0,100,100"/></GeometryDrawing.Geometry></GeometryDrawing><GeometryDrawing Geometry="M0,20 L100,20 M0,40 L100,40 M0,60 L100,60 M0,80 L100,80 M20,0 L20,100 M40,0 L40,100 M60,0 L60,100 M80,0 L80,100"><GeometryDrawing.Pen><Pen Brush="{DynamicResource ControlBorder}" Thickness="0.3"/></GeometryDrawing.Pen></GeometryDrawing><GeometryDrawing Geometry="M0,100 L100,100 M100,0 L100,100"><GeometryDrawing.Pen><Pen Brush="{DynamicResource ControlBorder}" Thickness="1.5"/></GeometryDrawing.Pen></GeometryDrawing></DrawingGroup></DrawingBrush.Drawing></DrawingBrush>')
 
         cm := this.bdr.Add("FrameworkElement.ContextMenu").Add("ContextMenu").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).Foreground("{DynamicResource TextMain}")
         cm.Add("MenuItem").Name(this.id "_BtnNewNode").Header("Add Process Node")
@@ -354,7 +354,8 @@ class XNodeGraph {
 
         this.offsetX := 10000
         this.offsetY := 10000
-        this.canvas := this.bdr.Add("Canvas").Name(this.id).Background("{DynamicResource GridPattern}").Width("20000").Height("20000").Margin("-" this.offsetX ",-" this.offsetY ",0,0")
+        this.canvas := this.bdr.Add("Canvas").Name(this.id).Background("Transparent").Width("20000").Height("20000").Margin("-" this.offsetX ",-" this.offsetY ",0,0")
+        this.canvas.Add("Rectangle").Fill("{DynamicResource GridPattern}").Width("20000").Height("20000").IsHitTestVisible("False")
     }
 
     AddNode(id, title, x, y, nodeType := "Process") {
@@ -423,7 +424,7 @@ class XNodeGraph {
             }
         }
 
-        pathEl := this.canvas.Add("Path").Name(pathId).Stroke("#60A0FF").StrokeThickness("2.5").Opacity("0.8").SetProp("Panel.ZIndex", "-1")
+        pathEl := this.canvas.Add("Path").Name(pathId).Stroke("#60A0FF").StrokeThickness("2.5").Opacity("0.8").SetProp("Panel.ZIndex", "5")
         conn := { From: fromId, To: toId, PathId: pathId, PathEl: pathEl, Selected: false }
         this.connections.Push(conn)
         
@@ -526,7 +527,7 @@ class XNodeGraph {
 
     OnNewNode(nodeType, state, ctrl, event) {
         idx := this.nodes.Length + 1
-        newId := "Node" idx
+        newId := this.id "_Node" idx
         headerBg := nodeType == "Input" ? "#2E5A2E" : (nodeType == "Output" ? "#5A2E2E" : (nodeType == "MultiProcess" ? "#8A2BE2" : "#3E3E50"))
         label := nodeType == "Input" ? "Source" : (nodeType == "Output" ? "Sink" : "Transform")
 
@@ -554,10 +555,20 @@ class XNodeGraph {
         ; Build raw XAML string with proper namespace for injection
         xamlStr := '<Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Name="Node_' newId '" Background="{DynamicResource DropdownBg}" BorderBrush="{DynamicResource ControlBorder}" BorderThickness="1" CornerRadius="6" Width="160" Canvas.Left="' x '" Canvas.Top="' y '"><Border.Effect><DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.4" Direction="270" Color="Black"/></Border.Effect><Grid><Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="*"/></Grid.RowDefinitions><Border Grid.Row="0" Background="' headerBg '" CornerRadius="5,5,0,0" Cursor="SizeAll"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="' nodeType ' ' idx '" Foreground="White" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" Margin="10,0"/><TextBlock Grid.Column="1" Text="' nodeType '" Foreground="#DDDDDD" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,0"/></Grid></Border><StackPanel Grid.Row="1" Margin="10,6,10,8"><TextBlock Text="' label '" Foreground="{DynamicResource TextSub}" FontSize="10"/></StackPanel></Grid></Border>'
         this.ui.Update(this.id, "AddXamlItem", xamlStr)
-        if (inPortXAML != "")
-            this.ui.Update(this.id, "AddXamlItem", '<Canvas xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">' inPortXAML '</Canvas>')
-        if (outPortXAML != "")
-            this.ui.Update(this.id, "AddXamlItem", '<Canvas xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">' outPortXAML '</Canvas>')
+        
+        pos := 1
+        while (pos := RegExMatch(inPortXAML, "<Ellipse.*?\/>", &match, pos)) {
+            xml := StrReplace(match[0], "<Ellipse ", "<Ellipse xmlns=`"http://schemas.microsoft.com/winfx/2006/xaml/presentation`" ")
+            this.ui.Update(this.id, "AddXamlItem", xml)
+            pos += match.Len
+        }
+        
+        pos := 1
+        while (pos := RegExMatch(outPortXAML, "<Ellipse.*?\/>", &match, pos)) {
+            xml := StrReplace(match[0], "<Ellipse ", "<Ellipse xmlns=`"http://schemas.microsoft.com/winfx/2006/xaml/presentation`" ")
+            this.ui.Update(this.id, "AddXamlItem", xml)
+            pos += match.Len
+        }
 
         nodeObj := { Id: newId, Title: nodeType " " idx, X: x, Y: y, W: 160, H: 60, Type: nodeType }
         this.nodes.Push(nodeObj)
@@ -722,12 +733,8 @@ class XNodeGraph {
             }
 
             if (InStr(fromPort, "Port_Out") && InStr(toPort, "Port_In")) {
-                ; Extract node IDs (assuming ID follows the last underscore)
-                fromArr := StrSplit(fromPort, "_")
-                fromId := fromArr[fromArr.Length]
-
-                toArr := StrSplit(toPort, "_")
-                toId := toArr[toArr.Length]
+                fromId := RegExReplace(fromPort, "^Port_(Out|In)2?_", "")
+                toId := RegExReplace(toPort, "^Port_(Out|In)2?_", "")
 
                 if (fromId != toId) {
                     this.AddConnection(fromId, toId)
@@ -813,6 +820,12 @@ class XNodeGraph {
                             node.Y := Number(coords[2])
                             ui.Update("Node_" nodeId, "SetPosition", String(node.X) "," String(node.Y))
                             this.UpdateNodePorts(node)
+                            
+                            ; Explicitly re-enable drag and attach events for restored nodes
+                            ui.Update("Node_" nodeId, "EnableDrag", "grid=20")
+                            ui.OnEvent("Node_" nodeId, "DragMove", ObjBindMethod(this, "OnNodeMoved", nodeId))
+                            ui.OnEvent("Node_" nodeId, "SelectNode", ObjBindMethod(this, "OnSelectNode", nodeId))
+                            ui.OnEvent("Node_" nodeId, "CtrlSelectNode", ObjBindMethod(this, "OnCtrlSelectNode", nodeId))
                         }
                     }
                 }
