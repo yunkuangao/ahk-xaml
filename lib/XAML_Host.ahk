@@ -148,6 +148,31 @@ class XAMLHost {
         DllCall("user32\SendMessageW", "Ptr", this.wpfHwnd, "UInt", 0x004A, "Ptr", 0, "Ptr", cds.Ptr)
     }
 
+    BatchUpdate(updatesArray) {
+        if (!this.wpfHwnd)
+            return
+
+        payload := ""
+        for updateObj in updatesArray {
+            if (!updateObj.HasProp("ControlName") || !updateObj.HasProp("PropertyName") || !updateObj.HasProp("Value"))
+                continue
+            
+            payload .= updateObj.ControlName "|" updateObj.PropertyName "|" String(updateObj.Value) "`n"
+        }
+        
+        if (payload != "") {
+            buf := Buffer(StrPut(payload, "UTF-8"))
+            StrPut(payload, buf, "UTF-8")
+
+            cds := Buffer(A_PtrSize * 3)
+            NumPut("Ptr", 0, cds, 0)
+            NumPut("UInt", buf.Size, cds, A_PtrSize)
+            NumPut("Ptr", buf.Ptr, cds, A_PtrSize * 2)
+
+            DllCall("user32\SendMessageW", "Ptr", this.wpfHwnd, "UInt", 0x004A, "Ptr", 0, "Ptr", cds.Ptr)
+        }
+    }
+
     static Prewarm(exePath := "") {
         if XAMLHost.daemonHwnd
             return
@@ -227,14 +252,21 @@ class XAMLHost {
                 colNum := Integer(match[2])
             }
 
-            hasRetry := (XAML_DIAGNOSTICS_ENABLED && lineNum > 0)
-            action := XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, err, hasRetry)
-            if (action == "skip_property") {
-                this.SkipPropertyAndRetry(err, lineNum, colNum)
-            } else if (action == "skip_element") {
-                this.SkipElementAndRetry(err, lineNum, colNum)
-            } else {
-                ExitApp()
+            hasRetry := (IsSet(XAML_DIAGNOSTICS_ENABLED) && XAML_DIAGNOSTICS_ENABLED && lineNum > 0)
+            
+            while (true) {
+                action := XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, err, hasRetry)
+                if (action == "skip_property") {
+                    if (this.SkipPropertyAndRetry(err, lineNum, colNum)) {
+                        break
+                    }
+                } else if (action == "skip_element") {
+                    if (this.SkipElementAndRetry(err, lineNum, colNum)) {
+                        break
+                    }
+                } else {
+                    ExitApp()
+                }
             }
         }
     }
@@ -770,14 +802,21 @@ class XAMLHost {
                 colNum := Integer(match[2])
             }
 
-            hasRetry := (XAML_DIAGNOSTICS_ENABLED && lineNum > 0)
-            action := XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, errorMsg, hasRetry)
-            if (action == "skip_property") {
-                instance.SkipPropertyAndRetry(errorMsg, lineNum, colNum)
-            } else if (action == "skip_element") {
-                instance.SkipElementAndRetry(errorMsg, lineNum, colNum)
-            } else {
-                ExitApp()
+            hasRetry := (IsSet(XAML_DIAGNOSTICS_ENABLED) && XAML_DIAGNOSTICS_ENABLED && lineNum > 0)
+            
+            while (true) {
+                action := XAMLHost.ShowErrorDialog("Engine Crash", header, snippet, errorMsg, hasRetry)
+                if (action == "skip_property") {
+                    if (instance.SkipPropertyAndRetry(errorMsg, lineNum, colNum)) {
+                        break
+                    }
+                } else if (action == "skip_element") {
+                    if (instance.SkipElementAndRetry(errorMsg, lineNum, colNum)) {
+                        break
+                    }
+                } else {
+                    ExitApp()
+                }
             }
             return 1
         }
@@ -990,25 +1029,25 @@ class XAMLHost {
     SkipPropertyAndRetry(errorMsg, lineNum, colNum) {
         if (lineNum <= 0 || colNum <= 0) {
             MsgBox("Could not locate the exact error position to skip the property.", "Skip Failed", "Iconx")
-            ExitApp()
+            return false
         }
         
         charIndex := this.GetCharIndex(this.xaml, lineNum, colNum)
         if (charIndex <= 0) {
             MsgBox("Error position out of bounds.", "Skip Failed", "Iconx")
-            ExitApp()
+            return false
         }
         
         elem := this.FindElementBoundaries(this.xaml, charIndex)
         if (!elem) {
             MsgBox("Could not find the element at the error line.", "Skip Failed", "Iconx")
-            ExitApp()
+            return false
         }
         
         openingTagEnd := InStr(this.xaml, ">", , elem.start)
         if (!openingTagEnd || openingTagEnd > elem.end) {
             MsgBox("Malformed element opening tag.", "Skip Failed", "Iconx")
-            ExitApp()
+            return false
         }
         openingTag := SubStr(this.xaml, elem.start, openingTagEnd - elem.start + 1)
         
@@ -1029,7 +1068,7 @@ class XAMLHost {
         
         if (!removed) {
             MsgBox("Could not automatically identify the property to skip from error: " errorMsg, "Skip Failed", "Iconx")
-            ExitApp()
+            return false
         }
         
         this.xaml := SubStr(this.xaml, 1, elem.start - 1) . openingTag . SubStr(this.xaml, openingTagEnd + 1)
@@ -1038,24 +1077,25 @@ class XAMLHost {
         SetTimer(() => ToolTip(), -3000)
         
         SetTimer(() => this.Show(), -10)
+        return true
     }
 
     SkipElementAndRetry(errorMsg, lineNum, colNum) {
         if (lineNum <= 0 || colNum <= 0) {
             MsgBox("Could not locate the exact error position to skip the element.", "Skip Failed", "Iconx")
-            ExitApp()
+            return false
         }
         
         charIndex := this.GetCharIndex(this.xaml, lineNum, colNum)
         if (charIndex <= 0) {
             MsgBox("Error position out of bounds.", "Skip Failed", "Iconx")
-            ExitApp()
+            return false
         }
         
         elem := this.FindElementBoundaries(this.xaml, charIndex)
         if (!elem) {
             MsgBox("Could not find the element to skip at the error line.", "Skip Failed", "Iconx")
-            ExitApp()
+            return false
         }
         
         this.xaml := SubStr(this.xaml, 1, elem.start - 1) . SubStr(this.xaml, elem.end + 1)
@@ -1064,6 +1104,7 @@ class XAMLHost {
         SetTimer(() => ToolTip(), -3000)
         
         SetTimer(() => this.Show(), -10)
+        return true
     }
 
     static RestoreWebView2Dlls() {

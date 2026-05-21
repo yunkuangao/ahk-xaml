@@ -67,6 +67,44 @@ class AXML_State {
         return value
     }
 
+    Batch(updatesObj) {
+        pendingUIUpdates := []
+        
+        for k, v in updatesObj.OwnProps() {
+            if (this.HasOwnProp("_data") && this._data.Has(k) && this._data[k] == v)
+                continue
+                
+            if (this.HasOwnProp("_data"))
+                this._data[k] := v
+                
+            if (this.HasOwnProp("_ui") && this._ui && this.HasOwnProp("_bindings") && this._bindings.Has(k)) {
+                for bindObj in this._bindings[k] {
+                    pendingUIUpdates.Push({ ControlName: bindObj.ControlName, PropertyName: bindObj.PropertyName, Value: String(v) })
+                }
+            }
+            
+            if (this.HasOwnProp("_depMap") && this._depMap.Has(k)) {
+                for compName in this._depMap[k] {
+                    compObj := this._computed[compName]
+                    newVal := compObj.Fn.Call(this)
+                    if (this._data.Has(compName) && this._data[compName] == newVal)
+                        continue
+                    this._data[compName] := newVal
+                    
+                    if (this.HasOwnProp("_ui") && this._ui && this.HasOwnProp("_bindings") && this._bindings.Has(compName)) {
+                        for bindObj in this._bindings[compName] {
+                            pendingUIUpdates.Push({ ControlName: bindObj.ControlName, PropertyName: bindObj.PropertyName, Value: String(newVal) })
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (pendingUIUpdates.Length > 0 && this.HasOwnProp("_ui") && this._ui && this._ui.HasMethod("BatchUpdate")) {
+            this._ui.BatchUpdate(pendingUIUpdates)
+        }
+    }
+
     AddComputed(name, deps, computeFn) {
         if !this.HasOwnProp("_computed") {
             this.DefineProp("_computed", {Value: Map()})
@@ -109,6 +147,16 @@ class AXML {
     static ParseString(content, generatorParent, stateObj := "", sourceFile := "Inline AXML") {
         lines := StrSplit(content, "`n", "`r")
         astResult := this.BuildAST(lines, sourceFile)
+        
+        if (IsSet(XAML_AXML_DEBUG_MODE) && XAML_AXML_DEBUG_MODE) {
+            try {
+                dumpStr := "AST Nodes:`n" this.DumpNode(astResult.Nodes) "`n`nTemplates:`n" this.DumpNode(astResult.Templates)
+                FileDelete(A_Temp "\AXML_AST_Debug.txt")
+                FileAppend(dumpStr, A_Temp "\AXML_AST_Debug.txt")
+                Run("notepad.exe " A_Temp "\AXML_AST_Debug.txt")
+            }
+        }
+        
         bindings := []
         events := []
         this.RenderAST(astResult.Nodes, astResult.Templates, generatorParent, stateObj, bindings, events, sourceFile)
@@ -179,6 +227,43 @@ class AXML {
     ; Internal Helpers
     ; --------------------------------------------------------------------------
     
+    static DumpNode(node, indent := 0) {
+        if (Type(node) == "Array") {
+            out := ""
+            for child in node
+                out .= this.DumpNode(child, indent)
+            return out
+        }
+        if (Type(node) == "Map") {
+            out := ""
+            for k, v in node
+                out .= this.DumpNode(v, indent)
+            return out
+        }
+        
+        pad := ""
+        Loop indent
+            pad .= "  "
+            
+        out := pad "[" ((node.HasProp("IsLoop") && node.IsLoop) ? "@For " node.LoopStart ".." node.LoopEnd " as " node.LoopVar : node.Type) "]"
+        if (node.HasProp("Name") && node.Name != "")
+            out .= " Name: " node.Name
+        if (node.HasProp("SourceLine"))
+            out .= " Line: " node.SourceLine
+        out .= "`n"
+        
+        for k, v in node.Properties
+            out .= pad "  - Prop: " k " = " v "`n"
+            
+        for k, v in node.Events
+            out .= pad "  - Event: " k " = " v "`n"
+            
+        for child in node.Children
+            out .= this.DumpNode(child, indent + 1)
+            
+        return out
+    }
+    
     static BuildAST(lines, sourceFile := "Inline AXML") {
         rootNode := { Children: [] }
         stack := [{ Indent: -1, Node: rootNode }]
@@ -193,13 +278,27 @@ class AXML {
             
             cleanLine := Trim(line)
             
+            ; Determine if it's a Loop definition: @For [start]..[end] as [var]:
+            if RegExMatch(cleanLine, "^@For\s+([0-9]+)\.\.([0-9]+)\s+as\s+([a-zA-Z0-9_]+):$", &match) {
+                newNode := { IsTemplate: false, IsLoop: true, LoopStart: Integer(match[1]), LoopEnd: Integer(match[2]), LoopVar: match[3], Type: "@For", Name: "", Properties: Map(), Events: Map(), Children: [], SourceLine: index }
+                
+                while (stack.Length > 0 && stack[stack.Length].Indent >= indent)
+                    stack.Pop()
+                
+                parent := stack[stack.Length].Node
+                parent.Children.Push(newNode)
+                
+                stack.Push({ Indent: indent, Node: newNode })
+                continue
+            }
+            
             ; Determine if it's a Node definition: [@Template] Type (Name):
-            if RegExMatch(cleanLine, "^(@Template\s+)?([a-zA-Z0-9_\.]+)(?:\s*\(([^)]+)\))?:$", &match) {
+            else if RegExMatch(cleanLine, "^(@Template\s+)?([a-zA-Z0-9_\.]+)(?:\s*\(([^)]+)\))?:$", &match) {
                 isTemplate := (Trim(match[1]) == "@Template")
                 typeName := match[2]
                 nodeName := match[3]
                 
-                newNode := { IsTemplate: isTemplate, Type: typeName, Name: nodeName, Properties: Map(), Events: Map(), Children: [], SourceLine: index }
+                newNode := { IsTemplate: isTemplate, IsLoop: false, Type: typeName, Name: nodeName, Properties: Map(), Events: Map(), Children: [], SourceLine: index }
                 
                 while (stack.Length > 0 && stack[stack.Length].Indent >= indent)
                     stack.Pop()
@@ -260,7 +359,23 @@ class AXML {
     }
 
     static CloneNode(node, propOverrides) {
-        cloned := { IsTemplate: false, Type: node.Type, Name: node.Name, Properties: Map(), Events: Map(), Children: [] }
+        cloned := { IsTemplate: false, IsLoop: (node.HasProp("IsLoop") && node.IsLoop), Type: node.Type, Name: "", Properties: Map(), Events: Map(), Children: [] }
+        
+        if (cloned.IsLoop) {
+            cloned.LoopStart := node.LoopStart
+            cloned.LoopEnd := node.LoopEnd
+            cloned.LoopVar := node.LoopVar
+        }
+        if (node.HasProp("SourceLine"))
+            cloned.SourceLine := node.SourceLine
+            
+        if (node.Name != "") {
+            newName := node.Name
+            for overrideKey, overrideVal in propOverrides {
+                newName := StrReplace(newName, "{{" overrideKey "}}", overrideVal)
+            }
+            cloned.Name := newName
+        }
         
         ; Replace variables in properties like {{Icon}}
         for k, v in node.Properties {
@@ -284,6 +399,19 @@ class AXML {
 
     static RenderAST(astNodes, templates, parentGenerator, stateObj, bindings, events, sourceFile := "Inline AXML") {
         for node in astNodes {
+            ; Check if this node is an @For loop
+            if (node.HasProp("IsLoop") && node.IsLoop) {
+                loopCount := node.LoopEnd - node.LoopStart + 1
+                Loop loopCount {
+                    currentIndex := node.LoopStart + A_Index - 1
+                    for child in node.Children {
+                        cloned := this.CloneNode(child, Map(node.LoopVar, String(currentIndex)))
+                        this.RenderAST([cloned], templates, parentGenerator, stateObj, bindings, events, sourceFile)
+                    }
+                }
+                continue
+            }
+            
             ; Check if this node is invoking a template
             if (templates.Has(node.Type)) {
                 templateDef := templates[node.Type]
@@ -313,7 +441,8 @@ class AXML {
                     stateKey := SubStr(propVal, 2)
                     
                     if (node.Name == "") {
-                        node.Name := "AXML_" node.Type "_" A_TickCount "_" A_Index
+                        AXML._idCounter := (AXML.HasOwnProp("_idCounter") ? AXML._idCounter + 1 : 1)
+                        node.Name := "AXML_" node.Type "_" A_TickCount "_" AXML._idCounter
                         el.SetProp("x:Name", node.Name)
                     }
                     
@@ -344,7 +473,8 @@ class AXML {
             
             for evtName, fnName in node.Events {
                 if (node.Name == "") {
-                    node.Name := "AXML_" node.Type "_" A_TickCount "_" A_Index
+                    AXML._idCounter := (AXML.HasOwnProp("_idCounter") ? AXML._idCounter + 1 : 1)
+                    node.Name := "AXML_" node.Type "_" A_TickCount "_" AXML._idCounter
                     el.SetProp("x:Name", node.Name)
                 }
                 realEvtName := SubStr(evtName, 3) ; Strip "On"

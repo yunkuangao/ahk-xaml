@@ -1415,6 +1415,12 @@ public class AhkWpfEngine {
     }
 
     private void ProcessMessage(IntPtr hwnd, string text) {
+        foreach (string line in text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)) {
+            ProcessSingleMessage(hwnd, line);
+        }
+    }
+
+    private void ProcessSingleMessage(IntPtr hwnd, string text) {
         string[] parts = text.Split(new[] { '|' }, 3);
         if (parts.Length < 3) return;
         if (parts[0] == "Window" && parts[1] == "DWM") {
