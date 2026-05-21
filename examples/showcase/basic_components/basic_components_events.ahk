@@ -191,7 +191,8 @@ ExecuteProcess(state, ctrl, event) {
 
     ui.Update("LogList", "ClearItems", "")
     ui.Update("LogList", "AddItem", "Authenticating " state["TxtUser"] " on " state["ComboRegion"])
-    ui.Update("LogList", "AddItem", "Proxy Active: " state["TglProxy"])
+    proxyActive := state.Has("TglProxy") ? state["TglProxy"] : "False"
+    ui.Update("LogList", "AddItem", "Proxy Active: " proxyActive)
 
     Loop 20 {
         ui.Update("SldPower", "Value", String(A_Index * 5))

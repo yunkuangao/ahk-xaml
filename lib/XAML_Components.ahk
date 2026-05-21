@@ -1686,7 +1686,9 @@ class DataGridEx {
         ; --- Table ---
         tableBdr := grid.Add("Border").Grid_Row(1).Margin("0,0,15,0").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Background("{DynamicResource ControlBg}").ClipToBounds("True")
 
-        tableGrid := tableBdr.Add("Grid")
+        tableSV := tableBdr.Add("ScrollViewer").Name(this.id "_TableSV").HorizontalScrollBarVisibility("Auto").VerticalScrollBarVisibility("Disabled")
+
+        tableGrid := tableSV.Add("Grid").MinWidth("{Binding ElementName=" this.id "_TableSV, Path=ViewportWidth}")
         tableGrid.Rows("30", "*")
         tableGrid.IsSharedSizeScope("True")
 
@@ -1696,30 +1698,29 @@ class DataGridEx {
         for i, col in this.columns {
             w := this._GetColWidth(col, i)
             hColDefs.Add("ColumnDefinition").Name(this.id "_HeaderCol_" i).Width(w)
-            if (i < this.columns.Length)
-                hColDefs.Add("ColumnDefinition").Name(this.id "_HeaderSplit_" i).Width(w == "0" ? "0" : "Auto")
+            hColDefs.Add("ColumnDefinition").Name(this.id "_HeaderSplit_" i).Width(w == "0" ? "0" : "Auto")
         }
+        ; Small buffer to allow resizing last column without massive empty scroll space
+        hColDefs.Add("ColumnDefinition").Name(this.id "_HeaderDummy").Width("30")
 
         ; Dummy Grid to proxy explicit Widths into SharedSizeGroups (fixes GridSplitter bug)
         dummyGrid := tableGrid.Add("Grid").Height(0).IsHitTestVisible("False").Grid_Row(0)
         dColDefs := dummyGrid.Add("Grid.ColumnDefinitions")
         for i, col in this.columns {
             dColDefs.Add("ColumnDefinition").Width("{Binding ElementName=" this.id "_HeaderCol_" i ", Path=Width}").SharedSizeGroup("TableCol_" i)
-            if (i < this.columns.Length)
-                dColDefs.Add("ColumnDefinition").Width("{Binding ElementName=" this.id "_HeaderSplit_" i ", Path=Width}").SharedSizeGroup("TableSplit_" i)
+            dColDefs.Add("ColumnDefinition").Width("{Binding ElementName=" this.id "_HeaderSplit_" i ", Path=Width}").SharedSizeGroup("TableSplit_" i)
         }
+        dColDefs.Add("ColumnDefinition").Width("{Binding ElementName=" this.id "_HeaderDummy, Path=Width}").SharedSizeGroup("TableDummy")
 
         for i, col in this.columns {
             colIdx := (i - 1) * 2
             headerGrid.Add("Button").Name(this.id "_Table_Header_" StrReplace(col, " ", "")).Content(col).Grid_Column(colIdx).Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("0").FontSize(11).FontWeight("Bold").HorizontalContentAlignment("Left").Padding("10,0").Cursor("Hand")
-            if (i < this.columns.Length) {
-                headerGrid.Add("Border").Grid_Column(colIdx + 1).Width(1).HorizontalAlignment("Center").Background("{DynamicResource ControlBorder}").IsHitTestVisible("False")
-                headerGrid.Add("GridSplitter").Name(this.id "_Table_Splitter_" i).Grid_Column(colIdx + 1).Width(7).HorizontalAlignment("Center").VerticalAlignment("Stretch").Background("Transparent").Cursor("SizeWE").ResizeBehavior("PreviousAndNext")
-            }
+            headerGrid.Add("Border").Grid_Column(colIdx + 1).Width(1).HorizontalAlignment("Center").Background("{DynamicResource ControlBorder}").IsHitTestVisible("False")
+            headerGrid.Add("GridSplitter").Name(this.id "_Table_Splitter_" i).Grid_Column(colIdx + 1).Width(7).HorizontalAlignment("Center").VerticalAlignment("Stretch").Background("Transparent").Cursor("SizeWE").ResizeBehavior("PreviousAndNext").ToolTip("Drag to resize, double-click to auto-fit")
         }
 
         ; Table ListBox
-        lb := tableGrid.Add("ListBox").Name(this.id "_Table_List").Grid_Row(1).Background("Transparent").BorderThickness("0").ScrollViewer_HorizontalScrollBarVisibility("Auto").VirtualizingPanel_IsVirtualizing("False").HorizontalContentAlignment("Stretch")
+        lb := tableGrid.Add("ListBox").Name(this.id "_Table_List").Grid_Row(1).Background("Transparent").BorderThickness("0").ScrollViewer_HorizontalScrollBarVisibility("Disabled").VirtualizingPanel_IsVirtualizing("False").HorizontalContentAlignment("Stretch")
         lb.InjectResources('<Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="BorderThickness" Value="0"/></Style>')
 
         ; --- Pagination ---
@@ -1740,10 +1741,8 @@ class DataGridEx {
         ; Header sort buttons & splitters
         for i, col in this.columns {
             uiHost.OnEvent(this.id "_Table_Header_" StrReplace(col, " ", ""), "Click", ((c) => (state, ctrl, ev) => this.Sort(state, c))(col))
-            if (i < this.columns.Length) {
-                uiHost.Track(this.id "_Table_Splitter_" i)
-                uiHost.OnEvent(this.id "_Table_Splitter_" i, "MouseDoubleClick", (state, ctrl, ev) => this.OnSplitterDoubleClick(state, ctrl))
-            }
+            uiHost.Track(this.id "_Table_Splitter_" i)
+            uiHost.OnEvent(this.id "_Table_Splitter_" i, "MouseDoubleClick", (state, ctrl, ev) => this.OnSplitterDoubleClick(state, ctrl))
         }
 
         ; Search
@@ -1875,8 +1874,7 @@ class DataGridEx {
         newWidth := Round(maxLen * 7.5 + 30)
 
         this.ui.Update(this.id "_HeaderCol_" colIndex, "Width", String(newWidth))
-        if (colIndex < this.columns.Length)
-            this.ui.Update(this.id "_HeaderSplit_" colIndex, "Width", "Auto")
+        this.ui.Update(this.id "_HeaderSplit_" colIndex, "Width", "Auto")
 
         this.columnWidths[colName] := String(newWidth)
     }
@@ -1988,10 +1986,9 @@ class DataGridEx {
                 w := this._GetColWidth(col, i)
                 ; Use Width="0" so the row content does not stretch the SharedSizeGroup
                 rColDefs.Add("ColumnDefinition").Width("0").SharedSizeGroup("TableCol_" i)
-
-                if (i < this.columns.Length)
-                    rColDefs.Add("ColumnDefinition").Width(w == "0" ? "0" : "Auto").SharedSizeGroup("TableSplit_" i)
+                rColDefs.Add("ColumnDefinition").Width(w == "0" ? "0" : "Auto").SharedSizeGroup("TableSplit_" i)
             }
+            rColDefs.Add("ColumnDefinition").Width("Auto").SharedSizeGroup("TableDummy")
 
             isCompact := (this.density == "compact")
             fSize := isCompact ? 11 : 12

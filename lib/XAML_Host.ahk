@@ -504,10 +504,11 @@ class XAMLHost {
         embeddedRes := ""
         bamlPath := libDir "\xaml.components.baml"
         xamlPath := libDir "\xaml.components.xaml"
-        if FileExist(bamlPath)
+        if FileExist(bamlPath) {
             embeddedRes .= ' /resource:"' bamlPath '"'
-        if FileExist(xamlPath)
+        } else if FileExist(xamlPath) {
             embeddedRes .= ' /resource:"' xamlPath '"'
+        }
 
         for _, res in extraResources {
             if FileExist(res)

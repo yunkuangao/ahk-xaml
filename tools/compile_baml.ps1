@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory=$true)]
     [string]$InputXaml,
     
@@ -221,19 +221,21 @@ try {
     # Run MSBuild
     # ========================================================================
 
-    $msbuildArgs = @("/t:Build", "/p:Configuration=Release", "/v:normal", $csprojPath)
+    $msbuildArgsStr = "/t:Build /p:Configuration=Release /v:normal `"$csprojPath`""
     
     Write-Log "Compiling XAML to BAML..."
     
     $stdoutPath = Join-Path $buildDir "stdout.txt"
     $stderrPath = Join-Path $buildDir "stderr.txt"
-    $process = Start-Process -FilePath $msbuild -ArgumentList $msbuildArgs -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+    
+    cmd.exe /c "`"$msbuild`" $msbuildArgsStr > `"$stdoutPath`" 2> `"$stderrPath`""
+    $exitCode = $LASTEXITCODE
     
     $msbuildStdout = Get-Content $stdoutPath -Raw -ErrorAction SilentlyContinue
     $msbuildStderr = Get-Content $stderrPath -Raw -ErrorAction SilentlyContinue
 
-    if ($process.ExitCode -ne 0) {
-        Write-LogError "MSBuild failed (exit code $($process.ExitCode))"
+    if ($exitCode -ne 0) {
+        Write-LogError "MSBuild failed (exit code $($exitCode))"
         Write-Log ""
         Write-Log "=== MSBuild Output ==="
         
@@ -337,7 +339,7 @@ finally {
     # Always flush the log
     Flush-Log
     # Only clean up build directory on SUCCESS
-    if ($process -and $process.ExitCode -eq 0) {
+    if ($null -ne $exitCode -and $exitCode -eq 0) {
         Remove-Item -Path $buildDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
