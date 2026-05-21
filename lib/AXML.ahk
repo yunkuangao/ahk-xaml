@@ -102,15 +102,16 @@ class AXML {
     
     static ParseFile(filePath, generatorParent, stateObj := "") {
         content := FileRead(filePath, "UTF-8")
-        return this.ParseString(content, generatorParent, stateObj)
+        SplitPath(filePath, &outFileName)
+        return this.ParseString(content, generatorParent, stateObj, outFileName)
     }
 
-    static ParseString(content, generatorParent, stateObj := "") {
+    static ParseString(content, generatorParent, stateObj := "", sourceFile := "Inline AXML") {
         lines := StrSplit(content, "`n", "`r")
-        astResult := this.BuildAST(lines)
+        astResult := this.BuildAST(lines, sourceFile)
         bindings := []
         events := []
-        this.RenderAST(astResult.Nodes, astResult.Templates, generatorParent, stateObj, bindings, events)
+        this.RenderAST(astResult.Nodes, astResult.Templates, generatorParent, stateObj, bindings, events, sourceFile)
         
         return { Bindings: bindings, Events: events }
     }
@@ -178,16 +179,16 @@ class AXML {
     ; Internal Helpers
     ; --------------------------------------------------------------------------
     
-    static BuildAST(lines) {
+    static BuildAST(lines, sourceFile := "Inline AXML") {
         rootNode := { Children: [] }
         stack := [{ Indent: -1, Node: rootNode }]
         
         for index, line in lines {
-            if (Trim(line) == "" || SubStr(Trim(line), 1, 1) == "#")
+            if (Trim(line) == "" || SubStr(Trim(line), 1, 1) == "#" || SubStr(Trim(line), 1, 2) == "//" || SubStr(Trim(line), 1, 2) == "/*")
                 continue
             
             indent := 0
-            while (SubStr(line, indent + 1, 1) == " ")
+            while (SubStr(line, indent + 1, 1) == " " || SubStr(line, indent + 1, 1) == "`t")
                 indent++
             
             cleanLine := Trim(line)
@@ -198,7 +199,7 @@ class AXML {
                 typeName := match[2]
                 nodeName := match[3]
                 
-                newNode := { IsTemplate: isTemplate, Type: typeName, Name: nodeName, Properties: Map(), Events: Map(), Children: [] }
+                newNode := { IsTemplate: isTemplate, Type: typeName, Name: nodeName, Properties: Map(), Events: Map(), Children: [], SourceLine: index }
                 
                 while (stack.Length > 0 && stack[stack.Length].Indent >= indent)
                     stack.Pop()
@@ -227,6 +228,20 @@ class AXML {
                     currentNode.Events[propName] := propValue
                 } else {
                     currentNode.Properties[propName] := propValue
+                }
+            } else {
+                if (IsSet(XAMLHost)) {
+                    errDetails := "Invalid AXML Syntax on line " index ":`n" cleanLine "`n`nA valid line must either be a Node definition (e.g. 'Button:') or a Property (e.g. 'Content: `"Click Me`"')."
+                    hasRetry := (IsSet(XAML_DIAGNOSTICS_ENABLED) && XAML_DIAGNOSTICS_ENABLED)
+                    action := XAMLHost.ShowErrorDialog("AXML Compile Error", "AXML Parsing Error in " sourceFile "!", index "|  " cleanLine, errDetails, hasRetry)
+                    if (action == "skip_element" || action == "skip_property") {
+                        continue
+                    } else {
+                        ExitApp()
+                    }
+                } else {
+                    MsgBox("AXML Parsing Error in " sourceFile " at line " index ":`n" cleanLine, "AXML Error", "Iconx")
+                    ExitApp()
                 }
             }
         }
@@ -267,31 +282,29 @@ class AXML {
         return cloned
     }
 
-    static RenderAST(astNodes, templates, parentGenerator, stateObj, bindings, events) {
+    static RenderAST(astNodes, templates, parentGenerator, stateObj, bindings, events, sourceFile := "Inline AXML") {
         for node in astNodes {
             ; Check if this node is invoking a template
             if (templates.Has(node.Type)) {
                 templateDef := templates[node.Type]
                 
-                ; Clone the template's first child (the root of the template definition)
-                ; Wait, a template is defined like:
-                ; @Template SettingCard:
-                ;   Border:
-                ;     ...
-                ; So the template's Children[1] is the actual root element.
                 if (templateDef.Children.Length > 0) {
                     instantiatedNode := this.CloneNode(templateDef.Children[1], node.Properties)
                     if (node.Name != "")
                         instantiatedNode.Name := node.Name
                         
                     ; Render the cloned node instead
-                    this.RenderAST([instantiatedNode], templates, parentGenerator, stateObj, bindings, events)
+                    this.RenderAST([instantiatedNode], templates, parentGenerator, stateObj, bindings, events, sourceFile)
                 }
                 continue
             }
             
-            el := ""
             el := parentGenerator.Add(node.Type)
+            if (node.HasProp("SourceLine") && (!IsSet(XAML_ENABLE_TRACING) || XAML_ENABLE_TRACING)) {
+                el._AhkFile := sourceFile
+                el._AhkLine := node.SourceLine
+            }
+            
             if (node.Name != "")
                 el.SetProp("x:Name", node.Name)
                 
@@ -339,7 +352,7 @@ class AXML {
             }
             
             if (node.Children.Length > 0) {
-                this.RenderAST(node.Children, templates, el, stateObj, bindings, events)
+                this.RenderAST(node.Children, templates, el, stateObj, bindings, events, sourceFile)
             }
         }
     }
