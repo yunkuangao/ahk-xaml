@@ -2170,7 +2170,7 @@ public class AhkWpfEngine {
         var parent = canvas.Parent as FrameworkElement;
 
         canvas.PreviewMouseWheel += (s, e) => {
-            System.IO.File.AppendAllText("ahk_pan_debug.log", "PreviewMouseWheel fired! Delta: " + e.Delta + "\n");
+            //System.IO.File.AppendAllText("ahk_pan_debug.log", "PreviewMouseWheel fired! Delta: " + e.Delta + "\n");
             double zoom = e.Delta > 0 ? 1.1 : 0.9;
             double scaleX = scaleTransform.ScaleX;
             double newScale = scaleX * zoom;
@@ -2199,7 +2199,7 @@ public class AhkWpfEngine {
         
         canvas.PreviewMouseDown += (s, e) => {
             if (e.ChangedButton == System.Windows.Input.MouseButton.Middle) {
-                System.IO.File.AppendAllText("ahk_pan_debug.log", "Middle PreviewMouseDown fired! Starting pan.\n");
+                //System.IO.File.AppendAllText("ahk_pan_debug.log", "Middle PreviewMouseDown fired! Starting pan.\n");
                 isPanning = true;
                 panMoved = false;
                 panStart = e.GetPosition(parent != null ? parent : canvas);
@@ -2243,7 +2243,7 @@ public class AhkWpfEngine {
             
             string mode = "Pan";
             if (canvasModes.ContainsKey(canvas.Name)) mode = canvasModes[canvas.Name];
-            System.IO.File.AppendAllText("ahk_pan_debug.log", "MouseLeftButtonDown fired! Mode: " + mode + "\n");
+            //System.IO.File.AppendAllText("ahk_pan_debug.log", "MouseLeftButtonDown fired! Mode: " + mode + "\n");
             
             if (mode == "Pan") {
                 isPanning = true;
@@ -2299,7 +2299,7 @@ public class AhkWpfEngine {
                 if (Math.Abs(pos.X - panStart.X) > 2 || Math.Abs(pos.Y - panStart.Y) > 2) panMoved = true;
                 translateTransform.X = panStartTX + (pos.X - panStart.X);
                 translateTransform.Y = panStartTY + (pos.Y - panStart.Y);
-                System.IO.File.AppendAllText("ahk_pan_debug.log", "Canvas Moved! New TX: " + translateTransform.X + " TY: " + translateTransform.Y + " parent: " + (parent != null ? parent.Name : "null") + "\n");
+                //System.IO.File.AppendAllText("ahk_pan_debug.log", "Canvas Moved! New TX: " + translateTransform.X + " TY: " + translateTransform.Y + " parent: " + (parent != null ? parent.Name : "null") + "\n");
                 e.Handled = true;
             } else if (selectionBox != null && selectionBox.Visibility == Visibility.Visible) {
                 var pos = e.GetPosition(canvas);

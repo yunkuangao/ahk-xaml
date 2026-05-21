@@ -1559,6 +1559,8 @@ class DataGridEx {
         this.filterColumn := opts.HasProp("FilterColumn") ? opts.FilterColumn : ""
         this.filterValues := opts.HasProp("FilterValues") ? opts.FilterValues : []
         this.filterStates := Map()
+        this.showDensity := opts.HasProp("ShowDensity") ? opts.ShowDensity : true
+        this.density := "comfy"
 
         this.hiddenColumns := Map()
         if (opts.HasProp("HiddenColumns")) {
@@ -1631,6 +1633,8 @@ class DataGridEx {
         if (this.showFilters)
             toolCols .= "Auto,"
         toolCols .= "Auto," ; Columns toggle
+        if (this.showDensity)
+            toolCols .= "Auto," ; Density toggle
         if (this.showRowCount)
             toolCols .= "Auto,"
         toolCols := RTrim(toolCols, ",")
@@ -1668,6 +1672,11 @@ class DataGridEx {
             colPop.Add("CheckBox").Content(col).Name(this.id "_ToggleCol_" StrReplace(col, " ", "")).IsChecked(isChecked).Margin("0,0,0,5")
         }
         tci++
+
+        if (this.showDensity) {
+            toolbar.Add("Button").Name(this.id "_BtnDensity").Content(this.density == "comfy" ? "Comfy" : "Compact").Grid_Column(tci).Width(80).Height(30).VerticalAlignment("Top").Margin("0,0,10,0").Use("IconBtn").Cursor("Hand")
+            tci++
+        }
 
         if (this.showRowCount) {
             initEnd := Min(this.pageSize, this.data.Length)
@@ -1710,7 +1719,8 @@ class DataGridEx {
         }
 
         ; Table ListBox
-        tableGrid.Add("ListBox").Name(this.id "_Table_List").Grid_Row(1).Background("Transparent").BorderThickness("0").ScrollViewer_HorizontalScrollBarVisibility("Auto").VirtualizingPanel_IsVirtualizing("False").HorizontalContentAlignment("Stretch")
+        lb := tableGrid.Add("ListBox").Name(this.id "_Table_List").Grid_Row(1).Background("Transparent").BorderThickness("0").ScrollViewer_HorizontalScrollBarVisibility("Auto").VirtualizingPanel_IsVirtualizing("False").HorizontalContentAlignment("Stretch")
+        lb.InjectResources('<Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="BorderThickness" Value="0"/></Style>')
 
         ; --- Pagination ---
         if (this.showPagination) {
@@ -1763,6 +1773,11 @@ class DataGridEx {
             uiHost.OnEvent(trackName, "Click", (state, ctrl, ev) => this.OnColumnToggle(state))
         }
 
+        ; Density Toggle
+        if (this.showDensity) {
+            uiHost.OnEvent(this.id "_BtnDensity", "Click", (state, ctrl, ev) => this.ToggleDensity(state))
+        }
+
         ; Pagination
         if (this.showPagination) {
             uiHost.OnEvent(this.id "_BtnPrev", "Click", (state, ctrl, ev) => this.ChangePage(state, -1))
@@ -1782,6 +1797,12 @@ class DataGridEx {
             this.sortAsc := true
         }
         this.page := 1
+        this.Render(state)
+    }
+
+    ToggleDensity(state) {
+        this.density := (this.density == "comfy") ? "compact" : "comfy"
+        this.ui.Update(this.id "_BtnDensity", "Content", this.density == "comfy" ? "Comfy" : "Compact")
         this.Render(state)
     }
 
@@ -1972,10 +1993,14 @@ class DataGridEx {
                     rColDefs.Add("ColumnDefinition").Width(w == "0" ? "0" : "Auto").SharedSizeGroup("TableSplit_" i)
             }
 
+            isCompact := (this.density == "compact")
+            fSize := isCompact ? 11 : 12
+            marginText := isCompact ? "10,4" : "10,12"
+
             for i, col in this.columns {
                 val := rowObj.HasProp(col) ? rowObj.%col% : ""
                 colIdx := (i - 1) * 2
-                rowGrid.Add("TextBlock").Text(val).Grid_Column(colIdx).Foreground("{DynamicResource TextMain}").FontSize(12).VerticalAlignment("Center").Margin("10,8").TextTrimming("CharacterEllipsis").ToolTip(val)
+                rowGrid.Add("TextBlock").Text(val).Grid_Column(colIdx).Foreground("{DynamicResource TextMain}").FontSize(fSize).VerticalAlignment("Center").Margin(marginText).TextTrimming("CharacterEllipsis").ToolTip(val)
             }
 
             rowStr := rowGrid.Compile()
