@@ -10,7 +10,6 @@ scratch*
 WebView2
 .vscode/
 .vscode/*
-*.json
 scratch*
 old/
 *.events
@@ -21,4 +20,6 @@ old/
 !axml_examples/*
 node_modules/
 out/
-vscode-axml/
+*.vsix
+!vscode-axml/language-configuration.json
+package-lock.json
