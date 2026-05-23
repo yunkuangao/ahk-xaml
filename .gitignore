@@ -23,6 +23,5 @@ out/
 *.vsix
 !vscode-axml/language-configuration.json
 package-lock.json
-projects/
 !axml_error_test.ahk
 !axml_error_test.axml

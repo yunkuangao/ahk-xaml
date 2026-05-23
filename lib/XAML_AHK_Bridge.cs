@@ -1838,6 +1838,12 @@ public class AhkWpfEngine {
                     if (sb != null) sb.Begin();
                 } else if (parts[1] == "EnableListBoxDragDrop" && ctrl is ListBox) {
                     EnableListBoxDragDrop((ListBox)ctrl, parts[0]);
+                } else if (parts[1] == "EnableDragSource" && ctrl is UIElement) {
+                    string dragFormat = parts.Length > 2 ? parts[2] : "DragItem";
+                    EnableGenericDragSource((UIElement)ctrl, parts[0], dragFormat);
+                } else if (parts[1] == "EnableDropTarget" && ctrl is UIElement) {
+                    string dropFormat = parts.Length > 2 ? parts[2] : "DragItem";
+                    EnableGenericDropTarget((UIElement)ctrl, parts[0], dropFormat);
                 } else if (parts[1] == "Close" && ctrl is Window) {
                     var ownerHwnd = new System.Windows.Interop.WindowInteropHelper((Window)ctrl).Owner;
                     if (ownerHwnd != IntPtr.Zero) {
@@ -2568,6 +2574,113 @@ public class AhkWpfEngine {
         }
     }
     
+    // Generic drag-source: enables any element to be dragged with a custom payload
+    // Usage from AHK: ui.Update("MyButton", "EnableDragSource", "DesignerComponent")
+    // The drag payload will be the element's Tag property (if set), or its x:Name
+    private System.Collections.Generic.Dictionary<UIElement, bool> dragSourceEnabled = new System.Collections.Generic.Dictionary<UIElement, bool>();
+    
+    private void EnableGenericDragSource(UIElement element, string ctrlName, string dataFormat) {
+        if (dragSourceEnabled.ContainsKey(element) && dragSourceEnabled[element]) return;
+        dragSourceEnabled[element] = true;
+        
+        Point dragStartPos = new Point();
+        bool mouseDown = false;
+        
+        element.PreviewMouseLeftButtonDown += (s, e) => {
+            dragStartPos = e.GetPosition(null);
+            mouseDown = true;
+        };
+        
+        element.PreviewMouseLeftButtonUp += (s, e) => {
+            mouseDown = false;
+        };
+        
+        element.PreviewMouseMove += (s, e) => {
+            if (!mouseDown || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) {
+                mouseDown = false;
+                return;
+            }
+            
+            Point pos = e.GetPosition(null);
+            if (Math.Abs(pos.X - dragStartPos.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                Math.Abs(pos.Y - dragStartPos.Y) > SystemParameters.MinimumVerticalDragDistance) {
+                
+                mouseDown = false;
+                
+                // Determine payload: use Tag if set, otherwise use control name
+                string payload = ctrlName;
+                var fe = element as FrameworkElement;
+                if (fe != null && fe.Tag != null && fe.Tag.ToString() != "" && fe.Tag.ToString() != "DragEnabled") {
+                    payload = fe.Tag.ToString();
+                }
+                
+                DataObject dragData = new DataObject(dataFormat, payload);
+                dragData.SetData("DragSourceName", ctrlName);
+                
+                try {
+                    DragDrop.DoDragDrop(element, dragData, DragDropEffects.Copy | DragDropEffects.Move);
+                } catch { }
+            }
+        };
+    }
+    
+    // Generic drop-target: enables any element to accept drops and sends events to AHK
+    // Usage from AHK: ui.Update("CanvasArea", "EnableDropTarget", "DesignerComponent")
+    // Events sent: DragEnter (with payload), DragLeave, Drop (with payload + source name)
+    private System.Collections.Generic.Dictionary<UIElement, bool> dropTargetEnabled = new System.Collections.Generic.Dictionary<UIElement, bool>();
+    
+    private void EnableGenericDropTarget(UIElement element, string ctrlName, string dataFormat) {
+        if (dropTargetEnabled.ContainsKey(element) && dropTargetEnabled[element]) return;
+        dropTargetEnabled[element] = true;
+        
+        element.AllowDrop = true;
+        
+        element.DragEnter += (s, e) => {
+            if (e.Data.GetDataPresent(dataFormat)) {
+                e.Effects = DragDropEffects.Copy;
+                string payload = e.Data.GetData(dataFormat) as string ?? "";
+                SendToAhk("EVENT|" + winId + "|" + ctrlName + "|DragEnter|" + 
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(payload)) + "\n");
+            } else if (e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                e.Effects = DragDropEffects.Copy;
+            } else {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        };
+        
+        element.DragOver += (s, e) => {
+            if (e.Data.GetDataPresent(dataFormat) || e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                e.Effects = DragDropEffects.Copy;
+            } else {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        };
+        
+        element.DragLeave += (s, e) => {
+            SendToAhk("EVENT|" + winId + "|" + ctrlName + "|DragLeave|\n");
+        };
+        
+        element.Drop += (s, e) => {
+            if (e.Data.GetDataPresent(dataFormat)) {
+                string payload = e.Data.GetData(dataFormat) as string ?? "";
+                string sourceName = e.Data.GetData("DragSourceName") as string ?? "";
+                var dropPos = e.GetPosition((UIElement)s);
+                string dropData = payload + "|" + sourceName + "|" + 
+                    dropPos.X.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) + "," + 
+                    dropPos.Y.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
+                SendToAhk("EVENT|" + winId + "|" + ctrlName + "|Drop|" + 
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(dropData)) + "\n");
+            } else if (e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                SendToAhk("EVENT|" + winId + "|" + ctrlName + "|FileDrop|" + 
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join("|", files))) + "\n");
+            }
+            e.Handled = true;
+        };
+    }
+
     private void EnableListBoxDragDrop(ListBox listBox, string ctrlName) {
         listBox.AllowDrop = true;
         Point dragStart = new Point();
