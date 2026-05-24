@@ -1,0 +1,91 @@
+{
+  "name": "ahk-axml",
+  "displayName": "AHK-XAML (AXML) Language Support",
+  "description": "Rich language support for the AXML format, including IntelliSense, syntax highlighting, and diagnostics.",
+  "version": "0.0.1",
+  "publisher": "ahk-xaml",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahk-xaml/ahk-axml.git"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "axml",
+        "aliases": [
+          "AXML",
+          "axml"
+        ],
+        "extensions": [
+          ".axml"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "axml",
+        "scopeName": "source.axml",
+        "path": "./syntaxes/axml.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "axml",
+        "path": "./snippets/axml.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "axml.generateMargin",
+        "title": "AXML: Generate Margin/Padding"
+      },
+      {
+        "command": "axml.chooseThemeColor",
+        "title": "AXML: Choose Theme Color"
+      }
+    ],
+    "configuration": {
+      "title": "AXML Settings",
+      "properties": {
+        "axml.customProperties": {
+          "type": "array",
+          "default": [],
+          "description": "Custom AXML properties to show in autocomplete. Example: [\"MyCustomProperty\"]"
+        },
+        "axml.commonFixes": {
+          "type": "object",
+          "default": {
+            "BackgroundColor": "Background",
+            "TextColor": "Foreground",
+            "Color": "Foreground",
+            "Radius": "CornerRadius",
+            "Rounding": "CornerRadius",
+            "PaddingLeft": "Padding",
+            "MarginLeft": "Margin"
+          },
+          "description": "A map of incorrect property names to their correct XAML equivalent, used for quick fixes."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "18.x",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.1.3"
+  }
+}

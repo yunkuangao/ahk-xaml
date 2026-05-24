@@ -1,0 +1,336 @@
+Grid:
+  Background: "{DynamicResource SolidBg}"
+  Rows: "50, *"
+  
+  # Top Toolbar
+  Border:
+    Grid_Row: 0
+    Background: "{DynamicResource SolidControl}"
+    BorderBrush: "{DynamicResource SolidBorder}"
+    BorderThickness: "0,0,0,1"
+    
+    Grid:
+      Margin: "15,0"
+      Cols: "Auto, *, Auto"
+      
+      StackPanel:
+        Grid_Column: 0
+        Orientation: "Horizontal"
+        VerticalAlignment: "Center"
+        
+        TextBlock:
+          Text: "&#xE756;"
+          FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+          Foreground: "{DynamicResource Accent}"
+          FontSize: "18"
+          VerticalAlignment: "Center"
+          Margin: "0,0,10,0"
+          
+        TextBlock:
+          Text: "N O D E   S T U D I O"
+          Foreground: "{DynamicResource TextMain}"
+          FontWeight: "Bold"
+          FontSize: "14"
+          VerticalAlignment: "Center"
+          
+      StackPanel:
+        Grid_Column: 2
+        Orientation: "Horizontal"
+        VerticalAlignment: "Center"
+        
+        # Tool Buttons
+        Border:
+          Background: "{DynamicResource ControlBg}"
+          BorderBrush: "{DynamicResource ControlBorder}"
+          BorderThickness: "1"
+          Margin: "0,0,16,0"
+          Padding: "2"
+          StackPanel:
+            Orientation: "Horizontal"
+            Button (BtnModeSelect):
+              Background: "Transparent"
+              Foreground: "{DynamicResource TextMain}"
+              BorderThickness: "0"
+              Padding: "6,4"
+              Cursor: "Hand"
+              ToolTip: "Select (Box)"
+              TextBlock:
+                Text: "&#xE7C8;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                FontSize: "14"
+            Button (BtnModePan):
+              Background: "Transparent"
+              Foreground: "{DynamicResource TextMain}"
+              BorderThickness: "0"
+              Padding: "6,4"
+              Cursor: "Hand"
+              ToolTip: "Pan"
+              TextBlock:
+                Text: "&#xE700;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                FontSize: "14"
+            Button (BtnModeSlice):
+              Background: "Transparent"
+              Foreground: "{DynamicResource TextMain}"
+              BorderThickness: "0"
+              Padding: "6,4"
+              Cursor: "Hand"
+              ToolTip: "Slice Connections"
+              TextBlock:
+                Text: "&#xECC8;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                FontSize: "14"
+            Button (BtnSnapToggle):
+              Background: "{DynamicResource Accent}"
+              Foreground: "White"
+              BorderThickness: "0"
+              Padding: "6,4"
+              Margin: "0,0,4,0"
+              Cursor: "Hand"
+              ToolTip: "Toggle Grid Snap (On)"
+              TextBlock:
+                Text: "&#xF0E2;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                FontSize: "14"
+            Border:
+              Width: "1"
+              Background: "{DynamicResource ControlBorder}"
+              Margin: "4,2,8,2"
+            Button (BtnZoomFit):
+              Background: "Transparent"
+              Foreground: "{DynamicResource TextMain}"
+              BorderThickness: "0"
+              Padding: "6,4"
+              Cursor: "Hand"
+              ToolTip: "Fit All"
+              TextBlock:
+                Text: "&#xE73F;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                FontSize: "14"
+            Button (BtnZoomIn):
+              Background: "Transparent"
+              Foreground: "{DynamicResource TextMain}"
+              BorderThickness: "0"
+              Padding: "6,4"
+              Cursor: "Hand"
+              ToolTip: "Zoom In"
+              TextBlock:
+                Text: "&#xE710;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                FontSize: "14"
+            Button (BtnZoomOut):
+              Background: "Transparent"
+              Foreground: "{DynamicResource TextMain}"
+              BorderThickness: "0"
+              Padding: "6,4"
+              Cursor: "Hand"
+              ToolTip: "Zoom Out"
+              TextBlock:
+                Text: "&#xE711;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                FontSize: "14"
+        
+        Button (BtnSave):
+          Background: "{DynamicResource Accent}"
+          Foreground: "White"
+          BorderThickness: "0"
+          Padding: "12,6"
+          Margin: "0,0,8,0"
+          Cursor: "Hand"
+          StackPanel:
+            Orientation: "Horizontal"
+            TextBlock:
+              Text: "&#xE74E;"
+              FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+              FontSize: "12"
+              Margin: "0,0,6,0"
+              VerticalAlignment: "Center"
+            TextBlock:
+              Text: "Save State"
+              FontSize: "12"
+              FontWeight: "SemiBold"
+              VerticalAlignment: "Center"
+              
+        Button (BtnLoad):
+          Background: "Transparent"
+          Foreground: "{DynamicResource TextMain}"
+          BorderThickness: "1"
+          BorderBrush: "{DynamicResource ControlBorder}"
+          Padding: "12,6"
+          Cursor: "Hand"
+          StackPanel:
+            Orientation: "Horizontal"
+            TextBlock:
+              Text: "&#xE8E5;"
+              FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+              FontSize: "12"
+              Margin: "0,0,6,0"
+              VerticalAlignment: "Center"
+            TextBlock:
+              Text: "Load State"
+              FontSize: "12"
+              FontWeight: "SemiBold"
+              VerticalAlignment: "Center"
+              
+        ComboBox (CbSaveMode):
+          Width: "130"
+          Margin: "10,0,0,0"
+          SelectedIndex: "0"
+          ComboBoxItem:
+            Content: "Memory (Fast)"
+          ComboBoxItem:
+            Content: "Temp File (Safe)"
+          ComboBoxItem:
+            Content: "Local (Persistent)"
+
+  # Main Content Area
+  Grid:
+    Grid_Row: 1
+    Cols: "220, *"
+    
+    # Left Sidebar (Tool Palette & Tabs)
+    Border:
+      Grid_Column: 0
+      Background: "{DynamicResource SolidSidebar}"
+      BorderBrush: "{DynamicResource SolidBorder}"
+      BorderThickness: "0,0,1,0"
+      
+      Grid:
+        Rows: "Auto, *"
+        
+        # Tabs Area
+        StackPanel:
+          Grid_Row: 0
+          Margin: "0,15,0,0"
+          TextBlock:
+            Text: "OPEN GRAPHS"
+            Foreground: "{DynamicResource TextSub}"
+            FontSize: "10"
+            FontWeight: "Bold"
+            Margin: "15,0,0,10"
+            Opacity: "0.8"
+          StackPanel (TabList):
+            
+          Button (BtnNewTab):
+            Background: "Transparent"
+            Foreground: "{DynamicResource Accent}"
+            BorderThickness: "0"
+            HorizontalAlignment: "Left"
+            Margin: "15,5,0,0"
+            Cursor: "Hand"
+            Padding: "0"
+            StackPanel:
+              Orientation: "Horizontal"
+              TextBlock:
+                Text: "&#xE710;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                FontSize: "12"
+                Margin: "0,0,6,0"
+                VerticalAlignment: "Center"
+              TextBlock:
+                Text: "New Graph"
+                FontSize: "12"
+                FontWeight: "SemiBold"
+                VerticalAlignment: "Center"
+                
+        # Node Palette
+        StackPanel:
+          Grid_Row: 1
+          Margin: "0,30,0,0"
+          TextBlock:
+            Text: "NODE LIBRARY"
+            Foreground: "{DynamicResource TextSub}"
+            FontSize: "10"
+            FontWeight: "Bold"
+            Margin: "15,0,0,10"
+            Opacity: "0.8"
+            
+          Button (BtnAddInput):
+            Margin: "10,0,10,6"
+            Background: "{DynamicResource ControlBg}"
+            BorderBrush: "{DynamicResource ControlBorder}"
+            BorderThickness: "1"
+            HorizontalContentAlignment: "Left"
+            Padding: "10,8"
+            Cursor: "Hand"
+            StackPanel:
+              Orientation: "Horizontal"
+              TextBlock:
+                Text: "&#xE8B5;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                Foreground: "#4CAF50"
+                FontSize: "14"
+                Margin: "0,0,10,0"
+              TextBlock:
+                Text: "Input Node"
+                Foreground: "{DynamicResource TextMain}"
+                FontSize: "12"
+                
+          Button (BtnAddProcess):
+            Margin: "10,0,10,6"
+            Background: "{DynamicResource ControlBg}"
+            BorderBrush: "{DynamicResource ControlBorder}"
+            BorderThickness: "1"
+            HorizontalContentAlignment: "Left"
+            Padding: "10,8"
+            Cursor: "Hand"
+            StackPanel:
+              Orientation: "Horizontal"
+              TextBlock:
+                Text: "&#xE943;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                Foreground: "#60A0FF"
+                FontSize: "14"
+                Margin: "0,0,10,0"
+              TextBlock:
+                Text: "Process Node"
+                Foreground: "{DynamicResource TextMain}"
+                FontSize: "12"
+                
+          Button (BtnAddMultiProcess):
+            Margin: "10,0,10,6"
+            Background: "{DynamicResource ControlBg}"
+            BorderBrush: "{DynamicResource ControlBorder}"
+            BorderThickness: "1"
+            HorizontalContentAlignment: "Left"
+            Padding: "10,8"
+            Cursor: "Hand"
+            StackPanel:
+              Orientation: "Horizontal"
+              TextBlock:
+                Text: "&#xE943;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                Foreground: "#8A2BE2"
+                FontSize: "14"
+                Margin: "0,0,10,0"
+              TextBlock:
+                Text: "Multi-Process"
+                Foreground: "{DynamicResource TextMain}"
+                FontSize: "12"
+                
+          Button (BtnAddOutput):
+            Margin: "10,0,10,6"
+            Background: "{DynamicResource ControlBg}"
+            BorderBrush: "{DynamicResource ControlBorder}"
+            BorderThickness: "1"
+            HorizontalContentAlignment: "Left"
+            Padding: "10,8"
+            Cursor: "Hand"
+            StackPanel:
+              Orientation: "Horizontal"
+              TextBlock:
+                Text: "&#xE898;"
+                FontFamily: "Segoe Fluent Icons, Segoe MDL2 Assets"
+                Foreground: "#FF5722"
+                FontSize: "14"
+                Margin: "0,0,10,0"
+              TextBlock:
+                Text: "Output Node"
+                Foreground: "{DynamicResource TextMain}"
+                FontSize: "12"
+
+    # Canvas Area
+    Grid (GraphContainer):
+      Grid_Column: 1
+      Background: "Transparent"
+      ClipToBounds: "True"

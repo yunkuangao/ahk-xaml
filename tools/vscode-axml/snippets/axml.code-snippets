@@ -1,0 +1,55 @@
+{
+  "grid": {
+    "prefix": "grid",
+    "body": [
+      "Grid:",
+      "  Rows: \"${1:*, auto}\"",
+      "  Cols: \"${2:*, auto}\"",
+      "  ",
+      "  $0"
+    ],
+    "description": "Create a Grid layout"
+  },
+  "stack": {
+    "prefix": "stack",
+    "body": [
+      "StackPanel:",
+      "  Orientation: \"${1:Vertical}\"",
+      "  ",
+      "  $0"
+    ],
+    "description": "Create a StackPanel layout"
+  },
+  "border": {
+    "prefix": "border",
+    "body": [
+      "Border:",
+      "  CornerRadius: ${1:8}",
+      "  Background: \"${2:{DynamicResource ControlBg}\\}\"",
+      "  ",
+      "  $0"
+    ],
+    "description": "Create a styled Border"
+  },
+  "btn": {
+    "prefix": "btn",
+    "body": [
+      "Button (${1:Btn$2}):",
+      "  Content: \"${3:Click Me}\"",
+      "  OnClick: ${4:Handle$2Click}",
+      "  ",
+      "  $0"
+    ],
+    "description": "Create a Button with an OnClick event"
+  },
+  "txt": {
+    "prefix": "txt",
+    "body": [
+      "TextBlock:",
+      "  Text: \"$1\"",
+      "  FontSize: ${2:14}",
+      "  Foreground: \"${3:{DynamicResource TextMain}\\}\""
+    ],
+    "description": "Create a TextBlock"
+  }
+}
