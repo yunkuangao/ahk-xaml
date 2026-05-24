@@ -212,7 +212,6 @@ class XAML_GUI {
 
     BindBaseEvents() {
         this.host.OnEvent("Window", "Loaded", ObjBindMethod(this, "OnUIReady"))
-        this.host.OnEvent("Window", "Closed", (*) => ExitApp())
 
         this.host.OnEvent("ComboTheme", "SelectionChanged", ObjBindMethod(this, "ThemeChanged"))
         this.host.OnEvent("ComboScale", "SelectionChanged", ObjBindMethod(this, "ScaleChanged"))

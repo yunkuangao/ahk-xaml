@@ -98,9 +98,11 @@ class XAMLHost {
 
     __New(xaml := "", exePath := "", ownerHwnd := 0) {
         XAMLHost.RestoreWebView2Dlls()
+        this._disposed := false
         XAMLHost.instanceCounter++
         this.id := "WPF_" A_TickCount "_" XAMLHost.instanceCounter "_" Random(1000, 9999)
         XAMLHost._instances[this.id] := this
+        try FileAppend("[AHK-NEW] " this.id " instances=" XAMLHost._instances.Length "`n", A_Temp "\AhkWpf\mem_trace.log")
         this.xaml := xaml
         this.exePath := exePath
         this.ownerHwnd := ownerHwnd
@@ -190,7 +192,6 @@ class XAMLHost {
             DirCreate(A_Temp "\AhkWpf")
 
         baseDllName := (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) ? "ahk-xaml-webview.dll" : "ahk-xaml.dll"
-        targetExe := (exePath != "") ? exePath : A_Temp "\AhkWpf\" baseDllName
 
         SplitPath(A_LineFile, , &libDir)
         sharedExe := libDir "\" baseDllName
@@ -198,28 +199,26 @@ class XAMLHost {
         if (A_IsCompiled && FileExist(A_ScriptDir "\Plugins\AHK-XAML\lib\" baseDllName)) {
             targetExe := A_ScriptDir "\Plugins\AHK-XAML\lib\" baseDllName
         } else if (!A_IsCompiled) {
+            sourceCs := libDir "\XAML_AHK_Bridge.cs"
+            if (FileExist(sourceCs) && FileExist(sharedExe) && FileGetTime(sourceCs) > FileGetTime(sharedExe)) {
+                try {
+                    while ProcessExist("ahk-xaml.dll") {
+                        ProcessClose("ahk-xaml.dll")
+                        Sleep(50)
+                    }
+                    while ProcessExist("ahk-xaml-webview.dll") {
+                        ProcessClose("ahk-xaml-webview.dll")
+                        Sleep(50)
+                    }
+                }
+                try FileDelete(sharedExe)
+            }
             if !FileExist(sharedExe) {
                 if !XAMLHost.CompileEngine(libDir, sharedExe)
                     return
             }
-            if !FileExist(targetExe)
-                FileCopy(sharedExe, targetExe, 1)
-            Loop Files, libDir "\*.dll" {
-                if (A_LoopFileName != baseDllName)
-                    try FileCopy(A_LoopFilePath, A_Temp "\AhkWpf\" A_LoopFileName, 1)
-            }
-
-
-
+            targetExe := sharedExe
             XAMLHost.RestoreWebView2Dlls()
-            SplitPath(targetExe, , &targetDir)
-            if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {
-                if FileExist(libDir "\WebView2\WebView2Loader.dll") {
-                    try FileCopy(libDir "\WebView2\WebView2Loader.dll", targetDir "\WebView2Loader.dll", 1)
-                    try FileCopy(libDir "\WebView2\Microsoft.Web.WebView2.Core.dll", targetDir "\Microsoft.Web.WebView2.Core.dll", 1)
-                    try FileCopy(libDir "\WebView2\Microsoft.Web.WebView2.Wpf.dll", targetDir "\Microsoft.Web.WebView2.Wpf.dll", 1)
-                }
-            }
         } else {
             MsgBox("Error: " baseDllName " not found.`nExpected: " A_ScriptDir "\Plugins\AHK-XAML\lib\" baseDllName, "AHK-XAML", "Iconx")
             return
@@ -275,6 +274,33 @@ class XAMLHost {
                 }
             }
         }
+    }
+
+    Dispose() {
+        if (this._disposed)
+            return
+        this._disposed := true
+        try FileAppend("[AHK-DISPOSE] " this.id "`n", A_Temp "\AhkWpf\mem_trace.log")
+        SetTimer(ObjBindMethod(this, "CheckForCrashes"), 0)
+        if (XAMLHost._instances.Has(this.id))
+            XAMLHost._instances.Delete(this.id)
+        for ctrlName, eventMap in this.events {
+            for eventName, cbList in eventMap
+                cbList.Length := 0
+        }
+        this.events := ""
+        this.tracked := ""
+        this.xaml := ""
+        if (IsObject(this.receiver)) {
+            try {
+                this.receiver.Destroy()
+            }
+            this.receiver := ""
+        }
+    }
+
+    __Delete() {
+        this.Dispose()
     }
 
     static ShowErrorDialog(title, header, snippet, details, hasRetryOptions := false) {
@@ -483,13 +509,27 @@ class XAMLHost {
             FileDelete(tempTxt)
         FileAppend(payload, tempTxt, "UTF-8")
 
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\ahk-xaml.dll"
+        targetExe := (this.exePath != "") ? this.exePath : ""
         SplitPath(A_LineFile, , &libDir)
         sharedExe := libDir "\ahk-xaml.dll"
 
         if (A_IsCompiled && FileExist(A_ScriptDir "\Plugins\AHK-XAML\lib\ahk-xaml.dll")) {
             targetExe := A_ScriptDir "\Plugins\AHK-XAML\lib\ahk-xaml.dll"
         } else if (!A_IsCompiled) {
+            sourceCs := libDir "\XAML_AHK_Bridge.cs"
+            if (FileExist(sourceCs) && FileExist(sharedExe) && FileGetTime(sourceCs) > FileGetTime(sharedExe)) {
+                try {
+                    while ProcessExist("ahk-xaml.dll") {
+                        ProcessClose("ahk-xaml.dll")
+                        Sleep(50)
+                    }
+                    while ProcessExist("ahk-xaml-webview.dll") {
+                        ProcessClose("ahk-xaml-webview.dll")
+                        Sleep(50)
+                    }
+                }
+                try FileDelete(sharedExe)
+            }
             if !FileExist(sharedExe) {
                 if !XAMLHost.CompileEngine(libDir, sharedExe)
                     return
@@ -635,17 +675,15 @@ class XAMLHost {
 
     _EnsureDaemon() {
         baseDllName := (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) ? "ahk-xaml-webview.dll" : "ahk-xaml.dll"
-        targetExe := (this.exePath != "") ? this.exePath : A_Temp "\AhkWpf\" baseDllName
+        SplitPath(A_LineFile, , &libDir)
+        sharedExe := libDir "\" baseDllName
         if XAMLHost.daemonHwnd
-            return targetExe
+            return sharedExe
 
         if !DirExist(A_Temp "\AhkWpf")
             DirCreate(A_Temp "\AhkWpf")
         if FileExist(this.errLog)
             FileDelete(this.errLog)
-
-        SplitPath(A_LineFile, , &libDir)
-        sharedExe := libDir "\" baseDllName
 
         if (A_IsCompiled && FileExist(A_ScriptDir "\Plugins\AHK-XAML\lib\" baseDllName)) {
             targetExe := A_ScriptDir "\Plugins\AHK-XAML\lib\" baseDllName
@@ -668,24 +706,9 @@ class XAMLHost {
                 if !XAMLHost.CompileEngine(libDir, sharedExe)
                     return ""
             }
-            if (this.exePath == "") {
-                if (!FileExist(targetExe) || FileGetTime(sharedExe) != FileGetTime(targetExe)) {
-                    try FileCopy(sharedExe, targetExe, 1)
-                }
-            } else if (!FileExist(targetExe)) {
-                MsgBox("Custom Engine DLL not found: " targetExe, "AHK-XAML", "Iconx")
-                return ""
-            }
+            targetExe := sharedExe
 
             XAMLHost.RestoreWebView2Dlls()
-            SplitPath(targetExe, , &targetDir)
-            if (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) {
-                if FileExist(libDir "\WebView2\WebView2Loader.dll") {
-                    try FileCopy(libDir "\WebView2\WebView2Loader.dll", targetDir "\WebView2Loader.dll", 1)
-                    try FileCopy(libDir "\WebView2\Microsoft.Web.WebView2.Core.dll", targetDir "\Microsoft.Web.WebView2.Core.dll", 1)
-                    try FileCopy(libDir "\WebView2\Microsoft.Web.WebView2.Wpf.dll", targetDir "\Microsoft.Web.WebView2.Wpf.dll", 1)
-                }
-            }
         } else {
             MsgBox("Error: " baseDllName " not found.`nExpected: " A_ScriptDir "\Plugins\AHK-XAML\lib\" baseDllName, "AHK-XAML", "Iconx")
             return
