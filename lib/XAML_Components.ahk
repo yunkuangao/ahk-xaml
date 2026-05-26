@@ -2001,6 +2001,7 @@ class DataGridEx {
             }
 
             rowStr := rowGrid.Compile()
+            rowStr := RegExReplace(rowStr, "[\r\n]+", "")
             rowStr := RegExReplace(rowStr, "<!--.*?-->", "")
             rowStr := StrReplace(rowStr, "<Grid ", '<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" ')
             this.ui.Update(this.id "_Table_List", "AddXamlItem", rowStr)
