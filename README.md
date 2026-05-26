@@ -48,39 +48,39 @@ Here is a minimal implementation to show how a UI is constructed and launched.
 
 ```ahk
 #Requires AutoHotkey v2.0
-#Include "lib\XAML_GUI.ahk"
+#Include "../../lib/XAML_Host.ahk"
+#Include "../../lib/XAML_Generator.ahk"
+#Include "../../lib/XAML_Dialog.ahk"
+#Include "../../lib/XAML_GUI.ahk"
+#Include "../../lib/XAML_Components.ahk"
 
-; Toggle this flag for Development vs Production modes
-global XAML_FORCE_DYNAMIC_COMPILE := true
+; 1. Initialize the App Engine
+app := XAML_GUI("Minimal AHK GUI")
 
-; 1. Initialize the Main App Window
-app := XAML_GUI("My Application", 800, 600)
+; 2. Define the Main Content Area
+panel := app.main.Add("StackPanel").Grid_Row(1).Margin("40,20,40,20")
 
-if (XAML_FORCE_DYNAMIC_COMPILE) {
-    ; 2. Build the UI using the generator syntax (Only needed in Development!)
-    #Include "lib\XAML_Generator.ahk"
-    
-    app.Add("TextBlock").Text("Hello, World!").FontSize(24).Foreground("{DynamicResource TextMain}").HorizontalAlignment("Center").Margin("0,20,0,0")
-    app.Add("Button").Name("BtnClickMe").Content("Click Me!").Width(120).Height(40).Margin("0,20,0,0").Cursor("Hand")
+panel.Add("TextBlock").Name("TxtTitle").Text("Welcome to the Minimal UI!").Use("PageTitle").Margin("0,0,0,10")
 
-    ; 3a. Compile the dynamic UI into the memory host
-    ui := app.Compile()
-} else {
-    ; 3b. Or load it instantly from a pre-compiled, standalone DLL bundle!
-    ui := app.Load("gui.dll")
-}
+panel.Add("Button").Name("BtnSubmit").Content("Say Hello").Use("PrimaryBtn").Width(120).Height(32).HorizontalAlignment("Left")
 
-; 4. Bind events to AHK callbacks (Required in both modes)
-ui.OnEvent("BtnClickMe", "Click", (state, ctrl, event) => MsgBox("Button Clicked!"))
+; 3. Compile the UI (Generates the WPF window)
+ui := app.Compile()
 
-; 5. Bundle everything into an ultra-fast standalone DLL in Dev Mode
-; (Must be done AFTER bindings so that your events are serialized in the bundle)
-if (XAML_FORCE_DYNAMIC_COMPILE) {
-    app.ExportBundle("gui.dll")
-}
+; 4. Bind Events
+ui.OnEvent("BtnSubmit", "Click", OnSubmitClick)
 
-; 6. Show the Window
+; 5. Show the Window!
 app.Show()
+
+; Event Callbacks
+OnSubmitClick(state, ctrl, event) {
+    app.ShowSnackbar("Hello there!")
+    XDialog.Show({ Title: "Hello!", Message: "Message content here" })
+}
+
+; Keep the script alive
+Persistent()
 ```
 
 ## Component Highlights
