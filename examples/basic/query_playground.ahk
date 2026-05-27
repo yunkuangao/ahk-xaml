@@ -103,6 +103,7 @@ leftSp.Add("TextBox").Name("TxtInput").Track()
 leftSp.Add("TextBlock").Text("Slider — MySlider").Fg("{DynamicResource TextSub}").Size(11).Bold().M("0,12,0,5")
 sldGrid := leftSp.Add("Grid")
 sldGrid.Add("Slider").Name("MySlider").Minimum(0).Maximum(100).Value(42).M("0,0,60,0").Tag("Throttle:16").Track()
+    .On("ValueChanged", OnSliderMoved)
 sldGrid.Add("TextBlock").Name("TxtSldVal").Text("42").Fg("{DynamicResource Accent}").Size(16).Bold().HorizontalAlignment("Right").VerticalAlignment("Center")
 
 ; CheckBox
@@ -166,9 +167,6 @@ refSp.Add("TextBlock").Mono().Fg("{DynamicResource TextSub}").Size(11).Wrap()
 
 ; === Compile & Show ===
 ui := app.Compile()
-
-; Bind slider change to update display
-ui.OnEvent("MySlider", "ValueChanged", OnSliderMoved)
 
 app.Show()
 

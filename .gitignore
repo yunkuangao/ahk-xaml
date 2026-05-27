@@ -26,3 +26,4 @@ package-lock.json
 !axml_error_test.ahk
 !axml_error_test.axml
 work_docs/
+*.py

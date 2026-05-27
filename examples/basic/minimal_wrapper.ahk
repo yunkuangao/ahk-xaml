@@ -11,6 +11,8 @@ app := XAML_GUI("Minimal AHK GUI")
 ; 2. (Optional) Add items to the Sidebar
 app.sidebarPanel.Add("TextBlock").Text("QUICK SETTINGS").Margin("0,15,0,15").Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold")
 app.sidebarPanel.Toggle("TglCenter", "Center Align", false)
+    .Track()
+    .On("Click", OnToggleCenter)
 
 ; 3. Define the Main Content Area
 app.tabs.Visibility("Collapsed") ; Hide the default tab control
@@ -22,22 +24,17 @@ panel.Add("TextBlock").Name("TxtDesc").Text("Notice how much heavy lifting is do
 
 ; Input Field
 panel.Add("TextBlock").Name("TxtLabel").Text("ENTER YOUR NAME").Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold").Margin("0,0,0,8").HorizontalAlignment("Left")
-panel.Add("TextBox").Name("TxtName").Width(300).HorizontalAlignment("Left").Margin("0,0,0,15")
+panel.Add("TextBox").Name("TxtName").Width(300).HorizontalAlignment("Left").Margin("0,0,0,15").Track()
 
 ; Action Button
 panel.Add("Button").Name("BtnSubmit").Content("Say Hello").Use("PrimaryBtn").Width(120).Height(32).HorizontalAlignment("Left")
+    .On("Click", OnSubmitClick)
 
 ; 5. Compile the UI (Generates the WPF window)
 ui := app.Compile()
 ui.xaml := StrReplace(ui.xaml, 'Width="940" Height="700"', 'Width="600" Height="420"')
 
-; 6. Bind Events
-ui.Track("TxtName")
-ui.Track("TglCenter")
-ui.OnEvent("BtnSubmit", "Click", OnSubmitClick)
-ui.OnEvent("TglCenter", "Click", OnToggleCenter)
-
-; 7. Show the Window!
+; 6. Show the Window!
 app.Show()
 
 ; --- Event Callbacks ---
