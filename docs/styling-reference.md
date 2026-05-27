@@ -165,6 +165,9 @@ panel.Add("TextBlock").Text("SECTION TITLE")  ; inherits defaults
 
 ## 4. Event Hooking
 
+> [!TIP]
+> **`.On()` is the recommended API.** Inline `.On()` registers events directly on the element tree, keeping your UI definition and event bindings together. The legacy `ui.OnEvent()` still works and is needed for Window-level events, dynamic elements, and forward references. See [Power Usage](power-usage.md) for when to use each.
+
 ### Inline Events (`.On()`)
 
 ```ahk

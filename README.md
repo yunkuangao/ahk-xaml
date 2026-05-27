@@ -107,6 +107,7 @@ ahk-xaml/
 │   └── production-steps.md       # Steps for packaging/exporting to production (.baml)
 │   └── data-pipeline.md          # IPC protocol, encoding, and query API
 │   └── styling-reference.md      # Shorthands, templates, events, and rich queries
+│   └── power-usage.md            # Deep engine hooks, tags, scroll/drag/canvas/media APIs
 ├── lib/
 │   ├── XAML_Host.ahk             # Core IPC bridge, engine compilation, message dispatch
 │   ├── XAML_Generator.ahk        # Chainable AST → XAML compiler
@@ -151,5 +152,6 @@ This repository has been fully modularized. For deep dives into specific areas, 
 2. [Syntax & Principles](SyntaxAndPrinciples.md) - Learn how the `XAML_Generator` works, scoped defaults, templates, theming, and the component lifecycle.
 3. [Architecture](ARCHITECTURE.md) - Deep-dive into the two-process runtime, IPC bridge, compilation pipeline, state persistence, crash recovery, dynamic mutations, and production builds.
 4. [Styling Reference](docs/styling-reference.md) - Shorthand aliases, object-style construction, templates, event hooking, and rich queries.
-5. [Data Pipeline](docs/data-pipeline.md) - IPC protocol, length-prefix encoding, query API, and lightweight events.
-6. [Production Steps](docs/production-steps.md) - Packaging, `.baml` compilation, and `.dll` bundling.
+5. [Power Usage](docs/power-usage.md) - Deep engine hooks, tags, scroll control, drag-and-drop, canvas manipulation, media, WebView2, and window management.
+6. [Data Pipeline](docs/data-pipeline.md) - IPC protocol, length-prefix encoding, query API, and lightweight events.
+7. [Production Steps](docs/production-steps.md) - Packaging, `.baml` compilation, and `.dll` bundling.
