@@ -58,28 +58,29 @@ Here is a minimal implementation to show how a UI is constructed and launched.
 app := XAML_GUI("Minimal AHK GUI")
 
 ; 2. Define the Main Content Area
-panel := app.main.Add("StackPanel").Grid_Row(1).Margin("40,20,40,20")
+panel := app.main.Add("StackPanel").Margin("40,20,40,20")
 
-panel.Add("TextBlock").Name("TxtTitle").Text("Welcome to the Minimal UI!").Use("PageTitle").Margin("0,0,0,10")
+panel.Add("TextBlock").Text("Welcome!").Use("PageTitle").M("0,0,0,10")
 
-panel.Add("Button").Name("BtnSubmit").Content("Say Hello").Use("PrimaryBtn").Width(120).Height(32).HorizontalAlignment("Left")
+; 3. Input + Button with inline events (.On) and state tracking (.Track)
+panel.Add("TextBox").Name("TxtName").W(300).Left().M("0,0,0,15").Track()
+panel.Add("Button", { Name: "BtnSubmit", W: 120, H: 32, HAlign: "Left" })
+    .Text("Say Hello")   ; auto-resolves to Content on Button
+    .Use("PrimaryBtn")
+    .On("Click", OnSubmitClick)
 
-; 3. Compile the UI (Generates the WPF window)
+; 4. Compile & Show (no manual ui.OnEvent needed!)
 ui := app.Compile()
-
-; 4. Bind Events
-ui.OnEvent("BtnSubmit", "Click", OnSubmitClick)
-
-; 5. Show the Window!
 app.Show()
 
-; Event Callbacks
+; Event Callback
 OnSubmitClick(state, ctrl, event) {
-    app.ShowSnackbar("Hello there!")
-    XDialog.Show({ Title: "Hello!", Message: "Message content here" })
+    name := ui.Query("TxtName")
+    if (name == "")
+        name := "Stranger"
+    app.ShowSnackbar("Hello there, " name "!")
 }
 
-; Keep the script alive
 Persistent()
 ```
 
@@ -104,6 +105,8 @@ Persistent()
 ahk-xaml/
 ├── docs/
 │   └── production-steps.md       # Steps for packaging/exporting to production (.baml)
+│   └── data-pipeline.md          # IPC protocol, encoding, and query API
+│   └── styling-reference.md      # Shorthands, templates, events, and rich queries
 ├── lib/
 │   ├── XAML_Host.ahk             # Core IPC bridge, engine compilation, message dispatch
 │   ├── XAML_Generator.ahk        # Chainable AST → XAML compiler
@@ -147,3 +150,6 @@ This repository has been fully modularized. For deep dives into specific areas, 
 1. [Components Guide](Components.md) - A definitive list of all 50+ UI components with coding examples.
 2. [Syntax & Principles](SyntaxAndPrinciples.md) - Learn how the `XAML_Generator` works, scoped defaults, templates, theming, and the component lifecycle.
 3. [Architecture](ARCHITECTURE.md) - Deep-dive into the two-process runtime, IPC bridge, compilation pipeline, state persistence, crash recovery, dynamic mutations, and production builds.
+4. [Styling Reference](docs/styling-reference.md) - Shorthand aliases, object-style construction, templates, event hooking, and rich queries.
+5. [Data Pipeline](docs/data-pipeline.md) - IPC protocol, length-prefix encoding, query API, and lightweight events.
+6. [Production Steps](docs/production-steps.md) - Packaging, `.baml` compilation, and `.dll` bundling.

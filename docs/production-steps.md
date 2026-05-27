@@ -1,52 +1,85 @@
 # Production Asset Workflow (`.dll` Bundling)
 
-I have successfully refactored the engine to support a true "compiled" production asset workflow. You can now compile all of your dynamic XAML, events, and the WPF engine itself into a static, ultra-fast `.dll` file, completely eliminating the need for string parsing or `%TEMP%` file extraction in production!
+The engine supports a "compiled" production asset workflow. You can compile all of your dynamic XAML, events, and the WPF engine itself into a static, ultra-fast `.dll` file, completely eliminating the need for string parsing or `%TEMP%` file extraction in production.
 
-## Implementation Details
+## How It Works
 
-### 1. Unified Asset Bundler (`XAML_GUI.ahk`)
-I added an `ExportBundle(outFile)` method to the `XAML_GUI` class. This method takes the final, computed XAML string, compiles it natively into a WPF `.baml` asset using MSBuild, serializes all AHK event bindings, and bundles everything—along with the C# rendering engine itself—into a single, custom standalone `.dll`.
+### Development Mode
+1. Your script builds the UI tree (`.Add()`, `.On()`, `.Track()` calls)
+2. `app.Compile()` generates XAML from the tree and collects inline events
+3. `app.ExportBundle("gui.dll")` compiles XAML → BAML, serializes events, bundles into DLL
 
-### 2. Zero-Overhead Asset Ingestion (`XAML_AHK_Bridge.cs`)
-When `app.Load("gui.dll")` is called, the library instructs the bridge to run your bundled DLL directly. Because the BAML and events are physically embedded inside the executable's manifest resources, the C# engine ingests the data instantly without opening any external files. This completely bypasses the XML text parser, safely and instantly loading the UI into memory.
+### Production Mode
+1. Your script builds the UI tree (same code — always runs)
+2. `app.Load("gui.dll")` loads the precompiled DLL and harvests `.On()` events from the tree
+3. Zero XML parsing, instant startup
 
-### 3. Side-by-Side Distribution Support
-You no longer need to distribute `ahk-xaml.dll` alongside your executable. The engine generates a unique DLL (e.g. `gui.dll`) tailored specifically to your UI.
-
-## How to use in Production
-
-In your main script, use a toggle variable (like `XAML_FORCE_DYNAMIC_COMPILE`) to switch between development and production modes:
+## Usage
 
 ```ahk
+#Requires AutoHotkey v2.0
+#Include "../../lib/XAML_Host.ahk"
+#Include "../../lib/XAML_Generator.ahk"
+#Include "../../lib/XAML_Dialog.ahk"
+#Include "../../lib/XAML_GUI.ahk"
+#Include "../../lib/XAML_Components.ahk"
+
 global XAML_FORCE_DYNAMIC_COMPILE := true
 
-; 1. In dev mode, dynamically generate UI. In production, load the pre-compiled DLL bundle.
+; ========== UI DEFINITION (always runs) ==========
+app := XAML_GUI("My App")
+app.lightweightEvents := true
+
+panel := app.main.Add("StackPanel").M("40,20,40,20")
+panel.Add("TextBlock").Text("Production Demo").Use("PageTitle")
+panel.Add("TextBox").Name("TxtInput").W(300).Track()
+panel.Add("Button", { Name: "BtnSave", W: 120, H: 32 })
+    .Text("Save")
+    .Use("PrimaryBtn")
+    .On("Click", OnSaveClick)
+
+; ========== COMPILE / LOAD ==========
 if (XAML_FORCE_DYNAMIC_COMPILE) {
     ui := app.Compile()
+    app.ExportBundle("gui.dll")   ; creates the production bundle
 } else {
-    ui := app.Load("gui.dll")
-}
-
-; 2. Bind events (always required, as events are runtime behavior)
-myGrid.Bind(ui)
-ui.OnEvent("BtnSave", "Click", SaveData)
-
-; 3. Generate the static production bundle (requires MSBuild).
-; Must be called AFTER binding events so they are included in the bundle!
-if (XAML_FORCE_DYNAMIC_COMPILE) {
-    app.ExportBundle("gui.dll")
+    ui := app.Load("gui.dll")     ; loads precompiled + harvests .On() events
 }
 
 app.Show()
+
+; ========== CALLBACKS ==========
+OnSaveClick(state, ctrl, event) {
+    val := ui.Query("TxtInput")
+    app.ShowSnackbar("Saved: " val)
+}
+
+Persistent()
 ```
 
-### Steps:
-1. Run your script once with `XAML_FORCE_DYNAMIC_COMPILE := true`. This will dynamically generate the UI, export the `.baml`, serialize the events, and compile everything into a tailored `gui.dll` file.
-2. Change the flag to `XAML_FORCE_DYNAMIC_COMPILE := false` (or comment out the development block).
-3. The app will now instantly load from the `gui.dll` file.
+### Steps
+1. Run your script with `XAML_FORCE_DYNAMIC_COMPILE := true`. This generates the UI, exports BAML, serializes events, and compiles into `gui.dll`.
+2. Change the flag to `false`.
+3. The app now instantly loads from `gui.dll` — zero XML parsing.
 
-When you distribute your final application, you can simply zip up your folder as:
-- `MyApplication.exe`
-- `gui.dll`
+> [!IMPORTANT]
+> **`.On()` and `.Track()` work with both paths.** The element tree (built by your `.Add()` calls) exists regardless of compile/load mode. Both `Compile()` and `Load()` call `_CollectInlineEvents()` to harvest inline events from the tree.
 
-When users run `MyApplication.exe`, it will instantly launch your UI with absolutely zero disk I/O string generation and no XML parsing overhead, ensuring the fastest, most robust startup time possible!
+## Distribution
+
+When distributing your final application, ship:
+- `MyApplication.exe` (compiled AHK)
+- `gui.dll` (bundled UI)
+
+Users get instant startup with zero disk I/O, no XML parsing, and no `%TEMP%` file extraction.
+
+## Implementation Details
+
+### Unified Asset Bundler (`XAML_GUI.ahk`)
+`ExportBundle(outFile)` takes the final XAML string, compiles it into WPF `.baml` using MSBuild, serializes all AHK event bindings, and bundles everything into a standalone `.dll`.
+
+### Zero-Overhead Asset Ingestion (`XAML_AHK_Bridge.cs`)
+When `app.Load("gui.dll")` is called, the bridge loads the bundled DLL directly. BAML and events are embedded in the DLL's manifest resources — the C# engine ingests them instantly without file I/O.
+
+### Side-by-Side Distribution
+You no longer need `ahk-xaml.dll` alongside your executable. The bundled `gui.dll` is self-contained.

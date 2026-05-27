@@ -199,7 +199,7 @@ class XKanbanBoard {
 
     UpdateCounts() {
         for col in this.columns {
-            if (this.ui != "")
+            if (this.ui)
                 this.ui.Update(col.CountId, "Text", String(col.Data.Length))
         }
     }
@@ -265,7 +265,7 @@ class XKanbanBoard {
     OnItemDropped(dstColIdx, state, ctrl, event) {
         if !state.Has("ItemDropped")
             return
-        parts := StrSplit(state["ItemDropped"], "|")
+        parts := StrSplit(state["ItemDropped"], "|", , 2)
         if (parts.Length < 2)
             return
 
@@ -362,7 +362,7 @@ class XNodeGraph {
         x += this.offsetX
         y += this.offsetY
         node := this.canvas.Add("Border").Name("Node_" id).Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").CornerRadius("6").Width("160").SetProp("Canvas.Left", String(x)).SetProp("Canvas.Top", String(y))
-        node.Add("Border.Effect").Add("DropShadowEffect").BlurRadius("8").ShadowDepth("2").Opacity("0.4").Direction("270").Color("Black")
+        node.Add("Border.Effect").Add("DropShadowEffect").BlurRadius("8").ShadowDepth("2").Opacity("0.4").Direction("270").SetProp('Color', "Black")
 
         grid := node.Add("Grid")
         grid.Rows("30", "*")
@@ -467,7 +467,7 @@ class XNodeGraph {
         if (initial && pathEl != "") {
             ; Set initial Data string on the Path element directly at XAML build time
             pathEl.SetProp("Data", geom)
-        } else if (this.ui != "")
+        } else if (this.ui)
             this.ui.Update(pathId, "Data", geom)
     }
 
@@ -1424,7 +1424,7 @@ class XClock {
 
         ; Background glow effect
         glowCanvas := this.grid.Add("Canvas")
-        glowCanvas.Add("Ellipse").Width("300").Height("300").Fill("{DynamicResource Accent}").Opacity("0.1").Margin("-50,-50,0,0").Add("Ellipse.Effect").Add("BlurEffect").Radius("80")
+        glowCanvas.Add("Ellipse").Width("300").Height("300").Fill("{DynamicResource Accent}").Opacity("0.1").Margin("-50,-50,0,0").Add("Ellipse.Effect").Add("BlurEffect").SetProp('Radius', "80")
 
         ; Main Card
         card := this.grid.Add("Border").Use("CardPanel").Padding("30").Background("#10FFFFFF")
@@ -2256,7 +2256,7 @@ class XWebView extends XAMLElement {
     OnWebMessage(state, ctrl, event) {
         if (state.Has("WebMessageReceived")) {
             msg := state["WebMessageReceived"]
-            if (this.OnMessageCallback != "") {
+            if (this.OnMessageCallback) {
                 cb := this.OnMessageCallback
                 cb(msg)
             }
@@ -2345,7 +2345,7 @@ class XFlyout {
             this.container.ClipToBounds("False")
             
             ; Add a beautiful drop shadow for overlays
-            this.container.Add("Border.Effect").Add("DropShadowEffect").BlurRadius("30").ShadowDepth("0").Opacity("0.4").Color("Black")
+            this.container.Add("Border.Effect").Add("DropShadowEffect").BlurRadius("30").ShadowDepth("0").Opacity("0.4").SetProp('Color', "Black")
         } else {
             this.container.ClipToBounds("True")
             if (this.side == "Right")
@@ -2975,7 +2975,7 @@ class XCommandPalette {
         this.Close()
 
         ; Fire per-command callback if set
-        if (this.commands.Has(id) && this.commands[id].callback != "") {
+        if (this.commands.Has(id) && this.commands[id].callback) {
             try this.commands[id].callback.Call(id)
             return
         }

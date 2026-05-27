@@ -283,8 +283,8 @@ profCard := profCardWrap.Add("Border").Background("{DynamicResource ControlBg}")
 profGrid := profCard.Add("Grid").Rows("120", "Auto")
 
 bannerBg := profGrid.Add("Border").Grid_Row(0).Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,1")
-bannerBg.Add("GradientStop").Color("#5865F2").Offset("0.0")
-bannerBg.Add("GradientStop").Color("#ED4245").Offset("1.0")
+bannerBg.Add("GradientStop").SetProp('Color', "#5865F2").Offset("0.0")
+bannerBg.Add("GradientStop").SetProp('Color', "#ED4245").Offset("1.0")
 
 profDetails := profGrid.Add("Grid").Grid_Row(1).Margin("20,-40,20,20")
 

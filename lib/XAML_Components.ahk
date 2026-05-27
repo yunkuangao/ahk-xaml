@@ -117,12 +117,12 @@ class XColorPicker {
         canvasGrid.Add("Border").Name("CanvasBg").Background("#FFFF0000").CornerRadius("6")
 
         wGr := canvasGrid.Add("Border").CornerRadius("6").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
-        wGr.Add("GradientStop").Color("#FFFFFFFF").Offset("0")
-        wGr.Add("GradientStop").Color("#00FFFFFF").Offset("1")
+        wGr.Add("GradientStop").SetProp('Color', "#FFFFFFFF").Offset("0")
+        wGr.Add("GradientStop").SetProp('Color', "#00FFFFFF").Offset("1")
 
         bGr := canvasGrid.Add("Border").CornerRadius("6").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,1").EndPoint("0,0")
-        bGr.Add("GradientStop").Color("#FF000000").Offset("0")
-        bGr.Add("GradientStop").Color("#00000000").Offset("1")
+        bGr.Add("GradientStop").SetProp('Color', "#FF000000").Offset("0")
+        bGr.Add("GradientStop").SetProp('Color', "#00000000").Offset("1")
 
         canvasArea := canvasGrid.Add("Grid").Name("CanvasArea").Background("Transparent").Cursor("Cross")
         canvasArea.Add("Ellipse").Name("CanvasThumb").HorizontalAlignment("Left").VerticalAlignment("Top").Width("14").Height("14").Stroke("White").StrokeThickness("2").Fill("Transparent").Margin("-7,-7,0,0").IsHitTestVisible("False")
@@ -136,13 +136,13 @@ class XColorPicker {
         sliders := sliderGrid.Add("StackPanel").Grid_Column(1).VerticalAlignment("Center").Margin("0,0,15,0")
 
         hueBg := sliders.Add("Border").Height("10").CornerRadius("5").Margin("0,0,0,12").Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
-        hueBg.Add("GradientStop").Color("#FFFF0000").Offset("0")
-        hueBg.Add("GradientStop").Color("#FFFFFF00").Offset("0.16")
-        hueBg.Add("GradientStop").Color("#FF00FF00").Offset("0.33")
-        hueBg.Add("GradientStop").Color("#FF00FFFF").Offset("0.5")
-        hueBg.Add("GradientStop").Color("#FF0000FF").Offset("0.66")
-        hueBg.Add("GradientStop").Color("#FFFF00FF").Offset("0.83")
-        hueBg.Add("GradientStop").Color("#FFFF0000").Offset("1")
+        hueBg.Add("GradientStop").SetProp('Color', "#FFFF0000").Offset("0")
+        hueBg.Add("GradientStop").SetProp('Color', "#FFFFFF00").Offset("0.16")
+        hueBg.Add("GradientStop").SetProp('Color', "#FF00FF00").Offset("0.33")
+        hueBg.Add("GradientStop").SetProp('Color', "#FF00FFFF").Offset("0.5")
+        hueBg.Add("GradientStop").SetProp('Color', "#FF0000FF").Offset("0.66")
+        hueBg.Add("GradientStop").SetProp('Color', "#FFFF00FF").Offset("0.83")
+        hueBg.Add("GradientStop").SetProp('Color', "#FFFF0000").Offset("1")
         sliders.Add("Slider").Name("HueSlider").Minimum("0").Maximum("360").Value("0").Margin("0,-18,0,0")
 
         alphaBg := sliders.Add("Border").Height("10").CornerRadius("5").Background("Transparent").ClipToBounds("True")
@@ -150,8 +150,8 @@ class XColorPicker {
         ; Dynamic Fill overlay masked by a transparent-to-white gradient
         alphaFill := alphaBg.Add("Rectangle").Name("AlphaFillRect").Fill("White")
         mask := alphaFill.Add("Rectangle.OpacityMask").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,0")
-        mask.Add("GradientStop").Color("Transparent").Offset("0")
-        mask.Add("GradientStop").Color("White").Offset("1")
+        mask.Add("GradientStop").SetProp('Color', "Transparent").Offset("0")
+        mask.Add("GradientStop").SetProp('Color', "White").Offset("1")
         sliders.Add("Slider").Name("AlphaSlider").Minimum("0").Maximum("255").Value("255").Margin("0,-14,0,0")
 
         sliderGrid.Add("Border").Name("ColorPreview").Grid_Column(2).Width("36").Height("36").CornerRadius("18").Background(defaultColor).BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1")
@@ -1291,7 +1291,7 @@ _AddRichPopover(this) {
     popup := this.Parent().Add("Popup").PlacementTarget("{Binding Source={x:Reference " elementName "}}").Placement("Bottom").StaysOpen("False").AllowsTransparency("True").IsOpen("{Binding Source={x:Reference " elementName "}, Path=IsChecked, Mode=TwoWay}")
     bdr := popup.Add("Border").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).CornerRadius(6).Padding("10").Margin("4")
 
-    bdr.Add("Border.Effect").Add("DropShadowEffect").BlurRadius(12).ShadowDepth(3).Opacity(0.25).Color("Black")
+    bdr.Add("Border.Effect").Add("DropShadowEffect").BlurRadius(12).ShadowDepth(3).Opacity(0.25).SetProp('Color', "Black")
 
     sp := bdr.Add("StackPanel")
     return sp

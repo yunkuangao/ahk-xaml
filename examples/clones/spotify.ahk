@@ -86,7 +86,7 @@ mainContainer := mainBg.Add("Grid")
 
 ; Dynamic Background Overlay
 bgOverlay := mainContainer.Add("Border").Name("BgOverlay").Background("#422556").Opacity("0.6")
-bgOverlay.Add("Border.Effect").Add("BlurEffect").Radius("150")
+bgOverlay.Add("Border.Effect").Add("BlurEffect").SetProp("Radius", "150")
 
 mainGrid := mainContainer.Add("Grid")
 mainGrid.Rows("60", "*")
