@@ -414,8 +414,6 @@ public class AhkWpfEngine {
                     dummy.Content = prewarmPanel;
                     dummy.Show();
                     dummy.Hide();
-
-                    // app.Run();
 #if ENABLE_WEBVIEW
                     try {
                         var wv = new Microsoft.Web.WebView2.Wpf.WebView2();
@@ -429,6 +427,9 @@ public class AhkWpfEngine {
             if (args.Length >= 2 && args[0] == "--prewarm") {
                 try {
                     int pid = int.Parse(args[1]);
+                    var dummy = new Window { Width = 0, Height = 0, WindowStyle = WindowStyle.None, ShowInTaskbar = false, AllowsTransparency = true, Opacity = 0 };
+                    dummy.Show();
+                    dummy.Hide();
 #if ENABLE_WEBVIEW
                     try {
                         var wv = new Microsoft.Web.WebView2.Wpf.WebView2();
@@ -537,7 +538,14 @@ public class AhkWpfEngine {
         if (btnMaximize != null) btnMaximize.Click += (s, e) => { win.WindowState = win.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; };
         var btnMinimize = win.FindName("BtnMinimize") as ButtonBase;
         if (btnMinimize != null) btnMinimize.Click += (s, e) => { win.WindowState = WindowState.Minimized; };
-
+        
+        win.Resources["BaseWindowRadius"] = new CornerRadius(12);
+        if (Application.Current != null) Application.Current.Resources["BaseWindowRadius"] = win.Resources["BaseWindowRadius"];
+        
+        win.StateChanged += (s, e) => UpdateSnapState(win);
+        win.LocationChanged += (s, e) => UpdateSnapState(win);
+        win.SizeChanged += (s, e) => UpdateSnapState(win);
+        
         win.Loaded += (s, e) => {
             IntPtr hwndVal = new WindowInteropHelper(win).Handle;
             HwndSource.FromHwnd(hwndVal).AddHook(WndProc);
@@ -546,36 +554,15 @@ public class AhkWpfEngine {
             InheritWindowIconAndTitle(win, ownerHwndStr);
             DumpState("Window", "Loaded");
         };
-        win.Closing += (s, e) => {
+        win.Closing += (s, e) => { 
             var ownHwnd = new WindowInteropHelper(win).Owner;
             if (ownHwnd != IntPtr.Zero) {
                 SetWindowPos(ownHwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0003);
                 SetForegroundWindow(ownHwnd);
             }
-            SendToAhk("EVENT|" + winId + "|Window|Closing\n");
+            SendToAhk("EVENT|" + winId + "|Window|Closing\n"); 
         };
-        win.Closed += (s, e) => {
-            SendToAhk("EVENT|" + winId + "|Window|Closed\n");
-            var _winRef = win;
-            var _trackedRef = tracked;
-            var _canvasModesRef = canvasModes;
-            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() => {
-                try {
-                    try { _winRef.Content = null; } catch { }
-                    _winRef.Close();
-                    _winRef = null;
-                    _trackedRef = null;
-                    if (_canvasModesRef != null) _canvasModesRef.Clear();
-                    selectionBox = null;
-                    tempConnection = null;
-                    connectionSourcePort = null;
-                    canvasModes.Clear();
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    GC.Collect(0);
-                } catch { }
-            }));
-        };
+        win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
         
         // Bind events
         if (!string.IsNullOrEmpty(eventsContent)) {
@@ -916,6 +903,13 @@ public class AhkWpfEngine {
         var btnMinimize = win.FindName("BtnMinimize") as ButtonBase;
         if (btnMinimize != null) btnMinimize.Click += (s, e) => { win.WindowState = WindowState.Minimized; };
 
+        win.Resources["BaseWindowRadius"] = new CornerRadius(12);
+        if (Application.Current != null) Application.Current.Resources["BaseWindowRadius"] = win.Resources["BaseWindowRadius"];
+        
+        win.StateChanged += (s, e) => UpdateSnapState(win);
+        win.LocationChanged += (s, e) => UpdateSnapState(win);
+        win.SizeChanged += (s, e) => UpdateSnapState(win);
+        
         win.Loaded += async (s, e) => {
             IntPtr hwnd = new WindowInteropHelper(win).Handle;
             HwndSource.FromHwnd(hwnd).AddHook(WndProc);
@@ -963,36 +957,15 @@ public class AhkWpfEngine {
             };
             timer.Start();
         };
-        win.Closing += (s, e) => {
+        win.Closing += (s, e) => { 
             var ownerHwnd = new System.Windows.Interop.WindowInteropHelper(win).Owner;
             if (ownerHwnd != IntPtr.Zero) {
                 SetWindowPos(ownerHwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0003);
                 SetForegroundWindow(ownerHwnd);
             }
-            SendToAhk("EVENT|" + winId + "|Window|Closing\n");
+            SendToAhk("EVENT|" + winId + "|Window|Closing\n"); 
         };
-        win.Closed += (s, e) => {
-            SendToAhk("EVENT|" + winId + "|Window|Closed\n");
-            var _w2 = win;
-            var _t2 = tracked;
-            var _cm2 = canvasModes;
-            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() => {
-                try {
-                    try { _w2.Content = null; } catch { }
-                    _w2.Close();
-                    _w2 = null;
-                    _t2 = null;
-                    if (_cm2 != null) _cm2.Clear();
-                    selectionBox = null;
-                    tempConnection = null;
-                    connectionSourcePort = null;
-                    canvasModes.Clear();
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    GC.Collect(0);
-                } catch { }
-            }));
-        };
+        win.Closed += (s, e) => { SendToAhk("EVENT|" + winId + "|Window|Closed\n"); };
 
         // Unified event binding — merge all event sources
         // eventsContent may come from: inline data, .bin, or BAML companion .events file
@@ -1866,6 +1839,12 @@ public class AhkWpfEngine {
                     if (sb != null) sb.Begin();
                 } else if (parts[1] == "EnableListBoxDragDrop" && ctrl is ListBox) {
                     EnableListBoxDragDrop((ListBox)ctrl, parts[0]);
+                } else if (parts[1] == "EnableDragSource" && ctrl is UIElement) {
+                    string dragFormat = parts.Length > 2 ? parts[2] : "DragItem";
+                    EnableGenericDragSource((UIElement)ctrl, parts[0], dragFormat);
+                } else if (parts[1] == "EnableDropTarget" && ctrl is UIElement) {
+                    string dropFormat = parts.Length > 2 ? parts[2] : "DragItem";
+                    EnableGenericDropTarget((UIElement)ctrl, parts[0], dropFormat);
                 } else if (parts[1] == "Close" && ctrl is Window) {
                     var ownerHwnd = new System.Windows.Interop.WindowInteropHelper((Window)ctrl).Owner;
                     if (ownerHwnd != IntPtr.Zero) {
@@ -1934,8 +1913,7 @@ public class AhkWpfEngine {
                                 ImageBehavior.SetAnimatedSource((System.Windows.Controls.Image)ctrl, bmp);
                                 return;
                             } else {
-                                var bmp = new System.Windows.Media.Imaging.BitmapImage(new Uri(parts[2], UriKind.RelativeOrAbsolute));
-                                val = bmp;
+                                val = new System.Windows.Media.Imaging.BitmapImage(new Uri(parts[2], UriKind.RelativeOrAbsolute));
                             }
                         }
                         else if (pt == "GridLength") val = new System.Windows.GridLengthConverter().ConvertFromString(parts[2]);
@@ -2601,6 +2579,113 @@ public class AhkWpfEngine {
         }
     }
     
+    // Generic drag-source: enables any element to be dragged with a custom payload
+    // Usage from AHK: ui.Update("MyButton", "EnableDragSource", "DesignerComponent")
+    // The drag payload will be the element's Tag property (if set), or its x:Name
+    private System.Collections.Generic.Dictionary<UIElement, bool> dragSourceEnabled = new System.Collections.Generic.Dictionary<UIElement, bool>();
+    
+    private void EnableGenericDragSource(UIElement element, string ctrlName, string dataFormat) {
+        if (dragSourceEnabled.ContainsKey(element) && dragSourceEnabled[element]) return;
+        dragSourceEnabled[element] = true;
+        
+        Point dragStartPos = new Point();
+        bool mouseDown = false;
+        
+        element.PreviewMouseLeftButtonDown += (s, e) => {
+            dragStartPos = e.GetPosition(null);
+            mouseDown = true;
+        };
+        
+        element.PreviewMouseLeftButtonUp += (s, e) => {
+            mouseDown = false;
+        };
+        
+        element.PreviewMouseMove += (s, e) => {
+            if (!mouseDown || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) {
+                mouseDown = false;
+                return;
+            }
+            
+            Point pos = e.GetPosition(null);
+            if (Math.Abs(pos.X - dragStartPos.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                Math.Abs(pos.Y - dragStartPos.Y) > SystemParameters.MinimumVerticalDragDistance) {
+                
+                mouseDown = false;
+                
+                // Determine payload: use Tag if set, otherwise use control name
+                string payload = ctrlName;
+                var fe = element as FrameworkElement;
+                if (fe != null && fe.Tag != null && fe.Tag.ToString() != "" && fe.Tag.ToString() != "DragEnabled") {
+                    payload = fe.Tag.ToString();
+                }
+                
+                DataObject dragData = new DataObject(dataFormat, payload);
+                dragData.SetData("DragSourceName", ctrlName);
+                
+                try {
+                    DragDrop.DoDragDrop(element, dragData, DragDropEffects.Copy | DragDropEffects.Move);
+                } catch { }
+            }
+        };
+    }
+    
+    // Generic drop-target: enables any element to accept drops and sends events to AHK
+    // Usage from AHK: ui.Update("CanvasArea", "EnableDropTarget", "DesignerComponent")
+    // Events sent: DragEnter (with payload), DragLeave, Drop (with payload + source name)
+    private System.Collections.Generic.Dictionary<UIElement, bool> dropTargetEnabled = new System.Collections.Generic.Dictionary<UIElement, bool>();
+    
+    private void EnableGenericDropTarget(UIElement element, string ctrlName, string dataFormat) {
+        if (dropTargetEnabled.ContainsKey(element) && dropTargetEnabled[element]) return;
+        dropTargetEnabled[element] = true;
+        
+        element.AllowDrop = true;
+        
+        element.DragEnter += (s, e) => {
+            if (e.Data.GetDataPresent(dataFormat)) {
+                e.Effects = DragDropEffects.Copy;
+                string payload = e.Data.GetData(dataFormat) as string ?? "";
+                SendToAhk("EVENT|" + winId + "|" + ctrlName + "|DragEnter|" + 
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(payload)) + "\n");
+            } else if (e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                e.Effects = DragDropEffects.Copy;
+            } else {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        };
+        
+        element.DragOver += (s, e) => {
+            if (e.Data.GetDataPresent(dataFormat) || e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                e.Effects = DragDropEffects.Copy;
+            } else {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        };
+        
+        element.DragLeave += (s, e) => {
+            SendToAhk("EVENT|" + winId + "|" + ctrlName + "|DragLeave|\n");
+        };
+        
+        element.Drop += (s, e) => {
+            if (e.Data.GetDataPresent(dataFormat)) {
+                string payload = e.Data.GetData(dataFormat) as string ?? "";
+                string sourceName = e.Data.GetData("DragSourceName") as string ?? "";
+                var dropPos = e.GetPosition((UIElement)s);
+                string dropData = payload + "|" + sourceName + "|" + 
+                    dropPos.X.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) + "," + 
+                    dropPos.Y.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
+                SendToAhk("EVENT|" + winId + "|" + ctrlName + "|Drop|" + 
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(dropData)) + "\n");
+            } else if (e.Data.GetDataPresent(DataFormats.FileDrop)) {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                SendToAhk("EVENT|" + winId + "|" + ctrlName + "|FileDrop|" + 
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join("|", files))) + "\n");
+            }
+            e.Handled = true;
+        };
+    }
+
     private void EnableListBoxDragDrop(ListBox listBox, string ctrlName) {
         listBox.AllowDrop = true;
         Point dragStart = new Point();

@@ -47,7 +47,7 @@ class XAML_GUI {
             el := XAMLElement.Prototype.Add.Call(thisObj, type),
             el.Grid_Row(1),
             el
-        )})
+        ) })
 
         dragArea := this.main.Add("Border").Name("DragArea").Grid_Row(0).Background("{x:Null}").Cursor("Arrow").SetProp("Panel.ZIndex", "100")
         this.BuildWindowControls(dragArea)
@@ -219,6 +219,7 @@ class XAML_GUI {
 
     BindBaseEvents() {
         this.host.OnEvent("Window", "Loaded", ObjBindMethod(this, "OnUIReady"))
+        this.host.OnEvent("Window", "Closed", (*) => ExitApp())
 
         this.host.OnEvent("ComboTheme", "SelectionChanged", ObjBindMethod(this, "ThemeChanged"))
         this.host.OnEvent("ComboScale", "SelectionChanged", ObjBindMethod(this, "ScaleChanged"))
@@ -349,15 +350,14 @@ class XAML_GUI {
         this.assetPath := assetPath
         this.xamlString := ""
         this.host := XAMLHost("", assetPath, options*)
-        
         ; If auto-prewarm is enabled, immediately start booting the bundled engine in the background
         ; This masks the ~300ms WPF cold-boot time while the AHK script continues executing!
         if (IsSet(XAML_AUTO_PREWARM) && XAML_AUTO_PREWARM) {
             SetTimer(() => XAMLHost.Prewarm(assetPath), -10)
         }
-        
+
         this.BindBaseEvents()
-        
+
         for k, v in this.tokenizers {
             this.host.OnEvent(v.inputName, "GotFocus", ObjBindMethod(this, "OnInputFocus"))
             this.host.OnEvent(v.inputName, "LostFocus", ObjBindMethod(this, "OnInputBlur"))
@@ -370,7 +370,6 @@ class XAML_GUI {
             this.host.OnEvent("PART_DownButton", "Click", (s, c, e) => this.HandleSpinnerButton(v, false))
             v.Bind()
         }
-        
         return this.host
     }
 
@@ -495,10 +494,10 @@ class XAML_GUI {
         radText := state.Has("ComboRadius") ? state["ComboRadius"] : "Smooth (8)"
         RegExMatch(radText, "\((\d+)\)", &match)
         radius := match ? match[1] : "8"
-        
+
         ; Apply to window resources
         this.host.Update("Resource", "WindowRadius", "CornerRadius:" radius)
-        
+
         ; Apply to DWM for Win11 styling
         if (this.host.wpfHwnd) {
             cornerPref := Buffer(4)
@@ -672,7 +671,7 @@ FindThemesIni() {
 }
 
 ; Auto-Prewarm the generic engine in Dev Mode if configured
-; By kicking this off during the script's Auto-Execute phase, the background daemon 
+; By kicking this off during the script's Auto-Execute phase, the background daemon
 ; will be fully booted and ready by the time the user calls app.Show()!
 if (IsSet(XAML_FORCE_DYNAMIC_COMPILE) && XAML_FORCE_DYNAMIC_COMPILE) {
     if (IsSet(XAML_AUTO_PREWARM) && XAML_AUTO_PREWARM) {

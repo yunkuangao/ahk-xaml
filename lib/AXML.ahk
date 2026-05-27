@@ -226,7 +226,6 @@ class AXML {
     ; --------------------------------------------------------------------------
     ; Internal Helpers
     ; --------------------------------------------------------------------------
-
     static DumpNode(node, indent := 0) {
         if (Type(node) == "Array") {
             out := ""
@@ -416,12 +415,6 @@ class AXML {
             if (templates.Has(node.Type)) {
                 templateDef := templates[node.Type]
                 
-                ; Clone the template's first child (the root of the template definition)
-                ; Wait, a template is defined like:
-                ; @Template SettingCard:
-                ;   Border:
-                ;     ...
-                ; So the template's Children[1] is the actual root element.
                 if (templateDef.Children.Length > 0) {
                     instantiatedNode := this.CloneNode(templateDef.Children[1], node.Properties)
                     if (node.Name != "")

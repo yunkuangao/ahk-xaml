@@ -1,6 +1,5 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
-#Include "XAML_Config.ahk"
 
 
 class CodeBox {
@@ -102,7 +101,6 @@ class XAMLHost {
         XAMLHost.instanceCounter++
         this.id := "WPF_" A_TickCount "_" XAMLHost.instanceCounter "_" Random(1000, 9999)
         XAMLHost._instances[this.id] := this
-        try FileAppend("[AHK-NEW] " this.id " instances=" XAMLHost._instances.Length "`n", A_Temp "\AhkWpf\mem_trace.log")
         this.xaml := xaml
         this.exePath := exePath
         this.ownerHwnd := ownerHwnd
@@ -588,10 +586,11 @@ class XAMLHost {
         embeddedRes := ""
         bamlPath := libDir "\xaml.components.baml"
         xamlPath := libDir "\xaml.components.xaml"
-        if FileExist(bamlPath)
+        if FileExist(bamlPath) {
             embeddedRes .= ' /resource:"' bamlPath '"'
-        if FileExist(xamlPath)
+        } else if FileExist(xamlPath) {
             embeddedRes .= ' /resource:"' xamlPath '"'
+        }
 
         for _, res in extraResources {
             if FileExist(res)
