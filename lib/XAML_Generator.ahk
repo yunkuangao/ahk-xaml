@@ -135,6 +135,15 @@ class XAMLElement {
         return this._Parent
     }
 
+    ; Walk the parent chain to find the owning XAML_GUI instance (if any).
+    ; Returns the XAML_GUI or "" if the element is not attached to one.
+    _FindApp() {
+        root := this
+        while root._Parent
+            root := root._Parent
+        return root.HasOwnProp("_App") ? root._App : ""
+    }
+
     ; Find a descendant element by its Name or x:Name
     Find(name) {
         if (this._Props.Has("Name") && this._Props["Name"] == name)
@@ -415,5 +424,22 @@ _XAMLElement_On(this, events, callback) {
 XAMLElement.Prototype.DefineProp("Track", { Call: _XAMLElement_Track })
 _XAMLElement_Track(this) {
     this._Tracked := true
+    return this  ; chainable
+}
+
+; Register a global hotkey on an element (chainable).
+; action can be:
+;   - Omitted:  defaults to "Invoke" (programmatic click/toggle)
+;   - A string: "Invoke", "Click", "Focus", "Blur", "Toggle"
+;   - A callback: (*) => DoSomething()
+; Examples:
+;   .Hotkey("^+S")                         ; Ctrl+Shift+S → Invoke (click)
+;   .Hotkey("^+F", "Focus")                ; Ctrl+Shift+F → Focus the element
+;   .Hotkey("^+X", (*) => MsgBox("Hi"))    ; Ctrl+Shift+X → Custom callback
+XAMLElement.Prototype.DefineProp("Hotkey", { Call: _XAMLElement_Hotkey })
+_XAMLElement_Hotkey(this, key, action := "Invoke") {
+    if !this.HasOwnProp("_Hotkeys")
+        this._Hotkeys := []
+    this._Hotkeys.Push({ Key: key, Action: action })
     return this  ; chainable
 }

@@ -745,6 +745,13 @@ class XRibbon {
         this.tabs := []
         this.isPinned := true
         this.container.ClipToBounds("False")
+
+        ; Auto-register with XAML_GUI for auto-bind during Compile()
+        try {
+            _app := parentXAML._FindApp()
+            if (_app != "" && _app.HasMethod("RegisterComponent"))
+                _app.RegisterComponent(this)
+        }
     }
 
     AddTab(title) {
@@ -753,6 +760,11 @@ class XRibbon {
         tab := XRibbonTab(wrapPanel)
         this.tabs.Push(tab)
         return tab
+    }
+
+    ; Auto-bind compatible alias
+    Bind(ui) {
+        this.BindEvents(ui)
     }
 
     BindEvents(ui) {
@@ -965,6 +977,13 @@ class DateRangePickerEx {
                 btnDay := cell.Add("Button").Name(this.id "_Day_" dayId).Width(32).Height(32).BorderThickness("0").Cursor("Hand")
                 btnDay.InjectResources('<Style TargetType="Button"><Setter Property="Foreground" Value="{DynamicResource TextMain}"/><Setter Property="Background" Value="Transparent"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="16" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter><Style.Triggers><Trigger Property="Tag" Value="Selected"><Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="White"/></Trigger><Trigger Property="Tag" Value="Today"><Setter Property="BorderThickness" Value="1"/><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="{DynamicResource Accent}"/></Trigger></Style.Triggers></Style>')
             }
+        }
+
+        ; Auto-register with XAML_GUI for auto-bind during Compile()
+        try {
+            _app := parent._FindApp()
+            if (_app != "" && _app.HasMethod("RegisterComponent"))
+                _app.RegisterComponent(this)
         }
     }
 

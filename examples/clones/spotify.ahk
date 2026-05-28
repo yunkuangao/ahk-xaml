@@ -45,10 +45,13 @@ AddNavBtn(parent, iconHex, text, active := false) {
 
 btnHome := AddNavBtn(navSp, Chr(0xE80F), "Home", true)
 btnHome.Name("BtnHome")
+    .On("Click", ShowHomeView)
 btnSearch := AddNavBtn(navSp, Chr(0xE721), "Search")
 btnSearch.Name("BtnSearch")
+    .On("Click", (*) => searchPalette.Open())
 btnLibrary := AddNavBtn(navSp, Chr(0xE838), "Your Library")
 btnLibrary.Name("BtnLibrary")
+    .On("Click", ShowLibraryView)
 
 ; Playlists
 playlistSv := sidebar.Add("ScrollViewer").Grid_Row(1).Margin("12,10,12,10").VerticalScrollBarVisibility("Auto")
@@ -67,6 +70,7 @@ for i, p in playlists {
 ; SEARCH COMMAND PALETTE
 ; ==============================================================================
 searchPalette := app.overlay.CommandPalette("SpotifySearch")
+searchPalette.Hotkey("^f")
 searchPalette.AddCommand("song_1", "Starboy", {Icon: Chr(0xE8D6), Category: "Songs", Callback: (*) => PlaySong("Starboy", "The Weeknd")})
 searchPalette.AddCommand("song_2", "Blinding Lights", {Icon: Chr(0xE8D6), Category: "Songs", Callback: (*) => PlaySong("Blinding Lights", "The Weeknd")})
 searchPalette.AddCommand("song_3", "Midnight City", {Icon: Chr(0xE8D6), Category: "Songs", Callback: (*) => PlaySong("Midnight City", "M83")})
@@ -140,11 +144,17 @@ AddTopCard(grid, row, col, text, color, id) {
 }
 
 AddTopCard(topCardsGrid, 0, 0, "Liked Songs", "#4527A0", "Card_LikedSongs")
+    .On("Click", (*) => PlaySong("Liked Songs", "Playlist", "", "#4527A0"))
 AddTopCard(topCardsGrid, 0, 1, "Discover Weekly", "#2E7D32", "Card_DiscoverWeekly")
+    .On("Click", (*) => PlaySong("Discover Weekly", "Playlist", "", "#2E7D32"))
 AddTopCard(topCardsGrid, 0, 2, "Daily Mix 1", "#1565C0", "Card_DailyMix1")
+    .On("Click", (*) => PlaySong("Daily Mix 1", "Playlist", "", "#1565C0"))
 AddTopCard(topCardsGrid, 1, 0, "Coding Focus", "#424242", "Card_CodingFocus")
+    .On("Click", (*) => PlaySong("Coding Focus", "Playlist", "", "#424242"))
 AddTopCard(topCardsGrid, 1, 1, "Synthwave Essentials", "#C2185B", "Card_Synthwave")
+    .On("Click", (*) => PlaySong("Synthwave Essentials", "Playlist", "", "#C2185B"))
 AddTopCard(topCardsGrid, 1, 2, "Chill Vibes", "#00838F", "Card_ChillVibes")
+    .On("Click", (*) => PlaySong("Chill Vibes", "Playlist", "", "#00838F"))
 
 ; Jump Back In (Carousel)
 homeSp.Add("TextBlock").Text("Jump back in").FontSize(22).FontWeight("Bold").Foreground("White").Margin("0,0,0,15")
@@ -184,14 +194,21 @@ AddLibraryItem(wrapPanel, title, subtitle, seed, id) {
     sp := grid.Add("StackPanel").Grid_Row(1).Margin("15,10,15,15")
     sp.Add("TextBlock").Text(title).Foreground("White").FontWeight("SemiBold").FontSize("14").TextTrimming("CharacterEllipsis").Margin("0,0,0,4")
     sp.Add("TextBlock").Text(subtitle).Foreground("{DynamicResource TextSub}").FontSize("12").TextTrimming("CharacterEllipsis")
+    return bdr
 }
 
 AddLibraryItem(libWrap, "Liked Songs", "Playlist • 1,204 songs", "liked", "Lib_Liked")
+    .On("Click", (*) => PlaySong("Liked Songs", "Playlist"))
 AddLibraryItem(libWrap, "Albums", "Collection", "albums", "Lib_Albums")
+    .On("Click", (*) => PlaySong("Your Albums", "Collection"))
 AddLibraryItem(libWrap, "Podcasts", "Shows you follow", "pods", "Lib_Pods")
+    .On("Click", (*) => PlaySong("Podcasts", "Shows"))
 AddLibraryItem(libWrap, "Starboy", "The Weeknd", "Starboy", "Lib_Starboy")
+    .On("Click", (*) => PlaySong("Starboy", "The Weeknd"))
 AddLibraryItem(libWrap, "1989", "Taylor Swift", "1989", "Lib_1989")
+    .On("Click", (*) => PlaySong("1989", "Taylor Swift"))
 AddLibraryItem(libWrap, "Currents", "Tame Impala", "currents", "Lib_Currents")
+    .On("Click", (*) => PlaySong("Currents", "Tame Impala"))
 
 
 ; ==============================================================================
@@ -204,6 +221,7 @@ friendHeader := friendGrid.Add("Grid").Grid_Row(0).Margin("20,20,20,20")
 friendHeader.Cols("*", "Auto")
 friendHeader.Add("TextBlock").Grid_Column(0).Text("Friend Activity").Foreground("White").FontWeight("Bold").FontSize("14").VerticalAlignment("Center")
 friendHeader.Add("Button").Grid_Column(1).Content(Chr(0xE814)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("0").Cursor("Hand").Name("BtnCloseFriends")
+    .On("Click", ToggleFriends)
 
 friendSv := friendGrid.Add("ScrollViewer").Grid_Row(1).VerticalScrollBarVisibility("Auto").Margin("0,0,0,10")
 friendSp := friendSv.Add("StackPanel")
@@ -241,6 +259,7 @@ titleSp := nowPlaying.Add("StackPanel").VerticalAlignment("Center").Margin("0,0,
 titleSp.Add("TextBlock").Name("TrackTitle").Text("Starboy").Foreground("White").FontSize(14).FontWeight("SemiBold").Cursor("Hand")
 titleSp.Add("TextBlock").Name("TrackArtist").Text("The Weeknd, Daft Punk").Foreground("{DynamicResource TextSub}").FontSize(12).Cursor("Hand")
 nowPlaying.Add("Button").Name("LikeBtn").Content(Chr(0xEB51)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("White").BorderThickness(0).FontSize(16).VerticalAlignment("Center").Cursor("Hand")
+    .On("Click", ToggleLike)
 
 ; Center: Controls
 controlsCenter := playerGrid.Add("StackPanel").Grid_Column(1).VerticalAlignment("Center").HorizontalAlignment("Center")
@@ -248,11 +267,14 @@ controlsCenter := playerGrid.Add("StackPanel").Grid_Column(1).VerticalAlignment(
 ctrlBtns := controlsCenter.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Center").Margin("0,0,0,8")
 
 ctrlBtns.Add("Button").Name("ShuffleBtn").Content(Chr(0xE8B1)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).FontSize(14).Margin("0,0,15,0").Cursor("Hand")
+    .On("Click", ToggleShuffle)
 ctrlBtns.Add("Button").Content(Chr(0xE892)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).FontSize(16).Margin("0,0,15,0").Cursor("Hand")
 playBtn := ctrlBtns.Add("Button").Name("PlayBtn").Content(Chr(0xE768)).FontFamily("Segoe Fluent Icons").Background("White").Foreground("Black").BorderThickness(0).Width("32").Height("32").FontSize(16).Margin("0,0,15,0").Cursor("Hand")
+    .On("Click", TogglePlay)
 playBtn.InjectResources('<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="16"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bg" Property="Background" Value="#E0E0E0"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
 ctrlBtns.Add("Button").Content(Chr(0xE893)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).FontSize(16).Margin("0,0,15,0").Cursor("Hand")
 ctrlBtns.Add("Button").Name("RepeatBtn").Content(Chr(0xE8EE)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).FontSize(14).Cursor("Hand")
+    .On("Click", ToggleRepeat)
 
 progressGrid := controlsCenter.Add("Grid").Width("400")
 progressGrid.Cols("Auto", "*", "Auto")
@@ -265,8 +287,11 @@ progressGrid.Add("TextBlock").Name("TotalTime").Grid_Column(2).Text("3:50").Fore
 ; Right: Extra Controls
 extraSp := playerGrid.Add("StackPanel").Grid_Column(2).Orientation("Horizontal").HorizontalAlignment("Right").VerticalAlignment("Center")
 extraSp.Add("Button").Name("LyricsBtn").Content(Chr(0xE836)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).FontSize(14).Margin("0,0,10,0").Cursor("Hand")
+    .On("Click", (*) => app.dialogs.Show("Feature Not Available", "Lyrics are not available for this track yet.", "OK", "Info"))
 extraSp.Add("Button").Name("QueueBtn").Content(Chr(0xE9E9)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).FontSize(14).Margin("0,0,10,0").Cursor("Hand")
+    .On("Click", (*) => queueFlyout.Toggle())
 extraSp.Add("Button").Name("MuteBtn").Content(Chr(0xE995)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).FontSize(14).Margin("0,0,10,0").Cursor("Hand")
+    .On("Click", ToggleMute)
 
 volSlider := extraSp.Add("Slider").Name("VolumeSlider").Width("80").Value("70").Maximum("100").VerticalAlignment("Center").Margin("0,0,10,0")
 
@@ -409,49 +434,13 @@ UpdateProgress() {
 SetTimer(UpdateProgress, 1000)
 
 ; ==============================================================================
-; COMPILE & BIND
+; COMPILE & SHOW
 ; ==============================================================================
 ui := app.Compile()
-jumpCarousel.Bind(ui)
-popCarousel.Bind(ui)
-searchPalette.Bind(ui, "^f")
-queueFlyout.Bind(ui)
-
-; Player Controls
-ui.OnEvent("PlayBtn", "Click", TogglePlay)
-ui.OnEvent("LikeBtn", "Click", ToggleLike)
-ui.OnEvent("ShuffleBtn", "Click", ToggleShuffle)
-ui.OnEvent("RepeatBtn", "Click", ToggleRepeat)
-ui.OnEvent("MuteBtn", "Click", ToggleMute)
-ui.OnEvent("QueueBtn", "Click", (*) => queueFlyout.Toggle())
-ui.OnEvent("LyricsBtn", "Click", (*) => app.dialogs.Show("Feature Not Available", "Lyrics are not available for this track yet.", "OK", "Info"))
-
-; Sidebar Nav
-ui.OnEvent("BtnSearch", "Click", (*) => searchPalette.Open())
-ui.OnEvent("BtnHome", "Click", ShowHomeView)
-ui.OnEvent("BtnLibrary", "Click", ShowLibraryView)
-
-; Friend Activity
-ui.OnEvent("BtnCloseFriends", "Click", ToggleFriends)
 
 ; Carousel & Card Clicks
 jumpCarousel.OnCardSelected := (this, id, title) => PlaySong(title, "Jump Back In")
 popCarousel.OnCardSelected := (this, id, title) => PlaySong(title, "Popular Playlists")
-
-ui.OnEvent("Card_LikedSongs", "Click", (*) => PlaySong("Liked Songs", "Playlist", "", "#4527A0"))
-ui.OnEvent("Card_DiscoverWeekly", "Click", (*) => PlaySong("Discover Weekly", "Playlist", "", "#2E7D32"))
-ui.OnEvent("Card_DailyMix1", "Click", (*) => PlaySong("Daily Mix 1", "Playlist", "", "#1565C0"))
-ui.OnEvent("Card_CodingFocus", "Click", (*) => PlaySong("Coding Focus", "Playlist", "", "#424242"))
-ui.OnEvent("Card_Synthwave", "Click", (*) => PlaySong("Synthwave Essentials", "Playlist", "", "#C2185B"))
-ui.OnEvent("Card_ChillVibes", "Click", (*) => PlaySong("Chill Vibes", "Playlist", "", "#00838F"))
-
-; Library Item Clicks
-ui.OnEvent("Lib_Liked", "Click", (*) => PlaySong("Liked Songs", "Playlist"))
-ui.OnEvent("Lib_Albums", "Click", (*) => PlaySong("Your Albums", "Collection"))
-ui.OnEvent("Lib_Pods", "Click", (*) => PlaySong("Podcasts", "Shows"))
-ui.OnEvent("Lib_Starboy", "Click", (*) => PlaySong("Starboy", "The Weeknd"))
-ui.OnEvent("Lib_1989", "Click", (*) => PlaySong("1989", "Taylor Swift"))
-ui.OnEvent("Lib_Currents", "Click", (*) => PlaySong("Currents", "Tame Impala"))
 
 for i, p in playlists {
     boundName := p

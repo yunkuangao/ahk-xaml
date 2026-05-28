@@ -60,6 +60,7 @@ docSp.Rows("Auto", "*")
 headerSp := docSp.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Margin("0,0,0,10")
 headerSp.Add("TextBlock").Text("Markdown Renderer").Foreground("{DynamicResource TextSub}").FontSize("12").FontWeight("Bold").Margin("0,0,10,0")
 headerSp.Add("CheckBox").Name("BtnToggleMd").Content("Edit Raw").Style("{StaticResource ToggleSwitch}")
+    .On("Checked", (*) => (ui.Update("MdViewSv", "Visibility", "Collapsed"), ui.Update("MdEditor", "Visibility", "Visible")))
 
 mdGrid := docSp.Add("Grid").Grid_Row(1)
 mdSv := mdGrid.Add("ScrollViewer").Name("MdViewSv").VerticalScrollBarVisibility("Auto")
@@ -67,6 +68,7 @@ mdRenderer := mdSv.Add("StackPanel").Name("MdView").VerticalAlignment("Top")
 mdRenderer.MarkdownRenderer(mdText)
 
 mdGrid.Add("TextBox").Name("MdEditor").Text(mdText).TextWrapping("Wrap").AcceptsReturn("True").VerticalScrollBarVisibility("Auto").VerticalContentAlignment("Top").Visibility("Collapsed").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10")
+    .Track()
 
 nav.AddPage("Dashboard", Chr(0xEA24), dashGrid)
 
@@ -81,6 +83,7 @@ kanbanGrid.Add("TextBlock").Text("Task Board").Grid_Row(0).FontSize("24").FontWe
 
 kb := kanbanGrid.KanbanBoard("ProjectKanban")
 kb.sv.Grid_Row(2)
+kb.EnableDrag()
 Example_MockData.PopulateKanbanBoard(kb)
 
 nav.AddPage("Kanban", Chr(0xE8D4), kanbanGrid)
@@ -100,24 +103,33 @@ nodesHeader.Add("TextBlock").Text("Right-click: context menu  |  Scroll: zoom  |
 tb := nodesHeader.Add("StackPanel").Grid_Column(1).Orientation("Horizontal")
 
 btnPan := tb.Add("RadioButton").Name("BtnPanMode").Content("Pan Mode").IsChecked("True").Margin("0,0,10,0")
+    .On("Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Pan"))
 btnSel := tb.Add("RadioButton").Name("BtnSelectMode").Content("Select Mode").Margin("0,0,10,0")
+    .On("Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Select"))
 btnKnife := tb.Add("RadioButton").Name("BtnKnifeMode").Content("Knife Tool").Margin("0,0,20,0")
+    .On("Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Knife"))
 
 chkSnap := tb.Add("CheckBox").Name("ChkGridSnap").Content("Grid Snap").IsChecked("True").VerticalAlignment("Center").Margin("0,0,20,0")
+    .On("Checked", (*) => ng.SetGridSnap(ui, true))
+    .On("Unchecked", (*) => ng.SetGridSnap(ui, false))
 
 btnZoomOut := tb.Add("Button").Name("BtnZoomOut").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("8,4").Cursor("Hand").Margin("0,0,4,0")
+    .On("Click", (*) => ui.Update(ng.id, "Zoom", "0.8"))
 btnZoomOut.Add("TextBlock").Text("-").FontSize("14").FontWeight("Bold").VerticalAlignment("Center").Margin("0,-2,0,0")
 
 btnZoomIn := tb.Add("Button").Name("BtnZoomIn").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("8,4").Cursor("Hand").Margin("0,0,4,0")
+    .On("Click", (*) => ui.Update(ng.id, "Zoom", "1.2"))
 btnZoomIn.Add("TextBlock").Text("+").FontSize("14").FontWeight("Bold").VerticalAlignment("Center").Margin("0,-2,0,0")
 
 btnZoom := tb.Add("Button").Name("BtnZoomAll").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness("1").BorderBrush("{DynamicResource ControlBorder}").Padding("10,4").Cursor("Hand")
+    .On("Click", (*) => ui.Update(ng.id, "ZoomAll", ""))
 spZ := btnZoom.Add("StackPanel").Orientation("Horizontal")
 spZ.Add("TextBlock").Text(Chr(0xE8A3)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize("12").VerticalAlignment("Center").Margin("0,0,6,0")
 spZ.Add("TextBlock").Text("Zoom Fit").FontSize("12").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}")
 
 ng := nodesGrid.NodeGraph("WorkflowGraph")
 ng.bdr.Grid_Row(2)
+ng.EnableDrag()
 Example_MockData.PopulateNodeGraph(ng)
 
 nav.AddPage("Node Graph", Chr(0xE9D5), nodesGrid)
@@ -149,9 +161,13 @@ webHeader := webGrid.Add("StackPanel").Grid_Row(0).Orientation("Horizontal").Mar
 webHeader.Add("TextBlock").Text("Web/File Viewer").FontSize("24").FontWeight("Light").Foreground("{DynamicResource TextMain}").VerticalAlignment("Center").Margin("0,0,20,0")
 
 webHeader.Add("Button").Name("BtnSvgBgColor").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Change Background Color").Add("TextBlock").Text(Chr(0xE790)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+    .On("Click", ChangeSvgBgColor)
 webHeader.Add("Button").Name("BtnSvgGridDark").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Dark Grid").Add("TextBlock").Text(Chr(0xE80A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+    .On("Click", (state, ctrl, event) => webViewer.SetGrid("Dark"))
 webHeader.Add("Button").Name("BtnSvgGridLight").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,5,0").ToolTip("Light Grid").Add("TextBlock").Text(Chr(0xE80A)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).Foreground("{DynamicResource TextSub}").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+    .On("Click", (state, ctrl, event) => webViewer.SetGrid("Light"))
 webHeader.Add("Button").Name("BtnSvgGridNone").Style("{StaticResource IconButton}").Width("32").Height("32").Margin("0,0,15,0").ToolTip("No Grid").Add("TextBlock").Text(Chr(0xE814)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(16).Foreground("#FF453A").HorizontalAlignment("Center").VerticalAlignment("Center").Margin("0")
+    .On("Click", (state, ctrl, event) => webViewer.SetGrid("None"))
 
 webHeader.Add("Button").Name("BtnWebReplace").Content("Replace File").Background("Transparent").Foreground("{DynamicResource Accent}").BorderThickness("0").Margin("15,0,0,0").VerticalAlignment("Center").Visibility("Collapsed").Cursor("Hand")
 
@@ -174,6 +190,7 @@ imgGrid.Rows("Auto", "*")
 imgGrid.Add("TextBlock").Text("Image Cropper").Grid_Row(0).Foreground("{DynamicResource TextSub}").FontSize("12").FontWeight("Bold").Margin("0,0,0,10")
 ic := imgGrid.ImageCropper("", "ImgCrop")
 ic.grid.Grid_Row(1)
+ic.EnableDrag()
 
 nav.AddPage("Image", Chr(0xE91B), cropGrid)
 
@@ -189,10 +206,14 @@ clockHeader.Add("TextBlock").Text("Dynamic Clock").FontSize("24").FontWeight("Li
 
 liveSp := clockHeader.Add("StackPanel").Orientation("Horizontal").Margin("0,0,15,0")
 liveSp.Add("CheckBox").Name("BtnClockLive").Style("{StaticResource ToggleSwitch}").IsChecked("True").Margin("0,0,10,0")
+    .On("Checked", (s, c, e) => SwitchClockMode("Live", s, digitalClock, ui))
+    .On("Unchecked", (s, c, e) => SwitchClockMode("Edit", s, digitalClock, ui))
 liveSp.Add("TextBlock").Text("Live Mode").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
 
 editSp := clockHeader.Add("StackPanel").Orientation("Horizontal")
 editSp.Add("CheckBox").Name("BtnClockEdit").Style("{StaticResource ToggleSwitch}").Margin("0,0,10,0")
+    .On("Checked", (s, c, e) => SwitchClockMode("Edit", s, digitalClock, ui))
+    .On("Unchecked", (s, c, e) => SwitchClockMode("Live", s, digitalClock, ui))
 editSp.Add("TextBlock").Text("Edit Mode").Foreground("{DynamicResource TextSub}").VerticalAlignment("Center")
 
 cBox := clockPage.Add("Grid").Grid_Row(1)
@@ -271,6 +292,8 @@ imgViewerContent.Cols("200", "*")
 
 iconListBdr := imgViewerContent.Add("Border").Grid_Column(0).Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").CornerRadius("8").Margin("0,0,15,0")
 iconList := iconListBdr.Add("ListBox").Name("ImgExampleList").Background("Transparent").BorderThickness("0").Padding("5")
+    .On("SelectionChanged", LoadExampleImage)
+    .Track()
 global exampleIcons := [{ Name: "Shell32 Icon 1", Dll: "shell32.dll", Idx: 1 }, { Name: "Shell32 Icon 3", Dll: "shell32.dll", Idx: 3 }, { Name: "Shell32 Icon 4", Dll: "shell32.dll", Idx: 4 }, { Name: "Shell32 Icon 15", Dll: "shell32.dll", Idx: 15 }, { Name: "Shell32 Icon 44", Dll: "shell32.dll", Idx: 44 }, { Name: "Shell32 Icon 130", Dll: "shell32.dll", Idx: 130 }, { Name: "Imageres Icon 109", Dll: "imageres.dll", Idx: 109 }, { Name: "Imageres Icon 110", Dll: "imageres.dll", Idx: 110 }
 ]
 
@@ -294,8 +317,6 @@ nav.AddPage("Image Viewer", Chr(0xEB9F), imgViewerPage)
 
 ui := app.Compile()
 
-nav.Bind(ui)
-
 SetTimer(LoadPreviewIcons, 1000)
 LoadPreviewIcons() {
     static attempts := 0
@@ -318,32 +339,10 @@ LoadPreviewIcons() {
     }
 }
 
-; Bindings
-nav.Bind(ui)
-kb.Bind(ui)
-ng.Bind(ui)
-mp.Bind(ui)
-webViewer.Bind(ui)
+; Post-compile bindings (dynamic/non-factory elements)
 ui.OnEvent("BtnWebReplace", "Click", ObjBindMethod(webViewer, "OnClick"))
-ui.OnEvent("BtnSvgBgColor", "Click", ChangeSvgBgColor)
-ui.OnEvent("BtnSvgGridDark", "Click", (state, ctrl, event) => webViewer.SetGrid("Dark"))
-ui.OnEvent("BtnSvgGridLight", "Click", (state, ctrl, event) => webViewer.SetGrid("Light"))
-ui.OnEvent("BtnSvgGridNone", "Click", (state, ctrl, event) => webViewer.SetGrid("None"))
-imgViewer.Bind(ui)
-ui.Track("ImgExampleList")
-ui.OnEvent("ImgExampleList", "SelectionChanged", LoadExampleImage)
 ui.OnEvent("BtnImgReplace", "Click", ObjBindMethod(imgViewer, "OnClick"))
-ic.Bind(ui)
 
-digitalClock.Bind(ui)
-myEditor.Bind(ui)
-pg.Bind(ui)
-dv.Bind(ui)
-
-ui.OnEvent("BtnClockLive", "Checked", (s, c, e) => SwitchClockMode("Live", s, digitalClock, ui))
-ui.OnEvent("BtnClockEdit", "Checked", (s, c, e) => SwitchClockMode("Edit", s, digitalClock, ui))
-ui.OnEvent("BtnClockLive", "Unchecked", (s, c, e) => SwitchClockMode("Edit", s, digitalClock, ui))
-ui.OnEvent("BtnClockEdit", "Unchecked", (s, c, e) => SwitchClockMode("Live", s, digitalClock, ui))
 
 SwitchClockMode("Live", Map(), digitalClock, ui) ; Force initialize state
 
@@ -392,10 +391,8 @@ ui.OnEvent("KbMoveLeft", "Click", (*) => (kb.HasProp("selectedColIdx") && kb.sel
 ui.OnEvent("KbMoveRight", "Click", (*) => (kb.HasProp("selectedColIdx") && kb.selectedColIdx > 0 && kb.selectedColIdx < kb.columns.Length) ? kb.MoveSelectedTo(kb.selectedColIdx + 1) : "")
 
 ; Track markdown editor for state
-ui.Track("MdEditor")
 ui.Track("ComboTheme")
 
-ui.OnEvent("BtnToggleMd", "Checked", (*) => (ui.Update("MdViewSv", "Visibility", "Collapsed"), ui.Update("MdEditor", "Visibility", "Visible")))
 ui.OnEvent("BtnToggleMd", "Unchecked", ObjBindMethod(app, "RebuildMarkdown"))
 
 ; Extend app to handle the dynamic rebuild
@@ -485,25 +482,9 @@ ui.OnEvent("BtnLoad", "Click", (*) => ng.LoadState("node_state.ini", ui))
 ui.OnEvent("BtnCmdClose", "Click", (*) => ExitApp())
 ui.OnEvent("KbMoveLeft", "Click", (*) => kb.MoveSelectedTo(kb.selectedColIdx - 1))
 ui.OnEvent("KbMoveRight", "Click", (*) => kb.MoveSelectedTo(kb.selectedColIdx + 1))
-ui.OnEvent("BtnZoomAll", "Click", (*) => ui.Update(ng.id, "ZoomAll", ""))
-ui.OnEvent("BtnZoomIn", "Click", (*) => ui.Update(ng.id, "Zoom", "1.2"))
-ui.OnEvent("BtnZoomOut", "Click", (*) => ui.Update(ng.id, "Zoom", "0.8"))
-ui.OnEvent("BtnPanMode", "Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Pan"))
-ui.OnEvent("BtnSelectMode", "Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Select"))
-ui.OnEvent("BtnKnifeMode", "Checked", (*) => ui.Update(ng.id, "SetCanvasMode", "Knife"))
-ui.OnEvent("ChkGridSnap", "Checked", (*) => ng.SetGridSnap(ui, true))
-ui.OnEvent("ChkGridSnap", "Unchecked", (*) => ng.SetGridSnap(ui, false))
 
 HotIfWinActive "ahk_pid " DllCall("GetCurrentProcessId")
 Hotkey("Delete", (*) => ng.DeleteSelectedConnections())
 HotIfWinActive
-
-; Enable C#-side drag on nodes and cropper after Window loads
-ui.OnEvent("Window", "LoadedHwnd", _EnableDragComponents)
-_EnableDragComponents(state?, ctrl?, event?) {
-    kb.EnableDrag(ui)
-    ng.EnableDrag(ui)
-    ic.EnableDrag(ui)
-}
 
 app.Show()

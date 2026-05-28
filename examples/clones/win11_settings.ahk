@@ -277,6 +277,8 @@ appSearchGrid.Cols("250", "*", "Auto")
 
 searchBoxBorder := appSearchGrid.Add("Border").Grid_Column(0).CornerRadius("4").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").VerticalAlignment("Center")
 appsSearchBox := searchBoxBorder.Add("TextBox").Name("TxtSearchApps").Text("").Background("{DynamicResource DropdownBg}").Foreground("{DynamicResource TextMain}").BorderThickness("0").Padding("10,6,10,6")
+    .On("TextChanged", HandleAppSearch)
+    .Track()
 
 sortCombo := appSearchGrid.Add("ComboBox").Name("ComboSortApps").Grid_Column(2).Width("150").Height("32").SelectedIndex(0).VerticalAlignment("Center")
 sortCombo.Add("ComboBoxItem").Content("Name (A to Z)")
@@ -367,6 +369,7 @@ wuProgBdr := statusTextSp.Add("Border").Name("WuProgBdr").Margin("0,10,0,0").Vis
 wuProgressBar := wuProgBdr.Add("ProgressBar").Name("WuProgBar").Minimum(0).Maximum(100).Value(0).Height(4).BorderThickness(0).Background("Transparent").Foreground("{DynamicResource Accent}")
 
 statusGrid.Add("Button").Name("BtnCheckUpdates").Content("Check for updates").Grid_Column(2).Padding("15,8,15,8").FontWeight("SemiBold").Cursor("Hand")
+    .On("Click", HandleCheckUpdates)
 
 wuPage.Add("TextBlock").Text("More options").FontSize(16).FontWeight("SemiBold").Foreground("{DynamicResource TextMain}").Margin("0,10,0,10")
 
@@ -386,10 +389,8 @@ Pages["System"].Visibility("Visible")
 ui := app.Compile()
 ui.Track("TxtCustomAccent")
 ui.Track("TxtCustomBg")
-ui.Track("TxtSearchApps")
 
 ; --- Apps Event Handlers ---
-ui.OnEvent("TxtSearchApps", "TextChanged", HandleAppSearch)
 for appObj in AppList {
     ui.OnEvent("BtnUninstall_" appObj.Id, "Click", HandleUninstallApp.Bind(appObj))
 }
@@ -401,11 +402,9 @@ ui.OnEvent("CardSignInOpts", "MouseLeftButtonDown", (*) => XDialog.Show({ Title:
 ui.OnEvent("CardFamily", "MouseLeftButtonDown", (*) => XDialog.Show({ Title: "Family & other users", Message: "Family Group members:`n`n- Jane Doe (Child - Screen time: 2 hrs)`n- Little Timmy (Child - Screen time: 1 hr)", Icon: Chr(0xE77A), Buttons: ["OK"], Owner: ui.wpfHwnd, Theme: "Dark Mica (Win 11)" }))
 
 ; --- Windows Update Event Handlers ---
-ui.OnEvent("BtnCheckUpdates", "Click", HandleCheckUpdates)
 ui.OnEvent("ComboPauseUpdates", "SelectionChanged", HandlePauseUpdates)
 ui.OnEvent("CardUpdateHistory", "MouseLeftButtonDown", (*) => XDialog.Show({ Title: "Update history", Message: "Update history on this device:`n`n1. 2026-05 Security Update for Windows 11 (KB5037771) - Installed on 5/14/2026`n2. 2026-05 Cumulative Update for .NET Framework 3.5 and 4.8.1 (KB5037591) - Installed on 5/13/2026`n3. Windows Malicious Software Removal Tool x64 (KB890830) - Installed on 5/13/2026`n4. Realtek Semiconductor Corp. - Extension - 1.0.0.3 - Installed on 5/10/2026", Icon: Chr(0xE74D), Buttons: ["OK"], Owner: ui.wpfHwnd, Theme: "Dark Mica (Win 11)" }))
 ui.OnEvent("CardWuAdvanced", "MouseLeftButtonDown", (*) => XDialog.Show({ Title: "Advanced options", Message: "Advanced Update settings configured by policy:`n`n- Receive updates for other Microsoft products: On`n- Get me up to date: Restart as soon as possible: Off`n- Download updates over metered connections: Off`n- Active hours: Automatic (8:00 AM to 5:00 PM)", Icon: Chr(0xE115), Buttons: ["OK"], Owner: ui.wpfHwnd, Theme: "Dark Mica (Win 11)" }))
-
 
 
 ; Event Handlers for Navigation

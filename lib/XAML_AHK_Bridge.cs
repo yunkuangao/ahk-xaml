@@ -934,14 +934,16 @@ public class AhkWpfEngine {
             });
             foreach (var wv in webViews) {
                 try {
-                    var env = await CoreWebView2Environment.CreateAsync(null, System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWebView2Data"));
-                    await wv.EnsureCoreWebView2Async(env);
-                    wv.CoreWebView2.WebMessageReceived += (ws, we) => {
-                        SendToAhk("EVENT|" + winId + "|" + wv.Name + "|WebMessageReceived|" + LengthPrefix(we.TryGetWebMessageAsString()) + "\n");
+                    wv.WebMessageReceived += (ws, we) => {
+                        string debugMsg = we.WebMessageAsJson;
+                        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWebViewDebug.log"), "C# WebMessageReceived: " + debugMsg + "\n"); } catch {}
+                        SendToAhk("EVENT|" + winId + "|" + wv.Name + "|WebMessageReceived|" + LengthPrefix(debugMsg) + "\n");
                     };
                     wv.NavigationCompleted += (ws, we) => {
                         SendToAhk("EVENT|" + winId + "|" + wv.Name + "|NavigationCompleted|" + LengthPrefix(wv.Source != null ? wv.Source.ToString() : "") + "\n");
                     };
+                    var env = await CoreWebView2Environment.CreateAsync(null, System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AhkWebView2Data"));
+                    await wv.EnsureCoreWebView2Async(env);
                 } catch (Exception ex) {
                     System.Windows.MessageBox.Show("WebView Init Error:\n" + ex.ToString(), "AHK-XAML WebView Error");
                 }
@@ -1506,6 +1508,14 @@ public class AhkWpfEngine {
         if (e is System.Windows.Input.KeyEventArgs) {
             eName += ":" + ((System.Windows.Input.KeyEventArgs)e).Key.ToString();
         }
+#if ENABLE_WEBVIEW
+        else if (e is Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs) {
+            var we = (Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs)e;
+            var sb = new StringBuilder("EVENT|" + winId + "|" + cName + "|" + eName + "|" + LengthPrefix(we.WebMessageAsJson) + "\n");
+            SendToAhk(sb.ToString());
+            return;
+        }
+#endif
         DumpState(cName, eName);
     }
 
@@ -1652,7 +1662,13 @@ public class AhkWpfEngine {
 
     private void ProcessMessage(IntPtr hwnd, string text) {
         foreach (string line in text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)) {
-            ProcessSingleMessage(hwnd, line);
+            try {
+                ProcessSingleMessage(hwnd, line);
+            } catch (Exception ex) {
+                if (EnableLogging) {
+                    try { System.IO.File.AppendAllText(System.Environment.ExpandEnvironmentVariables("%TEMP%\\AhkWpf\\AhkWpfDebug.log"), "ProcessMessage line failed: " + line + " => " + ex.Message + "\n"); } catch { }
+                }
+            }
         }
     }
 

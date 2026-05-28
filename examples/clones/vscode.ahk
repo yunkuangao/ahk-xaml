@@ -44,6 +44,7 @@ editorArea := mainArea.Add("Grid").Name("EditorArea").Grid_Column(1).Margin("250
 
 ; Editor Scrim (Catches clicks when Sidebar is overlaid)
 editorScrim := editorArea.Add("Border").Name("EditorScrim").Grid_RowSpan(2).Background("#40000000").Visibility("Collapsed").SetProp("Panel.ZIndex", "100").Cursor("Arrow")
+    .On("PreviewMouseDown", (*) => ToggleSidebar(currentSidebarView))
 
 editorArea.Rows("Auto", "*")
 
@@ -164,6 +165,8 @@ setSp.Add("TextBlock").Text("Settings").FontSize(24).FontWeight("SemiBold").Fore
 
 setSp.Add("TextBlock").Text("APPEARANCE").Foreground("{DynamicResource TextSub}").FontSize(12).FontWeight("SemiBold").Margin("0,0,0,10")
 themeCb := setSp.Add("ComboBox").Name("AppThemeCb").Margin("0,0,0,20").Width("300").HorizontalAlignment("Left")
+    .On("SelectionChanged", ChangeTheme)
+    .Track()
 
 try {
     iniPath := FileExist("themes.ini") ? "themes.ini" : "../themes.ini"
@@ -189,7 +192,8 @@ statusRight.Add("TextBlock").Text("CRLF").Foreground("White").FontSize(12).Verti
 statusRight.Add("TextBlock").Text("AutoHotkey").Foreground("White").FontSize(12).VerticalAlignment("Center").Margin("15,0,0,0")
 
 ; Command Palette Component
-cmdPalette := XCommandPalette(app.overlay, "CmdPal")
+cmdPalette := app.overlay.CommandPalette("CmdPal")
+cmdPalette.Hotkey("^+P")
 Example_MockData.PopulateVSCodeCommandPalette(cmdPalette)
 
 cmdPalette.DefineProp("OnCommandSelected", { Call: HandleCommand })
@@ -224,9 +228,6 @@ HandleCommand(this, id) {
 
 ; Compile UI
 ui := app.Compile()
-
-; Bind hotkey
-cmdPalette.Bind(ui, "^+P")  ; Ctrl+Shift+P
 
 HotIfWinActive("VS Code Clone - AHK-XAML")
 Hotkey("^b", ToggleSidebarMode, "On")  ; Ctrl+B
@@ -343,7 +344,6 @@ ui.OnEvent("BtnActRun", "Click", ObjBindMethod(ActivityIconClicked, "Call", "RUN
 ui.OnEvent("BtnActExtensions", "Click", ObjBindMethod(ActivityIconClicked, "Call", "EXTENSIONS"))
 
 ui.OnEvent("BtnActSettings", "Click", (*) => SelectTab("Settings"))
-ui.OnEvent("EditorScrim", "PreviewMouseDown", (*) => ToggleSidebar(currentSidebarView))
 ui.Track("EditorScrim") ; Needed for mouse down
 
 
@@ -532,8 +532,6 @@ InitApp(*) {
 }
 
 ui.OnEvent("AppGrid", "Loaded", InitApp)
-ui.Track("AppThemeCb")
-ui.OnEvent("AppThemeCb", "SelectionChanged", ChangeTheme)
 
 ; Bind Tab Click Events
 for t in fileKeys {

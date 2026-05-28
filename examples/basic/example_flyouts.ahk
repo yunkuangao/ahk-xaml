@@ -21,10 +21,15 @@ btnGrid.Cols("Auto", "Auto", "Auto")
 btnGrid.Rows("Auto", "Auto")
 
 btnLeft := btnGrid.Add("Button").Content("Toggle Left (Push)").Name("BtnLeft").Grid_Row(0).Grid_Column(0).Margin("5")
+    .On("Click", (*) => flyLeft.Toggle())
 btnRight := btnGrid.Add("Button").Content("Toggle Right (Overlay)").Name("BtnRight").Grid_Row(0).Grid_Column(1).Margin("5")
+    .On("Click", (*) => flyRight.Toggle())
 btnGlobal := btnGrid.Add("Button").Content("Toggle Global (Overlay)").Name("BtnGlobal").Grid_Row(0).Grid_Column(2).Margin("5")
+    .On("Click", (*) => flyGlobal.Toggle())
 btnTop := btnGrid.Add("Button").Content("Toggle Top (PopPush)").Name("BtnTop").Grid_Row(1).Grid_Column(0).Margin("5")
+    .On("Click", (*) => flyTop.Toggle())
 btnBottom := btnGrid.Add("Button").Content("Toggle Bottom (PopOverlay)").Name("BtnBottom").Grid_Row(1).Grid_Column(1).Margin("5")
+    .On("Click", (*) => flyBottom.Toggle())
 
 ; 6. Sub-Flyout Example (Contained within a specific card/panel)
 subCard := sp.Add("Border").Width(400).Height(200).Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").CornerRadius("8").Margin("0,40,0,0")
@@ -35,6 +40,7 @@ subContent := subGrid.Add("StackPanel").Grid_Column(1).Margin("20").VerticalAlig
 subContent.Add("TextBlock").Text("Sub-Flyout Demo").FontWeight("Bold").FontSize(16).Margin("0,0,0,10")
 subContent.Add("TextBlock").Text("This flyout is completely confined to this specific card container.").Foreground("{DynamicResource TextSub}").Margin("0,0,0,15").TextWrapping("Wrap")
 btnSub := subContent.Add("Button").Content("Toggle Sub-Flyout").Name("BtnSub").HorizontalAlignment("Left")
+    .On("Click", (*) => flySub.Toggle())
 
 flySub := XFlyout("SubMenu", "Left", "Push", 150)
 flySub.Build(subGrid).Grid_Column(0)
@@ -44,6 +50,7 @@ flySub.container.Add("TextBlock").Text("Nested Menu").Margin("20").Foreground("{
 ; 1. Left Flyout (Push Mode) - occupies Column 0
 flyLeft := XFlyout("Menu", "Left", "Push", 250)
 flyLeft.Build(layout).Grid_RowSpan(3).Grid_Column(0)
+flyLeft.Hotkey("^+L")  ; Ctrl+Shift+L
 navSp := flyLeft.container.Add("StackPanel").Margin("10")
 navSp.Add("TextBlock").Text("DASHBOARD").Foreground("{DynamicResource TextSub}").FontSize(10).FontWeight("Bold").Margin("10,10,10,20")
 
@@ -55,6 +62,7 @@ navSp.Add("Button").Content(Chr(0xE713) "  Settings").Background("Transparent").
 ; 2. Right Flyout (Overlay Mode) - occupies Column 2, spans backwards
 flyRight := XFlyout("Settings", "Right", "Overlay", 300)
 flyRight.Build(layout).Grid_RowSpan(3).Grid_ColumnSpan(3)
+flyRight.Hotkey("^+R")  ; Ctrl+Shift+R
 rightSp := flyRight.container.Add("StackPanel").Margin("20")
 rightSp.Add("TextBlock").Text("PROPERTIES").Use("PageTitle").Margin("0,0,0,20")
 rightSp.Add("TextBlock").Text("Enable Fast Sync").Foreground("{DynamicResource TextSub}")
@@ -66,16 +74,19 @@ rightSp.Add("Slider").Minimum("0").Maximum("100").Value("80").Margin("0,5,0,0")
 ; 3. Top Flyout (PopPush Mode) - occupies Row 0
 flyTop := XFlyout("Banner", "Top", "PopPush", 60)
 flyTop.Build(layout).Grid_ColumnSpan(3).Grid_Row(0)
+flyTop.Hotkey("^+T")  ; Ctrl+Shift+T
 flyTop.container.Background("#1A73E8") ; Blue notification banner
 topGrid := flyTop.container.Add("Grid").Margin("20,0")
 topGrid.Cols("Auto", "*", "Auto")
 topGrid.Add("TextBlock").Text(Chr(0xE9CE)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Foreground("White").VerticalAlignment("Center").FontSize(18).Grid_Column(0).Margin("0,0,15,0")
 topGrid.Add("TextBlock").Text("A new software update is available. Restart to apply.").Foreground("White").VerticalAlignment("Center").FontWeight("SemiBold").Grid_Column(1)
 closeTopBtn := topGrid.Add("Button").Content(Chr(0xE711)).Use("IconBtn").FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Foreground("White").Grid_Column(2).Name("BtnCloseTop")
+    .On("Click", (*) => flyTop.Toggle())
 
 ; 4. Bottom Flyout (PopOverlay Mode) - occupies Row 2
 flyBottom := XFlyout("Console", "Bottom", "PopOverlay", 200)
 flyBottom.Build(layout).Grid_ColumnSpan(3).Grid_RowSpan(3)
+flyBottom.Hotkey("^+B")  ; Ctrl+Shift+B
 flyBottom.container.Background("#0C0C0C").BorderBrush("#333333").BorderThickness("0,1,0,0")
 consoleSp := flyBottom.container.Add("StackPanel").Margin("20")
 consoleSp.Add("TextBlock").Text("TERMINAL").Foreground("#888888").FontSize(10).FontWeight("Bold").Margin("0,0,0,10")
@@ -86,12 +97,14 @@ consoleSp.Add("TextBlock").Text("> Ready.").Foreground("#00FF00").FontFamily("Co
 ; 5. Global Overlay (Covers the entire app including original sidebar/tabs)
 flyGlobal := XFlyout("GlobalMenu", "Left", "Overlay", 350, true)
 flyGlobal.Build(app.overlay).Margin("0,50,0,0")
+flyGlobal.Hotkey("^+G")  ; Ctrl+Shift+G
 globalGrid := flyGlobal.container.Add("Grid").Margin("20")
 globalGrid.Rows("Auto", "*")
 headerGrid := globalGrid.Add("Grid").Grid_Row(0).Margin("0,0,0,30")
 headerGrid.Cols("*", "Auto")
 headerGrid.Add("TextBlock").Text("SETTINGS").Use("PageTitle").Grid_Column(0)
 closeBtn := headerGrid.Add("Button").Content(Chr(0xE711)).Use("IconBtn").FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Grid_Column(1).Name("BtnCloseGlobal")
+    .On("Click", (*) => flyGlobal.Toggle())
 
 contentSp := globalGrid.Add("StackPanel").Grid_Row(1)
 contentSp.Add("TextBlock").Text("Global Overlay Menu").Foreground("{DynamicResource TextSub}").Margin("0,0,0,30")
@@ -107,25 +120,5 @@ cb2.Add("ComboBoxItem").Content("Balanced").IsSelected("True")
 
 ; Compile UI
 ui := app.Compile()
-
-; Bind events and hotkeys
-flyLeft.Bind(ui, "^+L")    ; Ctrl+Shift+L
-flyRight.Bind(ui, "^+R")   ; Ctrl+Shift+R
-flyTop.Bind(ui, "^+T")     ; Ctrl+Shift+T
-flyBottom.Bind(ui, "^+B")  ; Ctrl+Shift+B
-flyGlobal.Bind(ui, "^+G")  ; Ctrl+Shift+G
-flySub.Bind(ui)            ; Sub menu binding
-
-; Button bindings
-ui.OnEvent("BtnLeft", "Click", (*) => flyLeft.Toggle())
-ui.OnEvent("BtnRight", "Click", (*) => flyRight.Toggle())
-ui.OnEvent("BtnGlobal", "Click", (*) => flyGlobal.Toggle())
-ui.OnEvent("BtnTop", "Click", (*) => flyTop.Toggle())
-ui.OnEvent("BtnBottom", "Click", (*) => flyBottom.Toggle())
-ui.OnEvent("BtnSub", "Click", (*) => flySub.Toggle())
-
-; Close button bindings
-ui.OnEvent("BtnCloseGlobal", "Click", (*) => flyGlobal.Toggle())
-ui.OnEvent("BtnCloseTop", "Click", (*) => flyTop.Toggle())
 
 app.Show()

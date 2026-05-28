@@ -99,6 +99,7 @@ for t in openTabs {
 }
 
 newTabBtn := scrollContent.Add("Button").Content(Chr(0xE710)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).Margin("6,0,0,0").Padding("8").FontSize(14).Cursor("Hand").Name("BtnNewTab").WindowChrome_IsHitTestVisibleInChrome("True")
+    .On("Click", HandleNewTab)
 
 
 ; ==============================================================================
@@ -114,9 +115,13 @@ toolbarGrid.Cols("Auto", "*", "Auto")
 
 navSp := toolbarGrid.Add("StackPanel").Orientation("Horizontal").Grid_Column(0).VerticalAlignment("Center")
 navSp.Add("Button").Content(Chr(0xE700)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Margin("5,0,10,0").FontSize(16).Padding("10").Cursor("Hand").Name("BtnToggleSidebar").ToolTip("Toggle Sidebar")
+    .On("Click", HandleToggleSidebar)
 navSp.Add("Button").Content(Chr(0xE72B)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Margin("0,0,2,0").FontSize(16).Padding("10").Cursor("Hand").Name("BtnNavBack").ToolTip("Click to go back")
+    .On("Click", HandleNavBack)
 navSp.Add("Button").Content(Chr(0xE72A)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextSub}").BorderThickness(0).Margin("0,0,2,0").FontSize(16).Padding("10").Cursor("Hand").Name("BtnNavFwd").ToolTip("Click to go forward")
+    .On("Click", HandleNavFwd)
 navSp.Add("Button").Content(Chr(0xE72C)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Margin("0,0,15,0").FontSize(16).Padding("10").Cursor("Hand").Name("BtnNavReload").ToolTip("Reload current file to original state")
+    .On("Click", HandleReload)
 
 omniboxBorder := toolbarGrid.Add("Border").Grid_Column(1).Background("{DynamicResource ControlBg}").CornerRadius("18").Padding("15,6,15,6").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("1").VerticalAlignment("Center")
 omniboxGrid := omniboxBorder.Add("Grid")
@@ -137,12 +142,14 @@ try {
 themeCombo.SelectedIndex(0)
 
 extBtn := extSp.Add("Button").Name("BtnExt").Content(Chr(0xE9D5)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Margin("0,0,2,0").FontSize(16).Padding("10").Cursor("Hand").ToolTip("Extensions")
+    .On("Click", (*) => ui.Update("BtnExt.ContextMenu", "IsOpen", "True"))
 extCtx := extBtn.Add("Button.ContextMenu").Add("ContextMenu").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).Foreground("{DynamicResource TextMain}")
 extCtx.Add("MenuItem").Header("Vim Emulator").Icon(Chr(0xE768))
 extCtx.Add("MenuItem").Header("Prettier Code Formatter").Icon(Chr(0xE768))
 extCtx.Add("MenuItem").Header("Manage Extensions...")
 
 profBtn := extSp.Add("Button").Name("BtnProfile").Content(Chr(0xE77B)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).Margin("0,0,2,0").FontSize(16).Padding("10").Cursor("Hand").ToolTip("Profile")
+    .On("Click", (*) => ui.Update("BtnProfile.ContextMenu", "IsOpen", "True"))
 profCtx := profBtn.Add("Button.ContextMenu").Add("ContextMenu").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).Foreground("{DynamicResource TextMain}")
 profCtx.Add("MenuItem").Header("Sync is ON").Icon(Chr(0xE898))
 profCtx.Add("Separator")
@@ -150,18 +157,25 @@ profCtx.Add("MenuItem").Header("Manage Google Account")
 profCtx.Add("MenuItem").Header("Sign out")
 
 extSp.Add("Button").Content(Chr(0xE712)).FontFamily("Segoe Fluent Icons").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0).FontSize(16).Padding("10").Cursor("Hand").Name("BtnMenu").ToolTip("More Options")
+    .On("Click", HandleMenu)
 
 ; Hidden Dummy Button to host the Global Context Menu for Tabs
 dummyBtn := extSp.Add("Button").Name("DummyTabCtxBtn").Visibility("Collapsed")
 globalTabCtx := dummyBtn.Add("Button.ContextMenu").Add("ContextMenu").Name("GlobalTabCtx").Background("{DynamicResource DropdownBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness(1).Foreground("{DynamicResource TextMain}")
 globalTabCtx.Add("MenuItem").Name("CtxClose").Header("Close Tab")
+    .On("Click", (*) => CloseTab(ctxTargetTab))
 globalTabCtx.Add("MenuItem").Name("CtxCloseRight").Header("Close Tabs to Right")
+    .On("Click", (*) => CloseTabsRight(ctxTargetTab))
 globalTabCtx.Add("MenuItem").Name("CtxCloseOther").Header("Close Other Tabs")
+    .On("Click", (*) => CloseOtherTabs(ctxTargetTab))
 globalTabCtx.Add("Separator")
 globalTabCtx.Add("MenuItem").Name("CtxCopyPath").Header("Copy Path")
+    .On("Click", (*) => A_Clipboard := "C:\projects\ahk\richide\" ctxTargetTab)
 globalTabCtx.Add("MenuItem").Name("CtxReveal").Header("Reveal in File Explorer")
+    .On("Click", (*) => MsgBox("Revealed " ctxTargetTab " in File Explorer!", "Mock Action", 64))
 globalTabCtx.Add("Separator")
 globalTabCtx.Add("MenuItem").Name("CtxNew").Header("New Tab")
+    .On("Click", HandleNewTab)
 
 ; ==============================================================================
 ; 3. MIDDLE AREA (SIDEBAR + EDITOR)
@@ -175,6 +189,7 @@ sidebarBg := sidebarContainer.Add("Border").Grid_Column(0).Background("{DynamicR
 sidebarSp := sidebarBg.Add("StackPanel")
 sidebarSp.Add("TextBlock").Text("EXPLORER").Foreground("{DynamicResource TextSub}").FontSize(11).FontWeight("Bold").Margin("15,10,10,10")
 fileTree := sidebarSp.Add("TreeView").Name("FileExplorer").Background("Transparent").BorderThickness(0).Foreground("{DynamicResource TextMain}")
+    .On("SelectedItemChanged", HandleTreeSelect)
 
 BuildTree(parentEl, fsMap) {
     for k, v in fsMap {
@@ -194,6 +209,7 @@ sidebarContainer.Add("GridSplitter").Grid_Column(1).Width("3").Background("Trans
 
 editorArea := middleDock.Add("Border").Background("{DynamicResource DropdownBg}")
 codeEditor := editorArea.Add("TextBox").Name("MainEditor").Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness("0").FontFamily("Consolas").FontSize(16).AcceptsReturn("True").Padding("30,30,30,50").VerticalContentAlignment("Top").TextWrapping("Wrap").HorizontalScrollBarVisibility("Auto").VerticalScrollBarVisibility("Auto")
+    .On("TextChanged", EditorTextChanged)
 
 ; ==============================================================================
 ; 4. STATUS BAR
@@ -217,7 +233,8 @@ sbRight.Add("TextBlock").Name("StatusBarLang").Text("AutoHotkey").Foreground("{D
 ; ==============================================================================
 ; COMMAND PALETTE
 ; ==============================================================================
-cmdPalette := XCommandPalette(app.overlay, "CmdPal")
+cmdPalette := app.overlay.CommandPalette("CmdPal")
+cmdPalette.Hotkey("^+P")
 cmdPalette.AddCommand("new_tab", "New Tab", { Icon: Chr(0xE710), Callback: HandleNewTab })
 cmdPalette.AddCommand("close_tab", "Close Current Tab", { Icon: Chr(0xE711), Callback: (*) => CloseTab(currentTab) })
 cmdPalette.AddCommand("close_right", "Close Tabs to Right", { Icon: Chr(0xE711), Callback: (*) => CloseTabsRight(currentTab) })
@@ -228,22 +245,16 @@ cmdPalette.AddCommand("help", "Help & About", { Icon: Chr(0xE946), Callback: Han
 cmdPalette.SetHomeCommands(["new_tab", "close_tab", "reload", "settings", "help"])
 
 ; ==============================================================================
-; COMPILE & BIND EVENTS
+; COMPILE & START
 ; ==============================================================================
 ui := app.Compile()
-cmdPalette.Bind(ui, "^+P")
 
 HotIfWinActive("Chromium Editor")
 Hotkey("^t", (*) => HandleNewTab())
 HotIfWinActive()
 
-ui.OnEvent("CtxClose", "Click", (*) => CloseTab(ctxTargetTab))
-ui.OnEvent("CtxCloseRight", "Click", (*) => CloseTabsRight(ctxTargetTab))
-ui.OnEvent("CtxCloseOther", "Click", (*) => CloseOtherTabs(ctxTargetTab))
-ui.OnEvent("CtxNew", "Click", HandleNewTab)
 
 ui.Update("MainEditor", "BindEvent", "TextChanged")
-ui.OnEvent("MainEditor", "TextChanged", EditorTextChanged)
 
 EditorTextChanged(state, ctrl, ev) {
     global currentTab, filesData, modifiedFiles, ui
@@ -262,7 +273,6 @@ EditorTextChanged(state, ctrl, ev) {
 }
 
 ui.Update("FileExplorer", "BindEvent", "SelectedItemChanged")
-ui.OnEvent("FileExplorer", "SelectedItemChanged", HandleTreeSelect)
 HandleTreeSelect(state, ctrl, ev) {
     global filesData, openTabs, ui
     if (state.Has("FileExplorer") && state["FileExplorer"] != "") {
@@ -281,7 +291,6 @@ HandleTreeSelect(state, ctrl, ev) {
     }
 }
 
-ui.OnEvent("BtnNavBack", "Click", HandleNavBack)
 HandleNavBack(*) {
     global tabHistory, historyIndex
     if (historyIndex > 1) {
@@ -290,7 +299,6 @@ HandleNavBack(*) {
     }
 }
 
-ui.OnEvent("BtnNavFwd", "Click", HandleNavFwd)
 HandleNavFwd(*) {
     global tabHistory, historyIndex
     if (historyIndex < tabHistory.Length) {
@@ -299,11 +307,8 @@ HandleNavFwd(*) {
     }
 }
 
-ui.OnEvent("BtnExt", "Click", (*) => ui.Update("BtnExt.ContextMenu", "IsOpen", "True"))
-ui.OnEvent("BtnProfile", "Click", (*) => ui.Update("BtnProfile.ContextMenu", "IsOpen", "True"))
 
-ui.OnEvent("CtxCopyPath", "Click", (*) => A_Clipboard := "C:\projects\ahk\richide\" ctxTargetTab)
-ui.OnEvent("CtxReveal", "Click", (*) => MsgBox("Revealed " ctxTargetTab " in File Explorer!", "Mock Action", 64))
+
 
 AddChromiumTabDynamic(title) {
     global ui, openTabs
@@ -506,7 +511,6 @@ CloseOtherTabs(tabTitle) {
     SelectTab(tabTitle)
 }
 
-ui.OnEvent("BtnNewTab", "Click", HandleNewTab)
 HandleNewTab(*) {
     global filesData, openTabs
     newTitle := "Untitled_" (openTabs.Length + 1) ".txt"
@@ -514,7 +518,6 @@ HandleNewTab(*) {
     AddChromiumTabDynamic(newTitle)
 }
 
-ui.OnEvent("BtnMenu", "Click", HandleMenu)
 HandleMenu(*) {
     global cmdPalette
     cmdPalette.Open()
@@ -530,7 +533,6 @@ HandleHelp(*) {
     XDialog.Show({ Title: "Chromium Clone", Message: "Massively improved dynamic clone. Try adding and closing tabs, right clicking them, or using Ctrl+Shift+P for the command palette!", Icon: Chr(0xE946), IconColor: "{DynamicResource Accent}", Buttons: ["Awesome!"], Modal: true, Owner: ui.wpfHwnd, Theme: "Dark Mica (Win 11)" })
 }
 
-ui.OnEvent("BtnNavReload", "Click", HandleReload)
 HandleReload(*) {
     global currentTab, filesData, modifiedFiles, ui
     if (filesData.Has(currentTab)) {
@@ -547,7 +549,6 @@ InitUI(*) {
     SelectTab(currentTab)
 }
 
-ui.OnEvent("BtnToggleSidebar", "Click", HandleToggleSidebar)
 HandleToggleSidebar(*) {
     global ui, sidebarVisible
     if (!IsSet(sidebarVisible))

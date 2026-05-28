@@ -32,9 +32,13 @@ navGrid.Add("TextBlock").Text(Chr(0xE7FC) " STEAM").FontFamily("Segoe Fluent Ico
 ; Menu Links (Now functional Tabs)
 menuSp := navGrid.Add("StackPanel").Orientation("Horizontal").Grid_Column(1).VerticalAlignment("Center")
 menuSp.Add("Button").Name("NavStore").Content("STORE").Style("{DynamicResource TabBtnActive}").Cursor("Hand").Margin("0,0,10,0")
+    .On("Click", (state, ctrl, event) => NavTo("PageStore", "NavStore"))
 menuSp.Add("Button").Name("NavLibrary").Content("LIBRARY").Style("{DynamicResource TabBtnInactive}").Cursor("Hand").Margin("0,0,10,0")
+    .On("Click", (state, ctrl, event) => NavTo("PageLibrary", "NavLibrary"))
 menuSp.Add("Button").Name("NavCommunity").Content("COMMUNITY").Style("{DynamicResource TabBtnInactive}").Cursor("Hand").Margin("0,0,10,0")
+    .On("Click", (state, ctrl, event) => NavTo("PageCommunity", "NavCommunity"))
 menuSp.Add("Button").Name("NavProfile").Content("PROFILE").Style("{DynamicResource TabBtnInactive}").Cursor("Hand").Margin("0,0,10,0")
+    .On("Click", (state, ctrl, event) => NavTo("PageProfile", "NavProfile"))
 
 ; Search and Profile
 rightSp := navGrid.Add("StackPanel").Orientation("Horizontal").Grid_Column(2).VerticalAlignment("Center")
@@ -144,6 +148,7 @@ libContent.Cols("2*", "3*")
 ; Kanban on Left
 kbBorder := libContent.Add("Border").Grid_Column(0).Margin("0,0,20,0")
 kb := kbBorder.KanbanBoard("LibKanban")
+kb.EnableDrag()
 kb.AddColumn("Backlog", "#5A3A31")
 kb.AddColumn("Playing", "#2D4259")
 kb.AddColumn("Completed", "#4C6B22")
@@ -186,6 +191,7 @@ profInfo.Add("TextBlock").Text("Level 42  |  United Kingdom").FontSize(16).Foreg
 
 ; Theme Color Button
 profThemeBtn := profHeader.Add("Button").Name("BtnEditTheme").Grid_Column(2).VerticalAlignment("Center").Content("Edit Profile Theme").Background("#171A21").Foreground("White").BorderThickness("1").BorderBrush("#3D4450").Padding("20,10").Cursor("Hand")
+    .On("Click", OpenColorPicker)
 
 ; Metrics Grid
 metricsGrid := pageProfile.Add("Grid").Grid_Row(1).Margin("0,0,0,40")
@@ -211,11 +217,6 @@ app.main.InjectResources(btnStyles)
 ui := app.Compile()
 ui.Update("HeroOverlay", "AddXamlItem", gradient)
 
-; Init Kanban and Player
-kb.Bind(ui)
-kb.EnableDrag(ui)
-player.Bind(ui)
-
 ; Navigation Logic
 NavTo(pageName, btnName) {
     global globalAccentColor
@@ -236,13 +237,8 @@ NavTo(pageName, btnName) {
     ui.Update(pageName, "Visibility", "Visible")
 }
 
-ui.OnEvent("NavStore", "Click", (state, ctrl, event) => NavTo("PageStore", "NavStore"))
-ui.OnEvent("NavLibrary", "Click", (state, ctrl, event) => NavTo("PageLibrary", "NavLibrary"))
-ui.OnEvent("NavCommunity", "Click", (state, ctrl, event) => NavTo("PageCommunity", "NavCommunity"))
-ui.OnEvent("NavProfile", "Click", (state, ctrl, event) => NavTo("PageProfile", "NavProfile"))
 
 ; Profile Color Picker Logic
-ui.OnEvent("BtnEditTheme", "Click", OpenColorPicker)
 OpenColorPicker(state, ctrl, event) {
     global globalAccentColor
     opts := {

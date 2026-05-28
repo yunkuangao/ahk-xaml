@@ -773,6 +773,7 @@ class XAMLHost {
             ; Build event bindings from runtime registrations (includes events added after ExportBAML)
             eventBindings := this._BuildEventBindings()
             payload := "CREATE_WINDOW|" this.id "|" trackedCsv "|" A_ScriptName "|" String(this.ownerHwnd) "|" assetPath "|" eventBindings
+            this.wpfHwnd := 0
             this._SendToEngine(payload)
         } else {
             ; Inline mode: embed XAML + events directly in the CREATE_WINDOW message
@@ -781,10 +782,15 @@ class XAMLHost {
             cleanXaml := StrReplace(this.xaml, "%resources%", "")
             inlinePayload := cleanXaml "`n---AHK-XAML-EVENTS---`n" eventBindings
             payload := "CREATE_WINDOW_INLINE|" this.id "|" trackedCsv "|" A_ScriptName "|" String(this.ownerHwnd) "|" inlinePayload
+
+            ; CRITICAL: Reset wpfHwnd BEFORE sending, not after.
+            ; _SendToEngine uses SendMessageW which may trigger LoadedHwnd reentrantly
+            ; (the daemon's Dispatcher can process the BeginInvoke during the synchronous wait).
+            ; If we reset AFTER, we clobber the valid HWND set by the LoadedHwnd handler.
+            this.wpfHwnd := 0
             this._SendToEngine(payload)
         }
 
-        this.wpfHwnd := 0
         SetTimer(ObjBindMethod(this, "CheckForCrashes"), 50)
     }
 
@@ -833,6 +839,9 @@ class XAMLHost {
             return 0
 
         winId := parts[2], ctrlName := parts[3], eventName := parts[4]
+        if (eventName == "WebMessageReceived") {
+            try FileAppend("AHK OnCopyData WebMessageReceived: " payload "`n", A_Temp "\AhkWebViewDebug.log")
+        }
         if !XAMLHost._instances.Has(winId)
             return 0
 

@@ -96,7 +96,6 @@ docArea.Add("TextBlock").Text("Your Excel spreadsheet or document goes here!").H
 ui := app.Compile()
 
 ; Bind Events
-ribbon.BindEvents(ui)
 ui.OnEvent("BtnPaste", "Click", (*) => app.ShowSnackbar("Pasted content!"))
 ui.OnEvent("BtnBold", "Click", (*) => app.ShowSnackbar("Toggled Bold!"))
 ui.OnEvent("BtnTable", "Click", (*) => app.ShowSnackbar("Inserted Table!"))

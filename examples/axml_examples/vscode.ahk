@@ -117,7 +117,8 @@ try {
 }
 
 ; Command Palette logic (Must be added to UI BEFORE Compile)
-global cmdPalette := XCommandPalette(app.overlay, "CmdPal")
+global cmdPalette := app.overlay.CommandPalette("CmdPal")
+cmdPalette.Hotkey("^+p")
 Example_MockData.PopulateVSCodeCommandPalette(cmdPalette)
 cmdPalette.DefineProp("OnCommandSelected", { Call: HandleCommand })
 
@@ -148,7 +149,7 @@ for t in fileKeys {
     ui.OnEvent("BtnCloseTab_" boundName, "Click", HandleTabClose.Bind(boundName))
 }
 
-cmdPalette.Bind(ui, "^+p")
+
 
 HotIfWinActive("VS Code Clone - AHK-XAML")
 Hotkey("^b", ToggleSidebarMode, "On")

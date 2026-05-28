@@ -479,7 +479,6 @@ ui := app.Compile()  ; Events auto-collected from tree
 The explicit post-compile binding API. Still fully supported, and necessary for:
 - **Window-level events:** `ui.OnEvent("Window", "Loaded", handler)`
 - **Dynamic elements:** Controls created at runtime via `ui.Update("AddItem", ...)`
-- **Forward references:** When the callback references an object defined after the element
 - **Loop bindings:** Events bound in a loop over dynamically enumerated controls
 
 ```ahk
@@ -487,3 +486,88 @@ ui := app.Compile()
 ui.OnEvent("Window", "Loaded", OnWindowLoaded)
 ui.Track("ComboTheme")
 ```
+
+---
+
+## 16. Auto-Bind (Component Lifecycle)
+
+Composite components created via factory methods (`.KanbanBoard()`, `.NodeGraph()`, `.NavigationView()`, etc.) are **automatically bound** during `Compile()`. No manual `.Bind(ui)` calls needed.
+
+### How it works
+
+1. Factory method creates the component and registers it with `XAML_GUI`
+2. `Compile()` iterates all registered components and calls `.Bind(ui)` on each
+3. If `.EnableDrag()` was called (no args), drag is enabled after bind
+
+### `.EnableDrag()` — Chainable Flag
+
+Call `.EnableDrag()` with **no arguments** to flag a component for auto-enabling drag during compile:
+
+```ahk
+kb := panel.KanbanBoard("MyBoard")
+kb.AddColumn("Todo", cards)
+kb.EnableDrag()  ; Flagged — actual enabling happens at compile
+
+ng := canvas.NodeGraph("MyGraph")
+ng.AddNode(...)
+ng.EnableDrag()  ; Same pattern
+```
+
+### `.Hotkey()` — Flyout & Command Palette Hotkeys
+
+Set a hotkey on `XFlyout` or `XCommandPalette` that gets applied during auto-bind:
+
+```ahk
+fly := XFlyout("Settings", "Left", "Push", 300)
+fly.Build(layout).Grid_Column(0)
+fly.Hotkey("^+S")  ; Applied automatically during Compile()
+
+cmdPal := app.overlay.CommandPalette("CmdPal")
+cmdPal.Hotkey("^+P")
+```
+
+### Standalone Components (XFlyout)
+
+`XFlyout` is not a factory method — it's instantiated standalone. Auto-registration happens when `.Build(parent)` is called, since that's when the flyout attaches to the element tree.
+
+```ahk
+; Old pattern (still works):
+fly := XFlyout("Menu", "Left", "Push", 250)
+fly.Build(layout)
+ui := app.Compile()
+fly.Bind(ui, "^+L")  ; Manual
+
+; New pattern:
+fly := XFlyout("Menu", "Left", "Push", 250)
+fly.Build(layout)
+fly.Hotkey("^+L")    ; Stored
+ui := app.Compile()   ; Auto-bound with hotkey
+```
+
+### Element-Level `.Hotkey()` — Any Named Element
+
+Any element with a `Name` can have a global hotkey registered inline:
+
+```ahk
+; Default action is "Invoke" (programmatic click/toggle)
+panel.Add("Button").Name("BtnSave").Content("Save")
+    .On("Click", OnSave)
+    .Hotkey("^s")              ; Ctrl+S → clicks the button
+
+; Focus a textbox
+panel.Add("TextBox").Name("TxtSearch")
+    .Hotkey("^f", "Focus")     ; Ctrl+F → focuses the search box
+
+; Custom callback
+panel.Add("Button").Name("BtnReset")
+    .Hotkey("^+r", (*) => ResetAll())  ; Ctrl+Shift+R → custom function
+```
+
+**Built-in actions:**
+
+| Action | Effect |
+|--------|--------|
+| `"Invoke"` / `"Click"` / `"Toggle"` | Programmatically clicks/toggles the element |
+| `"Focus"` | Focuses the element |
+| `"Blur"` | Removes focus from the element |
+| Callback function | Runs the custom callback |

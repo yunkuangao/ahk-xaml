@@ -12,6 +12,7 @@ class XAML_GUI {
         this.tokenizers := Map()
         this.hotkeyBoxes := Map()
         this.segmentedInputs := Map()
+        this._components := []
 
         hasOpt(key) => Type(options) == "Map" ? options.Has(key) : options.HasOwnProp(key)
         getOpt(key) => Type(options) == "Map" ? options[key] : options.%key%
@@ -24,6 +25,7 @@ class XAML_GUI {
 
         ; Expose the root generator for customization
         this.X := XAML_Generator("Grid").Name("AppGrid").Background("{DynamicResource BgColor}").Focusable("True")
+        this.X._App := this  ; Back-reference so components can auto-register via _FindApp()
         this.X.Add("Grid.LayoutTransform").Add("ScaleTransform").SetProp("x:Name", "AppScale").ScaleX(1).ScaleY(1)
         this.X.Cols("Auto", "*")
 
@@ -188,6 +190,30 @@ class XAML_GUI {
         ; Collect inline .On() and .Track() registrations from the element tree
         this._CollectInlineEvents(this.X)
 
+        ; Auto-bind registered composite components (KanbanBoard, NavigationView, etc.)
+        _dragComps := []
+        for comp in this._components {
+            if (comp.HasMethod("Bind")) {
+                if (comp.HasOwnProp("_hotkey") && comp._hotkey != "")
+                    comp.Bind(this.host, comp._hotkey)
+                else
+                    comp.Bind(this.host)
+            }
+            ; Collect drag-enabled components for deferred enable after window loads
+            if (comp.HasOwnProp("_dragEnabled") && comp._dragEnabled && comp.HasMethod("EnableDrag"))
+                _dragComps.Push(comp)
+        }
+        ; EnableDrag sends Update commands that need WPF elements to exist,
+        ; so defer to LoadedHwnd event
+        if (_dragComps.Length > 0) {
+            _host := this.host
+            _OnLoaded(s, c, e) {
+                for dc in _dragComps
+                    dc.EnableDrag(_host)
+            }
+            this.host.OnEvent("Window", "LoadedHwnd", _OnLoaded)
+        }
+
         for k, v in this.tokenizers {
             this.host.OnEvent(v.inputName, "GotFocus", ObjBindMethod(this, "OnInputFocus"))
             this.host.OnEvent(v.inputName, "LostFocus", ObjBindMethod(this, "OnInputBlur"))
@@ -254,6 +280,32 @@ class XAML_GUI {
                         this.host.OnEvent(name, evt.Event, cb)
                         ; Auto-track any element that has events registered
                         this.host.Track(name)
+                    }
+                }
+            }
+
+            ; Collect inline hotkeys
+            if (el.HasOwnProp("_Hotkeys")) {
+                for hk in el._Hotkeys {
+                    action := hk.Action
+                    hkName := name  ; Capture for closure
+                    hkHost := this.host
+
+                    if HasMethod(action) {
+                        ; Custom callback
+                        Hotkey(hk.Key, action, "On")
+                    } else if (Type(action) == "String") {
+                        switch action, false {
+                            case "Invoke", "Click", "Toggle":
+                                Hotkey(hk.Key, (*) => hkHost.Update(hkName, "Invoke", "1"), "On")
+                            case "Focus":
+                                Hotkey(hk.Key, (*) => hkHost.Update(hkName, "Focus", "True"), "On")
+                            case "Blur":
+                                Hotkey(hk.Key, (*) => hkHost.Update(hkName, "Focus", "False"), "On")
+                            default:
+                                ; Treat unknown strings as custom Update commands
+                                Hotkey(hk.Key, (*) => hkHost.Update(hkName, action, ""), "On")
+                        }
                     }
                 }
             }
@@ -593,6 +645,12 @@ class XAML_GUI {
 
     RegisterTokenizer(tok) {
         this.tokenizers[tok.inputName] := tok
+    }
+
+    ; Register a composite component for auto-binding during Compile().
+    ; Called automatically by component factory methods (KanbanBoard, NavigationView, etc.)
+    RegisterComponent(comp) {
+        this._components.Push(comp)
     }
 
     RegisterNumericInput(num) {
