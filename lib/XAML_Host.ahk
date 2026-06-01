@@ -94,10 +94,31 @@ class XAMLHost {
     static daemonHwnd := 0
     static daemonReceiver := 0
     static instanceCounter := 0
+    static _appDir := ""
+
+    static GetAppDir() {
+        if (XAMLHost._appDir != "")
+            return XAMLHost._appDir
+        
+        ; 优先级: 1. 编译后的脚本目录 2. 库文件所在目录
+        if (A_IsCompiled) {
+            XAMLHost._appDir := A_ScriptDir
+        } else {
+            SplitPath(A_LineFile, , &libDir)
+            XAMLHost._appDir := libDir "\.."
+        }
+        
+        ; 创建必要的子目录
+        if !DirExist(XAMLHost._appDir "\Logs")
+            DirCreate(XAMLHost._appDir "\Logs")
+        if !DirExist(XAMLHost._appDir "\Cache")
+            DirCreate(XAMLHost._appDir "\Cache")
+            
+        return XAMLHost._appDir
+    }
 
     __New(xaml := "", exePath := "", ownerHwnd := 0) {
         XAMLHost.RestoreWebView2Dlls()
-        this._disposed := false
         XAMLHost.instanceCounter++
         this.id := "WPF_" A_TickCount "_" XAMLHost.instanceCounter "_" Random(1000, 9999)
         XAMLHost._instances[this.id] := this
@@ -108,9 +129,7 @@ class XAMLHost {
         this.tracked := Map()
         this.wpfHwnd := 0
         this.pid := 0
-        if !DirExist(A_Temp "\AhkWpf")
-            DirCreate(A_Temp "\AhkWpf")
-        this.errLog := A_Temp "\AhkWpf\AhkWpfError.log"
+        this.errLog := XAMLHost.GetAppDir() "\Logs\AhkWpfError.log"
 
 
         this.receiver := Gui()
@@ -200,9 +219,6 @@ class XAMLHost {
             }
         }
 
-        if !DirExist(A_Temp "\AhkWpf")
-            DirCreate(A_Temp "\AhkWpf")
-
         baseDllName := (IsSet(XAML_ENABLE_WEBVIEW) && XAML_ENABLE_WEBVIEW) ? "ahk-xaml-webview.dll" : "ahk-xaml.dll"
 
         SplitPath(A_LineFile, , &libDir)
@@ -286,33 +302,6 @@ class XAMLHost {
                 }
             }
         }
-    }
-
-    Dispose() {
-        if (this._disposed)
-            return
-        this._disposed := true
-        try FileAppend("[AHK-DISPOSE] " this.id "`n", A_Temp "\AhkWpf\mem_trace.log")
-        SetTimer(ObjBindMethod(this, "CheckForCrashes"), 0)
-        if (XAMLHost._instances.Has(this.id))
-            XAMLHost._instances.Delete(this.id)
-        for ctrlName, eventMap in this.events {
-            for eventName, cbList in eventMap
-                cbList.Length := 0
-        }
-        this.events := ""
-        this.tracked := ""
-        this.xaml := ""
-        if (IsObject(this.receiver)) {
-            try {
-                this.receiver.Destroy()
-            }
-            this.receiver := ""
-        }
-    }
-
-    __Delete() {
-        this.Dispose()
     }
 
     static ShowErrorDialog(title, header, snippet, details, hasRetryOptions := false, reason := "") {
@@ -535,9 +524,7 @@ class XAMLHost {
 
         payload := this.xaml "`n---AHK-XAML-EVENTS---`n" eventBindings
 
-        tempTxt := A_Temp "\AhkWpf\gui_temp.txt"
-        if !DirExist(A_Temp "\AhkWpf")
-            DirCreate(A_Temp "\AhkWpf")
+        tempTxt := XAMLHost.GetAppDir() "\Cache\gui_temp.txt"
 
         if FileExist(tempTxt)
             FileDelete(tempTxt)
@@ -584,7 +571,7 @@ class XAMLHost {
 
     static CompileEngine(libDir, sharedExe, extraResources := []) {
         XAMLHost.RestoreWebView2Dlls()
-        errLog := A_Temp "\AhkWpf\AhkWpfError.log"
+        errLog := XAMLHost.GetAppDir() "\Logs\AhkWpfError.log"
         sourceCs := libDir "\XAML_AHK_Bridge.cs"
         if !FileExist(sourceCs) {
             MsgBox("XAML_AHK_Bridge.cs not found in lib directory!`nCannot compile shared engine.", "AHK-XAML", "Iconx")
@@ -648,10 +635,8 @@ class XAMLHost {
         cleanXaml := StrReplace(this.xaml, "%resources%", "")
         cleanXaml := StrReplace(cleanXaml, "%components%", "")
         
-        tempDir := A_Temp "\AhkWpf"
-        if !DirExist(tempDir)
-            DirCreate(tempDir)
-            
+        tempDir := XAMLHost.GetAppDir() "\Cache"
+        
         tempXaml := tempDir "\app_payload.xaml"
         tempBaml := tempDir "\app_payload.baml"
         tempEvents := tempDir "\app_payload.events"
@@ -715,8 +700,6 @@ class XAMLHost {
         if XAMLHost.daemonHwnd
             return sharedExe
 
-        if !DirExist(A_Temp "\AhkWpf")
-            DirCreate(A_Temp "\AhkWpf")
         if FileExist(this.errLog)
             FileDelete(this.errLog)
 
@@ -834,7 +817,7 @@ class XAMLHost {
         lpData := NumGet(lParam, A_PtrSize * 2, "Ptr")
         payload := StrGet(lpData, "UTF-8")
         if (!IsSet(XAML_ENABLE_LOGGING) || XAML_ENABLE_LOGGING)
-            try FileAppend("OnCopyData: " payload "`n", A_Temp "\AhkWpf\AhkTrace.log", "UTF-8")
+            try FileAppend("OnCopyData: " payload "`n", XAMLHost.GetAppDir() "\Logs\AhkTrace.log", "UTF-8")
         if (!InStr(payload, "EVENT|") && !InStr(payload, "DAEMON|") && !InStr(payload, "MRESPONSE|"))
             return 0
             
@@ -873,7 +856,7 @@ class XAMLHost {
 
         winId := parts[2], ctrlName := parts[3], eventName := parts[4]
         if (eventName == "WebMessageReceived") {
-            try FileAppend("AHK OnCopyData WebMessageReceived: " payload "`n", A_Temp "\AhkWebViewDebug.log")
+            try FileAppend("AHK OnCopyData WebMessageReceived: " payload "`n", XAMLHost.GetAppDir() "\Logs\AhkWebViewDebug.log")
         }
         if !XAMLHost._instances.Has(winId)
             return 0
@@ -1349,7 +1332,7 @@ class XAMLHost {
                 FileCopy(sourceLoader, wvDir "\WebView2Loader.dll", 1)
                 
                 try FileDelete(libDir "\ahk-xaml-webview.dll")
-                try FileDelete(A_Temp "\AhkWpf\ahk-xaml-webview.dll")
+                try FileDelete(XAMLHost.GetAppDir() "\Cache\ahk-xaml-webview.dll")
                 
                 ToolTip("WebView2 DLLs successfully restored from NativeDOM!")
                 SetTimer(() => ToolTip(), -4000)
