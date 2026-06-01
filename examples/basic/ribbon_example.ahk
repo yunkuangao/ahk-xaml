@@ -89,17 +89,16 @@ winStack.AddSmallBtn("BtnSplit", "Split", 0xE8A6)
 ; MAIN DOCUMENT AREA
 ; ------------------------------------------------------------------------------
 docArea := mainContent.Add("Border").Name("DocArea").Grid_Row(1).Background("{DynamicResource ControlBg}").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("0,1,0,0")
+    .On("PreviewMouseLeftButtonDown", OnDocClick)
 docArea.Add("TextBlock").Text("Your Excel spreadsheet or document goes here!").HorizontalAlignment("Center").VerticalAlignment("Center").Foreground("{DynamicResource TextSub}").FontSize(16)
 
 
 ui := app.Compile()
 
 ; Bind Events
-ribbon.BindEvents(ui)
 ui.OnEvent("BtnPaste", "Click", (*) => app.ShowSnackbar("Pasted content!"))
 ui.OnEvent("BtnBold", "Click", (*) => app.ShowSnackbar("Toggled Bold!"))
 ui.OnEvent("BtnTable", "Click", (*) => app.ShowSnackbar("Inserted Table!"))
-ui.OnEvent("DocArea", "PreviewMouseLeftButtonDown", OnDocClick)
 
 ; Show the Window!
 app.Show()

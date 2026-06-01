@@ -22,21 +22,15 @@ sp.Add("TextBlock").Text("Welcome Back").FontSize(24).FontWeight("Bold").Foregro
 sp.Add("TextBlock").Text("Please log in to continue.").Foreground("{DynamicResource TextSub}").Margin("0,0,0,20").HorizontalAlignment("Center")
 
 sp.Add("TextBlock").Text("USERNAME").Use("SubtitleText")
-sp.Add("TextBox").Name("InputUser").Height(32).Margin("0,0,0,15")
+sp.Add("TextBox").Name("InputUser").Height(32).Margin("0,0,0,15").Track()
 
 sp.Add("TextBlock").Text("PASSWORD").Use("SubtitleText")
-sp.Add("PasswordBox").Name("InputPass").Height(32).Margin("0,0,0,25")
+sp.Add("PasswordBox").Name("InputPass").Height(32).Margin("0,0,0,25").Track()
 
 btn := sp.Add("Button").Name("BtnLogin").Content("Login").Use("PrimaryBtn").Height(36)
+    .On("Click", (state, ctrl, event) => OnLoginClick(state))
 
 ui := app.Compile()
-
-; Register the click event
-ui.OnEvent("BtnLogin", "Click", (state, ctrl, event) => OnLoginClick(state))
-
-; Track inputs so their values are sent when the button is clicked
-ui.Track("InputUser")
-ui.Track("InputPass")
 
 app.Show()
 

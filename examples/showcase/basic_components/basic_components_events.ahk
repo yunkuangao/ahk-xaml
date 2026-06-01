@@ -41,10 +41,9 @@ RatingBind(ui, "Rating10", 10, false, Chr(0xEB52), Chr(0xEB51), "#FF453A", "{Dyn
 emojiList := Example_MockData.GetEmojiList()
 EmojiPickerBind(ui, "MyEmoji", emojiList)
 
-; DateRangePickerEx — recreate object if production mode, then bind
+; DateRangePickerEx — recreate object if production mode
 if !IsObject(myDatePicker)
     myDatePicker := DateRangePickerEx("EventDates", "2026-05-16", "2026-06-16")
-myDatePicker.Bind(ui)
 ui.OnEvent("PriceFilter_SliderMin", "ValueChanged", ClampSliderMin)
 ui.OnEvent("PriceFilter_SliderMax", "ValueChanged", ClampSliderMax)
 ui.Track("PriceFilter_SliderMin")
@@ -84,13 +83,12 @@ for tabName in tabList {
 
 ui.OnEvent("Window", "Loaded", SyncTabVis)
 
-
-
 ; --- Custom Event Implementations ---
 
 global gaugeValue := 45
 global gaugeTarget := 45
 global gaugeTimerActive := false
+
 
 OnTestGaugeClick(state, ctrl, ev) {
     global gaugeTimerActive, gaugeTarget, gaugeValue

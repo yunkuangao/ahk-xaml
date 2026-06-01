@@ -398,6 +398,7 @@ class PanelManager {
         CloseBtnTemplate := '<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource CloseBtnRadius}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#E0FF3333"/><Setter Property="Foreground" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>'
 
         fillBtn := BtnGroup.Add("Button").Name("BtnFill").WindowChrome_IsHitTestVisibleInChrome("True").Width(btnWidth).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness(0)
+    .On("Click", (state, ctrl, event) => this.AutoFillSpace(id))
         fillBtn.InjectResources(BtnTemplate)
         fillBtn.Add("TextBlock").Text(Chr(0xE922)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").FontSize(10).VerticalAlignment("Center").HorizontalAlignment("Center")
 
@@ -444,7 +445,27 @@ class PanelManager {
         ui.xaml := StrReplace(ui.xaml, 'WindowStartupLocation="CenterScreen"', 'WindowStartupLocation="Manual"')
         ui.xaml := StrReplace(ui.xaml, 'CornerRadius="{DynamicResource WindowRadius}"', 'CornerRadius="{DynamicResource PanelRadius}"')
         initialRadius := pInfo.Snapped ? "0" : IniRead(INI_FILE, "Global", "PanelRadius", "0")
-        ui.xaml := StrReplace(ui.xaml, '%resources%', '<CornerRadius x:Key="PanelRadius">' initialRadius '</CornerRadius>')
+        ; Inject initial theme resources to prevent load flickering
+        pTheme := IniRead(INI_FILE, id, "Theme", "Inherit")
+        resolvedTheme := (pTheme == "Inherit") ? this.CurrentTheme : pTheme
+        iniPath := FindThemesIni()
+        themeData := ""
+        try themeData := IniRead(iniPath, resolvedTheme)
+        
+        resourceInject := '<CornerRadius x:Key="PanelRadius">' initialRadius '</CornerRadius>'
+        if (themeData != "") {
+            Loop Parse, themeData, "`n", "`r" {
+                parts := StrSplit(A_LoopField, "=", " `t", 2)
+                if (parts.Length == 2 && InStr(parts[1], "Resource_") == 1) {
+                    key := SubStr(parts[1], 10)
+                    val := parts[2]
+                    if (InStr(val, "#") == 1) {
+                        resourceInject .= '<SolidColorBrush x:Key="' key '" Color="' val '"/>'
+                    }
+                }
+            }
+        }
+        ui.xaml := StrReplace(ui.xaml, '%resources%', resourceInject)
 
         noShadows := this.GetSavedState("Global", "NoShadows", "0") == "1"
         if (noShadows) {
@@ -452,7 +473,6 @@ class PanelManager {
         }
 
         ; Callbacks
-        ui.OnEvent("BtnFill", "Click", (state, ctrl, event) => this.AutoFillSpace(id))
         ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => this.OnPanelLoaded(id, ui))
         ui.OnEvent("Window", "Closing", (state, ctrl, event) => this.OnPanelClosing(id))
 
@@ -477,16 +497,14 @@ class PanelManager {
             pTheme := IniRead(INI_FILE, panelId, "Theme", "Inherit")
         }
         resolvedTheme := (pTheme == "Inherit") ? themeName : pTheme
-        pInfo.LastThemeApplied := resolvedTheme
 
-        instVal := (pInfo.Instance == "") ? "EMPTY" : "OK"
-        hwndVal := (pInfo.Instance == "") ? "N/A" : pInfo.Instance.wpfHwnd
-        Trace("ApplyThemeToPanel details - Title: " pInfo.Title ", Instance: " instVal ", Hwnd: " hwndVal ", Preference: " pTheme ", Resolved: " resolvedTheme)
         if (pInfo.Instance == "" || !pInfo.Instance.wpfHwnd)
             return
 
-        Trace("ApplyThemeToPanel: applying theme '" resolvedTheme "' to " (pInfo.HasProp("Title") ? pInfo.Title : "Unknown"))
         try {
+            ; Build all theme updates into a single batch for atomic IPC delivery
+            updates := []
+
             iniPath := FindThemesIni()
             themeData := IniRead(iniPath, resolvedTheme)
             Loop Parse, themeData, "`n", "`r" {
@@ -495,19 +513,29 @@ class PanelManager {
                     key := parts[1]
                     val := parts[2]
                     if (key == "Window_DWM")
-                        pInfo.Instance.Update("Window", "DWM", val)
+                        updates.Push({ ControlName: "Window", PropertyName: "DWM", Value: val })
                     else if (InStr(key, "Resource_") == 1)
-                        pInfo.Instance.Update("Resource", SubStr(key, 10), val)
+                        updates.Push({ ControlName: "Resource", PropertyName: SubStr(key, 10), Value: val })
                 }
             }
+
+            ; Append PanelRadius to the same batch
+            radius := pInfo.Snapped ? "0" : IniRead(INI_FILE, "Global", "PanelRadius", "0")
+            updates.Push({ ControlName: "Resource", PropertyName: "PanelRadius", Value: "CornerRadius:" radius })
+
+            ; Send everything in one atomic IPC message
+            if (updates.Length > 0)
+                pInfo.Instance.BatchUpdate(updates)
+
+            ; Only mark as applied AFTER the BatchUpdate succeeds
+            pInfo.LastThemeApplied := resolvedTheme
         } catch as err {
-            Trace("ApplyThemeToPanel failed: " err.Message " at line " err.Line)
+            pInfo.LastThemeApplied := ""
+            Trace("ApplyThemeToPanel failed for " (pInfo.HasProp("Title") ? pInfo.Title : "?") ": " err.Message)
         }
 
-        ; Apply Snap/Saved Radius Option
+        ; DWM corner preference via Win32 API
         radius := pInfo.Snapped ? "0" : IniRead(INI_FILE, "Global", "PanelRadius", "0")
-        pInfo.Instance.Update("Resource", "PanelRadius", "CornerRadius:" radius)
-
         if (pInfo.GuiHwnd) {
             cornerPref := Buffer(4)
             NumPut("Int", radius == "0" ? 1 : 0, cornerPref)
@@ -703,19 +731,13 @@ class PanelManager {
                     } catch {
                     }
                     
-                    ; 3. Enforce theme consistency
-                    resolvedTheme := "Inherit"
+                    ; 3. Enforce theme consistency (lightweight safety net)
                     pTheme := IniRead(INI_FILE, id, "Theme", "Inherit")
                     resolvedTheme := (pTheme == "Inherit") ? this.CurrentTheme : pTheme
 
                     if (!pInfo.HasProp("LastThemeApplied") || pInfo.LastThemeApplied != resolvedTheme) {
                         Trace("Watchdog: Syncing theme for panel " id " to " resolvedTheme)
                         this.ApplyThemeToPanel(pInfo, this.CurrentTheme)
-                        pInfo.LastThemeApplied := resolvedTheme
-                        
-                        ; Re-apply backdrop and radius just in case
-                        UpdateBackdropEffects()
-                        this.UpdateRadius(IniRead(INI_FILE, "Global", "PanelRadius", "0"))
                     }
                 }
             }
@@ -746,16 +768,24 @@ app.sidebarPanel.Add("TextBlock").Text("WINDOW OPTIONS").Margin("0,15,0,5")
 
 app.sidebarPanel.Add("TextBlock").Text("Panel Visibility:").Foreground("{DynamicResource TextSub}").Margin("0,5,0,2")
 cbVisibility := app.sidebarPanel.Add("ComboBox").Name("ComboVisibility").Height(30).Margin("0,0,0,10")
+    .On("SelectionChanged", (state, ctrl, event) => OnVisibilityChanged(state))
+    .Track()
 cbVisibility.Add("ComboBoxItem").Content("Hidden in taskbar & alt tab")
 cbVisibility.Add("ComboBoxItem").Content("Taskbar + Alt Tab")
 cbVisibility.Add("ComboBoxItem").Content("ONLY Alt tab")
 
 chkShadows := app.sidebarPanel.Add("CheckBox").Name("ChkEnableShadows").Content("Enable window shadows").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10")
+    .On("Click", (state, ctrl, event) => OnShadowsToggle(state))
+    .Track()
 
 app.sidebarPanel.Add("TextBlock").Text("TRANSPARENCY & BLUR").Margin("0,15,0,5")
 chkTrans := app.sidebarPanel.Add("CheckBox").Name("ChkTransparency").Content("Transparency effects").Foreground("{DynamicResource TextMain}").Margin("0,0,0,10")
+    .On("Click", (state, ctrl, event) => OnTransparencyToggle(state))
+    .Track()
 app.sidebarPanel.Add("TextBlock").Text("Material Blur Effect:").Foreground("{DynamicResource TextSub}").Margin("0,5,0,2")
 cbBlur := app.sidebarPanel.Add("ComboBox").Name("ComboBlurEffect").Height(30).Margin("0,0,0,10")
+    .On("SelectionChanged", (state, ctrl, event) => OnBlurEffectChanged(state))
+    .Track()
 cbBlur.Add("ComboBoxItem").Content("Mica (High Fidelity)")
 cbBlur.Add("ComboBoxItem").Content("Acrylic (Frosted Glass)")
 cbBlur.Add("ComboBoxItem").Content("Aero (Classic Glass)")
@@ -797,14 +827,13 @@ contentPanel.Add("TextBlock").Text("Use the buttons below to tear off and spawn 
 
 btnSp := contentPanel.Add("StackPanel").Orientation("Horizontal").Margin("0,0,0,30")
 btnSp.Add("Button").Name("BtnOpenTerminal").Content("Toggle Terminal").Margin("0,0,10,0")
+    .On("Click", (*) => PanelManager.ShowPanel("Terminal"))
 btnSp.Add("Button").Name("BtnOpenProperties").Content("Toggle Properties").Margin("0,0,10,0")
+    .On("Click", (*) => PanelManager.ShowPanel("Properties"))
 btnSp.Add("Button").Name("BtnOpenToolbox").Content("Toggle Toolbox")
+    .On("Click", (*) => PanelManager.ShowPanel("Toolbox"))
 
 ui := app.Compile()
-ui.Track("ComboVisibility")
-ui.Track("ChkEnableShadows")
-ui.Track("ChkTransparency")
-ui.Track("ComboBlurEffect")
 for id, pInfo in PanelManager.Panels {
     ui.Track("ComboTheme_" id)
 }
@@ -825,9 +854,6 @@ if (IniRead("docking_layout.ini", "Global", "NoShadows", "0") == "1") {
 }
 ui.OnEvent("Window", "LoadedHwnd", (state, ctrl, event) => OnMainLoaded())
 ui.OnEvent("BtnAppMaximize", "Click", (*) => PanelManager.AutoFillSpace("Main"))
-ui.OnEvent("BtnOpenTerminal", "Click", (*) => PanelManager.ShowPanel("Terminal"))
-ui.OnEvent("BtnOpenProperties", "Click", (*) => PanelManager.ShowPanel("Properties"))
-ui.OnEvent("BtnOpenToolbox", "Click", (*) => PanelManager.ShowPanel("Toolbox"))
 ui.OnEvent("ComboTheme", "SelectionChanged", (state, ctrl, event) => (
     OnThemeEngineChanged(state["ComboTheme"])
 ))
@@ -840,10 +866,6 @@ ui.OnEvent("ComboScale", "SelectionChanged", (state, ctrl, event) => (
     PanelManager.UpdateScale(state["ComboScale"])
 ))
 ui.OnEvent("ComboRadius", "SelectionChanged", (state, ctrl, event) => OnRadiusChanged(state))
-ui.OnEvent("ComboVisibility", "SelectionChanged", (state, ctrl, event) => OnVisibilityChanged(state))
-ui.OnEvent("ChkEnableShadows", "Click", (state, ctrl, event) => OnShadowsToggle(state))
-ui.OnEvent("ChkTransparency", "Click", (state, ctrl, event) => OnTransparencyToggle(state))
-ui.OnEvent("ComboBlurEffect", "SelectionChanged", (state, ctrl, event) => OnBlurEffectChanged(state))
 ui.OnEvent("Window", "Closing", (*) => OnMainClosing())
 
 app.Show()

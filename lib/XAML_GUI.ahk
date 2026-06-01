@@ -12,6 +12,7 @@ class XAML_GUI {
         this.tokenizers := Map()
         this.hotkeyBoxes := Map()
         this.segmentedInputs := Map()
+        this._components := []
 
         hasOpt(key) => Type(options) == "Map" ? options.Has(key) : options.HasOwnProp(key)
         getOpt(key) => Type(options) == "Map" ? options[key] : options.%key%
@@ -26,6 +27,7 @@ class XAML_GUI {
 
         ; Expose the root generator for customization
         this.X := XAML_Generator("Grid").Name("AppGrid").Background("{DynamicResource BgColor}").Focusable("True")
+        this.X._App := this  ; Back-reference so components can auto-register via _FindApp()
         this.X.Add("Grid.LayoutTransform").Add("ScaleTransform").SetProp("x:Name", "AppScale").ScaleX(1).ScaleY(1)
         this.X.Cols("Auto", "*")
 
@@ -43,8 +45,8 @@ class XAML_GUI {
 
         ; Robust fix: default any new elements added to app.main to Grid_Row(1) (Content Area)
         ; This prevents users from accidentally squishing their UI into the title bar.
-        this.main.DefineProp("Add", { Call: (thisObj, type) => (
-            el := XAMLElement.Prototype.Add.Call(thisObj, type),
+        this.main.DefineProp("Add", { Call: (thisObj, type, propsOrText?) => (
+            el := XAMLElement.Prototype.Add.Call(thisObj, type, propsOrText ?? ""),
             el.Grid_Row(1),
             el
         ) })
@@ -83,7 +85,10 @@ class XAML_GUI {
             el.InjectResources('<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="15"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style TargetType="RepeatButton"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="{TemplateBinding Background}" CornerRadius="15"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style TargetType="ToggleButton"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton"><Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="15" BorderBrush="{DynamicResource ControlBorder}" BorderThickness="1" Padding="8,4"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBgHover}"/></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBgHover}"/><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
         }
         X.DefineTemplate("IconBtn", IconButtonTemplate)
-        X.SetDefaults("ListBox", { Background: "Transparent", BorderThickness: 0, ScrollViewer_HorizontalScrollBarVisibility: "Disabled" })
+        X.SetDefaults("ListBox", { Background: "Transparent", BorderThickness: 0, ScrollViewer_HorizontalScrollBarVisibility: "Disabled", Foreground: "{DynamicResource TextMain}" })
+        X.SetDefaults("ListBoxItem", { Foreground: "{DynamicResource TextMain}" })
+        X.SetDefaults("ComboBoxItem", { Foreground: "{DynamicResource TextMain}" })
+        X.SetDefaults("CheckBox", { Foreground: "{DynamicResource TextMain}" })
     }
 
     BuildSidebar(container) {
@@ -189,6 +194,33 @@ class XAML_GUI {
         }
         this.BindBaseEvents()
 
+        ; Collect inline .On() and .Track() registrations from the element tree
+        this._CollectInlineEvents(this.X)
+
+        ; Auto-bind registered composite components (KanbanBoard, NavigationView, etc.)
+        _dragComps := []
+        for comp in this._components {
+            if (comp.HasMethod("Bind")) {
+                if (comp.HasOwnProp("_hotkey") && comp._hotkey != "")
+                    comp.Bind(this.host, comp._hotkey)
+                else
+                    comp.Bind(this.host)
+            }
+            ; Collect drag-enabled components for deferred enable after window loads
+            if (comp.HasOwnProp("_dragEnabled") && comp._dragEnabled && comp.HasMethod("EnableDrag"))
+                _dragComps.Push(comp)
+        }
+        ; EnableDrag sends Update commands that need WPF elements to exist,
+        ; so defer to LoadedHwnd event
+        if (_dragComps.Length > 0) {
+            _host := this.host
+            _OnLoaded(s, c, e) {
+                for dc in _dragComps
+                    dc.EnableDrag(_host)
+            }
+            this.host.OnEvent("Window", "LoadedHwnd", _OnLoaded)
+        }
+
         for k, v in this.tokenizers {
             this.host.OnEvent(v.inputName, "GotFocus", ObjBindMethod(this, "OnInputFocus"))
             this.host.OnEvent(v.inputName, "LostFocus", ObjBindMethod(this, "OnInputBlur"))
@@ -216,6 +248,102 @@ class XAML_GUI {
 
         return this.host
     }
+
+    ; Walk the element tree and harvest all .On() / .Track() registrations.
+    ; Called automatically during Compile() — no separate AutoBind step needed.
+    _CollectInlineEvents(el) {
+        name := ""
+        if (el._Props.Has("Name"))
+            name := el._Props["Name"]
+        else if (el._Props.Has("x:Name"))
+            name := el._Props["x:Name"]
+
+        if (name != "") {
+            ; Auto-track if explicitly marked
+            if (el.HasOwnProp("_Tracked") && el._Tracked)
+                this.host.Track(name)
+
+            ; Collect inline events
+            if (el.HasOwnProp("_Events")) {
+                for evt in el._Events {
+                    cb := evt.Callback
+
+                    ; Resolve string function names to actual functions
+                    if (Type(cb) == "String") {
+                        funcName := cb
+                        try {
+                            cb := %funcName%
+                        } catch {
+                            ; Function not found — auto-generate skeleton if enabled
+                            if (IsSet(XAML_AUTO_GENERATE_EVENTS) && XAML_AUTO_GENERATE_EVENTS && !A_IsCompiled) {
+                                this._AutoGenerateEventStub(name, evt.Event, funcName)
+                            }
+                            OutputDebug("[AHK-XAML] Warning: Event handler '" funcName "' for " name "." evt.Event " not found. Skipping.`n")
+                            continue
+                        }
+                    }
+
+                    if (cb != "" && HasMethod(cb)) {
+                        this.host.OnEvent(name, evt.Event, cb)
+                        ; Auto-track any element that has events registered
+                        this.host.Track(name)
+                    }
+                }
+            }
+
+            ; Collect inline hotkeys
+            if (el.HasOwnProp("_Hotkeys")) {
+                for hk in el._Hotkeys {
+                    action := hk.Action
+                    hkName := name  ; Capture for closure
+                    hkHost := this.host
+
+                    if HasMethod(action) {
+                        ; Custom callback
+                        Hotkey(hk.Key, action, "On")
+                    } else if (Type(action) == "String") {
+                        switch action, false {
+                            case "Invoke", "Click", "Toggle":
+                                Hotkey(hk.Key, (*) => hkHost.Update(hkName, "Invoke", "1"), "On")
+                            case "Focus":
+                                Hotkey(hk.Key, (*) => hkHost.Update(hkName, "Focus", "True"), "On")
+                            case "Blur":
+                                Hotkey(hk.Key, (*) => hkHost.Update(hkName, "Focus", "False"), "On")
+                            default:
+                                ; Treat unknown strings as custom Update commands
+                                Hotkey(hk.Key, (*) => hkHost.Update(hkName, action, ""), "On")
+                        }
+                    }
+                }
+            }
+        }
+
+        ; Recurse into children
+        for child in el._Children
+            this._CollectInlineEvents(child)
+    }
+
+    ; Auto-generate a skeleton event handler function into <ScriptName>.events.ahk
+    _AutoGenerateEventStub(ctrlName, evtName, funcName) {
+        SplitPath(A_ScriptName, , , , &nameNoExt)
+        eventsFile := A_ScriptDir "\" nameNoExt ".events.ahk"
+
+        ; Check if the stub already exists in the file
+        if FileExist(eventsFile) {
+            existing := FileRead(eventsFile, "UTF-8")
+            if InStr(existing, funcName "(")
+                return  ; already exists
+        }
+
+        stub := "`n; Auto-generated event handler for " ctrlName "." evtName "`n"
+        stub .= funcName "(state, ctrl, event) {`n"
+        stub .= "    `; TODO: Implement handler`n"
+        stub .= "}`n"
+
+        FileAppend(stub, eventsFile, "UTF-8")
+        OutputDebug("[AHK-XAML] Auto-generated stub '" funcName "' in " eventsFile "`n")
+    }
+
 
     BindBaseEvents() {
         this.host.OnEvent("Window", "Loaded", ObjBindMethod(this, "OnUIReady"))
@@ -358,6 +486,10 @@ class XAML_GUI {
 
         this.BindBaseEvents()
 
+        ; Harvest .On() and .Track() from the element tree — works even with precompiled bundles
+        ; because the tree-building code (.Add(), .On() calls) always runs before Load().
+        this._CollectInlineEvents(this.X)
+
         for k, v in this.tokenizers {
             this.host.OnEvent(v.inputName, "GotFocus", ObjBindMethod(this, "OnInputFocus"))
             this.host.OnEvent(v.inputName, "LostFocus", ObjBindMethod(this, "OnInputBlur"))
@@ -409,6 +541,20 @@ class XAML_GUI {
 
         if (this.showIcon) {
             this.host.Update("AppIcon", "Source", "HICON:" hIcon)
+        }
+
+        ; Apply lightweight events if opted in
+        if (this.HasProp("lightweightEvents") && this.lightweightEvents)
+            this.host.SetLightweightEvents(true)
+
+        ; In lightweight mode, Window.Loaded state won't have sidebar combo values.
+        ; Query them explicitly so theme/scale/radius handlers still work on startup.
+        if (!state.Has("ComboTheme") || !state.Has("ComboScale") || !state.Has("ComboRadius")) {
+            sidebarState := this.host.Query("ComboTheme", "ComboScale", "ComboRadius")
+            for k, v in sidebarState {
+                if !state.Has(k)
+                    state[k] := v
+            }
         }
 
         this.ThemeChanged(state, ctrl, event)
@@ -526,6 +672,12 @@ class XAML_GUI {
 
     RegisterTokenizer(tok) {
         this.tokenizers[tok.inputName] := tok
+    }
+
+    ; Register a composite component for auto-binding during Compile().
+    ; Called automatically by component factory methods (KanbanBoard, NavigationView, etc.)
+    RegisterComponent(comp) {
+        this._components.Push(comp)
     }
 
     RegisterNumericInput(num) {

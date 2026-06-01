@@ -14,14 +14,12 @@ panel := app.main.Add("StackPanel").Grid_Row(1).Margin("40,20,40,20")
 panel.Add("TextBlock").Name("TxtTitle").Text("Welcome to the Minimal UI!").Use("PageTitle").Margin("0,0,0,10")
 
 panel.Add("Button").Name("BtnSubmit").Content("Say Hello").Use("PrimaryBtn").Width(120).Height(32).HorizontalAlignment("Left")
+    .On("Click", OnSubmitClick)
 
 ; 3. Compile the UI (Generates the WPF window)
 ui := app.Compile()
 
-; 4. Bind Events
-ui.OnEvent("BtnSubmit", "Click", OnSubmitClick)
-
-; 5. Show the Window!
+; 4. Show the Window!
 app.Show()
 
 ; Event Callbacks

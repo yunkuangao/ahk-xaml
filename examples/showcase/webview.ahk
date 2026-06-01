@@ -28,10 +28,10 @@ bdr := root.Add("Border").Grid_Row(1).Margin("20,0,20,20").Background("{DynamicR
 myBrowser := bdr.WebView("MyBrowser")
 
 ; Setup JS to AHK Bridge
-myBrowser.OnMessage((msg) => MsgBox("Received message from JavaScript:`n`n" msg, "IPC Bridge", "Iconi"))
+myBrowser.OnMessage((msg) => XDialog.Show({ Title: "IPC Bridge", Message: "Received message from JavaScript:`n`n" msg, Icon: Chr(0xE756), IconColor: "{DynamicResource Accent}", Buttons: ["OK"], Width: 400, Owner: ui.wpfHwnd, Modal: true, DarkenOwner: true, Movable: false }))
+
 
 ; Compile and Launch
 ui := app.Compile()
-myBrowser.Bind(ui)
 
 app.Show()

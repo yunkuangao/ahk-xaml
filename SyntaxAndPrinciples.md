@@ -204,33 +204,62 @@ Resource_Brush:ControlBorder=#25FFFFFF
 
 ## 5. Component Lifecycle
 
-### Build → Compile → Bind → Show
+### Build → Compile → Show (Auto-Bind)
 
-Most advanced components follow a consistent lifecycle:
+Composite components (KanbanBoard, NavigationView, NodeGraph, etc.) are **automatically initialized** during `Compile()`. No manual `.Bind(ui)` calls are needed — the framework discovers all components created via factory methods and binds them.
 
 ```ahk
-; 1. BUILD: Construct the XAML AST
-myGrid := DataGridEx("DGX", data, { PageSize: 50 })
-myGrid.Build(parent)
+; 1. BUILD: Create the component via factory method
+kb := panel.KanbanBoard("MyBoard")
+kb.AddColumn("Todo", ["Task 1", "Task 2"])
+kb.AddColumn("Done", ["Task 3"])
+kb.EnableDrag()  ; Flag for auto-enable during compile
 
-; 2. COMPILE: Generate the XAML and create the IPC host
+; 2. COMPILE: All components auto-bind here
 ui := app.Compile()
 
-; 3. BIND: Register all events and state tracking
-myGrid.Bind(ui)
-
-; 4. SHOW: Launch the WPF engine
+; 3. SHOW: Launch the WPF engine
 app.Show()
 ```
 
-### Class-Based vs Prototype Components
+### Flyouts & Command Palettes
 
-**Class-based** (standalone instances with internal state):
+Standalone components like `XFlyout` also auto-register when `.Build()` is called. Use `.Hotkey()` to set a toggle hotkey:
+
 ```ahk
-; Create → Build → Bind
-picker := DateRangePickerEx("Dates", "2026-01-01", "2026-12-31")
-picker.Build(panel)
-picker.Bind(ui)
+fly := XFlyout("Settings", "Left", "Push", 300)
+fly.Build(layout).Grid_Column(0)
+fly.Hotkey("^+S")  ; Stored, applied during auto-bind
+
+cmdPal := app.overlay.CommandPalette("CmdPal")
+cmdPal.Hotkey("^+P")
+cmdPal.AddCommand("reload", "Reload", { Icon: Chr(0xE72C), Callback: (*) => Reload() })
+```
+
+### What auto-bind does
+
+Each component's internal `.Bind(ui)` method:
+1. Stores the `ui` host reference
+2. Registers internal event handlers (`ui.OnEvent(...)`)
+3. Sets up state tracking (`ui.Track(...)`)
+4. Enables drag/drop if `.EnableDrag()` was called
+
+### `.On()` vs `.Track()` vs auto-bind
+
+| Method | Level | What it does |
+|--------|-------|-------------|
+| `.On("Click", fn)` | Element | Registers a single event handler on one element |
+| `.Track()` | Element | Includes element's value in every event's state map |
+| Auto-bind | Component | Initializes a composite component's internal event system |
+
+### Factory-Created vs Prototype Components
+
+**Factory-created** (auto-bind, no manual initialization needed):
+```ahk
+; Created via element method — auto-registered
+kb := panel.KanbanBoard("MyBoard")
+ng := canvas.NodeGraph("MyGraph")
+nav := sidebar.NavigationView("MainNav")
 ```
 
 **Prototype extensions** (chainable, inline):

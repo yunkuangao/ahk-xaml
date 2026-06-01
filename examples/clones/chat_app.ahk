@@ -162,8 +162,11 @@ userInfo.Add("TextBlock").Text("#1234").Foreground("{DynamicResource TextSub}").
 
 userControls := userGrid.Add("StackPanel").Grid_Column(2).Orientation("Horizontal").VerticalAlignment("Center")
 userControls.Add("TextBlock").Text("🎤").Foreground("{DynamicResource TextSub}").FontSize(14).Margin("0,0,10,0").Cursor("Hand").Name("BtnMic")
+    .On("MouseLeftButtonDown", (*) => ToggleColor("BtnMic", "🎤"))
 userControls.Add("TextBlock").Text("🎧").Foreground("{DynamicResource TextSub}").FontSize(14).Margin("0,0,10,0").Cursor("Hand").Name("BtnDeafen")
+    .On("MouseLeftButtonDown", (*) => ToggleColor("BtnDeafen", "🎧"))
 userControls.Add("TextBlock").Text("⚙").Foreground("{DynamicResource TextSub}").FontSize(14).Cursor("Hand").Name("BtnSettings")
+    .On("MouseLeftButtonDown", (*) => ui.Update("SettingsLayer", "Visibility", "Visible"))
 
 ; ==============================================================================
 ; 3. MAIN CHAT AREA (Col 2)
@@ -176,6 +179,7 @@ chatHeader := chatGrid.Add("Border").Grid_Row(0).BorderThickness("0,0,0,1").Bord
 chatHeaderGrid := chatHeader.Add("Grid").Cols("Auto", "*", "Auto").Margin("16,0")
 leftBtns := chatHeaderGrid.Add("StackPanel").Orientation("Horizontal").VerticalAlignment("Center")
 leftBtns.Add("Button").Name("BtnTogglePanes").Content(Chr(0xE89F)).FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets").Use("IconBtn").Foreground("{DynamicResource TextSub}").Margin("0,0,16,0").ToolTip("Toggle Sidebar Panes")
+    .On("Click", TogglePanes)
 leftBtns.Add("TextBlock").Text("# general").Name("ChatHeaderName").Foreground("{DynamicResource TextMain}").FontWeight("Bold").FontSize(15).VerticalAlignment("Center")
 
 ; Command Bar
@@ -204,6 +208,8 @@ inputBdr := chatGrid.Add("Border").Grid_Row(2).Background("{DynamicResource Cont
 inputGrid := inputBdr.Add("Grid").Cols("Auto", "*", "Auto").Margin("16,10")
 inputGrid.Add("TextBlock").Grid_Column(0).Text("⊕").Foreground("{DynamicResource TextSub}").FontSize(20).VerticalAlignment("Center").Margin("0,0,16,0").Cursor("Hand")
 chatInputBox := inputGrid.Add("TextBox").Name("ChatInput").Grid_Column(1).Background("Transparent").Foreground("{DynamicResource TextMain}").BorderThickness("0").FontSize(15).TextWrapping("Wrap").MaxHeight("144")
+    .On("TextChanged", ChatInputChanged)
+    .On("KeyDown:Return", ChatInputSubmit)
 inputGrid.Add("TextBlock").Grid_Column(1).Text("Message...").Foreground("{DynamicResource TextSub}").FontSize(15).VerticalAlignment("Center").Margin("4,0,0,0").IsHitTestVisible("False").Name("InputPlaceholder")
 inputRightSp := inputGrid.Add("StackPanel").Grid_Column(2).Orientation("Horizontal").VerticalAlignment("Center")
 inputRightSp.Add("TextBlock").Text("🎁").Foreground("{DynamicResource TextSub}").FontSize(20).Margin("16,0,10,0").Cursor("Hand")
@@ -258,12 +264,14 @@ AddMemToSp(parent, mem) {
 ; FLYOUTS & BINDINGS
 ; ==============================================================================
 switcher := app.overlay.CommandPalette("QuickSwitcher")
+switcher.Hotkey("^k")
 switcher.AddCommand("cmd_1", "Switch to General", { Icon: "#", Category: "Channels" })
 
 settingsLayer := masterGrid.Add("Grid").Grid_ColumnSpan(4).Background("{DynamicResource DropdownBg}").Visibility("Collapsed").Name("SettingsLayer").SetProp("Panel.ZIndex", "100")
 setNav := settingsLayer.NavigationView("SettingsNav")
 
 closeBtn := settingsLayer.Add("Button").Name("BtnCloseSettings").HorizontalAlignment("Right").VerticalAlignment("Top").Margin("0,20,20,0").Cursor("Hand").Background("Transparent").BorderThickness("0")
+    .On("Click", (*) => ui.Update("SettingsLayer", "Visibility", "Collapsed"))
 closeBtn.InjectResources('<Style TargetType="Button"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="Transparent"><ContentPresenter/></Border></ControlTemplate></Setter.Value></Setter></Style>')
 closeSp := closeBtn.Add("StackPanel")
 closeBdr := closeSp.Add("Border").Width("36").Height("36").CornerRadius("18").BorderBrush("{DynamicResource ControlBorder}").BorderThickness("2").Background("{DynamicResource ControlBgHover}")
@@ -283,8 +291,8 @@ profCard := profCardWrap.Add("Border").Background("{DynamicResource ControlBg}")
 profGrid := profCard.Add("Grid").Rows("120", "Auto")
 
 bannerBg := profGrid.Add("Border").Grid_Row(0).Add("Border.Background").Add("LinearGradientBrush").StartPoint("0,0").EndPoint("1,1")
-bannerBg.Add("GradientStop").Color("#5865F2").Offset("0.0")
-bannerBg.Add("GradientStop").Color("#ED4245").Offset("1.0")
+bannerBg.Add("GradientStop").SetProp('Color', "#5865F2").Offset("0.0")
+bannerBg.Add("GradientStop").SetProp('Color', "#ED4245").Offset("1.0")
 
 profDetails := profGrid.Add("Grid").Grid_Row(1).Margin("20,-40,20,20")
 
@@ -385,15 +393,11 @@ setNav.AddPage("Notifications", Chr(0xEA8F), notifScroll)
 setNav.AddPage("Advanced", Chr(0xE713), advScroll)
 
 ui := app.Compile()
-setNav.Bind(ui)
 
 for t in themeCards {
     cleanName := RegExReplace(t, "[^\w]", "_")
     ui.OnEvent("BtnTheme_" cleanName, "MouseLeftButtonUp", SetAppTheme.Bind(t))
 }
-for comp in chatComponents
-    comp.Bind(ui)
-switcher.Bind(ui, "^k")
 
 for reactor in msgReactors {
     ui.OnEvent(reactor.btnId, "Click", ShowReaction.Bind(reactor.pillId, reactor.emoji))
@@ -413,13 +417,11 @@ AppendEmoji(emoji, state, *) {
     ui.Update("ChatInput", "Text", currentText emoji)
 }
 
-ui.OnEvent("ChatInput", "TextChanged", ChatInputChanged)
 ChatInputChanged(state, *) {
     ui.Update("InputPlaceholder", "Visibility", state["ChatInput"] == "" ? "Visible" : "Collapsed")
 }
 
 ; Chat Submission (Enter key)
-ui.OnEvent("ChatInput", "KeyDown:Return", ChatInputSubmit)
 ChatInputSubmit(state, *) {
     text := state["ChatInput"]
     if (Trim(text) == "")
@@ -528,8 +530,6 @@ SwitchServer(srvObj, *) {
 }
 
 ; Interactive Toggles
-ui.OnEvent("BtnMic", "MouseLeftButtonDown", (*) => ToggleColor("BtnMic", "🎤"))
-ui.OnEvent("BtnDeafen", "MouseLeftButtonDown", (*) => ToggleColor("BtnDeafen", "🎧"))
 ToggleColor(id, text) {
     static st := Map()
     if !st.Has(id)
@@ -539,8 +539,7 @@ ToggleColor(id, text) {
     ui.Update(id, "Text", st[id] ? text " (Muted)" : text)
 }
 
-ui.OnEvent("BtnSettings", "MouseLeftButtonDown", (*) => ui.Update("SettingsLayer", "Visibility", "Visible"))
-ui.OnEvent("BtnCloseSettings", "Click", (*) => ui.Update("SettingsLayer", "Visibility", "Collapsed"))
+
 
 for mem in State.Members {
     ui.OnEvent("BtnMem_" mem.name, "MouseLeftButtonDown", ShowMemberProfile.Bind(mem))
@@ -574,7 +573,6 @@ SetAppTheme(themeName, *) {
 }
 
 global isPanesVisible := true
-ui.OnEvent("BtnTogglePanes", "Click", TogglePanes)
 TogglePanes(*) {
     global isPanesVisible
     isPanesVisible := !isPanesVisible
