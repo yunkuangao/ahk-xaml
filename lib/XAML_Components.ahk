@@ -170,22 +170,22 @@ class XColorPicker {
         inGrid.Add("TextBox").Name("HexInput").Text(defaultColor).Width("85").Height("28").Padding("8,4").Grid_Row(2).Grid_Column(0)
 
         rgbSp := inGrid.Add("StackPanel").Grid_Row(2).Grid_Column(2).Orientation("Horizontal")
-        rgbSp.Add("TextBlock").Text("A:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
-        rgbSp.Add("TextBox").Name("AInput").Text("255").Width("35").Height("28").Padding("2,4").HorizontalContentAlignment("Center")
         rgbSp.Add("TextBlock").Text("R:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
         rgbSp.Add("TextBox").Name("RInput").Text("255").Width("35").Height("28").Padding("2,4").Margin("0,0,8,0").HorizontalContentAlignment("Center")
         rgbSp.Add("TextBlock").Text("G:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
         rgbSp.Add("TextBox").Name("GInput").Text("0").Width("35").Height("28").Padding("2,4").Margin("0,0,8,0").HorizontalContentAlignment("Center")
         rgbSp.Add("TextBlock").Text("B:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
         rgbSp.Add("TextBox").Name("BInput").Text("0").Width("35").Height("28").Padding("2,4").Margin("0,0,8,0").HorizontalContentAlignment("Center")
+        rgbSp.Add("TextBlock").Text("A:").Foreground("{DynamicResource TextSub}").FontSize("11").VerticalAlignment("Center").Margin("0,0,4,0")
+        rgbSp.Add("TextBox").Name("AInput").Text("255").Width("35").Height("28").Padding("2,4").HorizontalContentAlignment("Center")
 
         inGrid.Add("TextBlock").Text("Some information about this color").Foreground("{DynamicResource TextSub}").FontSize("11").Grid_Row(4).Grid_ColumnSpan(3).Margin("0,10,0,0")
 
         btnSp := main.Add("StackPanel").Orientation("Horizontal").HorizontalAlignment("Right").Grid_Row(8).Margin("0,0,15,15")
         main.InjectResources('<Style x:Key="DialogBtn" TargetType="Button"><Setter Property="Background" Value="#10FFFFFF"/><Setter Property="Foreground" Value="{DynamicResource TextMain}"/><Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#20FFFFFF"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style><Style x:Key="DialogPrimaryBtn" TargetType="Button"><Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15,6"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>')
 
-        btnSp.Add("Button").Name("BtnCancel").Content("Cancel").Style("{DynamicResource DialogBtn}").Width("100").Height("32").Cursor("Hand").Margin("0,0,10,0")
-        btnSp.Add("Button").Name("BtnConfirm").Content("Confirm").Style("{DynamicResource DialogPrimaryBtn}").Width("100").Height("32").Cursor("Hand")
+        btnSp.Add("Button").Name("BtnCancel").Content("Cancel").Style("{StaticResource DialogBtn}").Width("100").Height("32").Cursor("Hand").Margin("0,0,10,0")
+        btnSp.Add("Button").Name("BtnConfirm").Content("Confirm").Style("{StaticResource DialogPrimaryBtn}").Width("100").Height("32").Cursor("Hand")
 
         tmp := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", "30")
         ui := XAMLHost(StrReplace(tmp, "%app%", main.ToString()), "", owner)
@@ -2008,10 +2008,6 @@ class DataGridEx {
                 rColDefs.Add("ColumnDefinition").Width(w == "0" ? "0" : "Auto").SharedSizeGroup("TableSplit_" i)
             }
             rColDefs.Add("ColumnDefinition").Width("Auto").SharedSizeGroup("TableDummy")
-
-            isCompact := (this.density == "compact")
-            fSize := isCompact ? 11 : 12
-            marginText := isCompact ? "10,4" : "10,12"
 
             isCompact := (this.density == "compact")
             fSize := isCompact ? 11 : 12

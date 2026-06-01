@@ -22,8 +22,6 @@ class XAML_GUI {
         this.showMinMax := hasOpt("MinMaxButtons") ? getOpt("MinMaxButtons") : true
         this.showIcon := hasOpt("AppIcon") ? getOpt("AppIcon") : true
         this.titleBarHeight := hasOpt("TitleBarHeight") ? getOpt("TitleBarHeight") : 50
-        this.winWidth := hasOpt("Width") ? getOpt("Width") : ""
-        this.winHeight := hasOpt("Height") ? getOpt("Height") : ""
 
         ; Expose the root generator for customization
         this.X := XAML_Generator("Grid").Name("AppGrid").Background("{DynamicResource BgColor}").Focusable("True")
@@ -185,11 +183,6 @@ class XAML_GUI {
             this.xamlString := StrReplace(XAML_TEMPLATE, "%CaptionHeight%", this.titleBarHeight)
             this.xamlString := StrReplace(this.xamlString, "%app%", this.X.Compile())
             this.xamlString := StrReplace(this.xamlString, "%resources%", "")
-            if (this.winWidth != "" || this.winHeight != "") {
-                w := this.winWidth != "" ? this.winWidth : "940"
-                h := this.winHeight != "" ? this.winHeight : "700"
-                this.xamlString := StrReplace(this.xamlString, 'Width="940" Height="700"', 'Width="' w '" Height="' h '"')
-            }
             this.host := XAMLHost(this.xamlString, outFile, options*)
         }
         this.BindBaseEvents()
@@ -465,12 +458,12 @@ class XAML_GUI {
             MsgBox("Error: You must call app.Compile() before app.ExportBundle().", "AHK-XAML", "Iconx")
             return false
         }
-        
+
         if (dllName == "") {
             SplitPath(A_ScriptName, , , , &nameNoExt)
             dllName := A_ScriptDir "\" nameNoExt "_bundled.dll"
         }
-        
+
         return this.host.BundleCustomEngine(dllName)
     }
 
@@ -478,6 +471,7 @@ class XAML_GUI {
         this.assetPath := assetPath
         this.xamlString := ""
         this.host := XAMLHost("", assetPath, options*)
+
         ; If auto-prewarm is enabled, immediately start booting the bundled engine in the background
         ; This masks the ~300ms WPF cold-boot time while the AHK script continues executing!
         if (IsSet(XAML_AUTO_PREWARM) && XAML_AUTO_PREWARM) {
@@ -502,6 +496,7 @@ class XAML_GUI {
             this.host.OnEvent("PART_DownButton", "Click", (s, c, e) => this.HandleSpinnerButton(v, false))
             v.Bind()
         }
+
         return this.host
     }
 
@@ -561,8 +556,6 @@ class XAML_GUI {
         this.ScaleChanged(state, ctrl, event)
         this.RadiusChanged(state, ctrl, event)
 
-        SetTimer(ObjBindMethod(this, "ApplySavedTheme"), -50)
-
         for _, tok in this.tokenizers {
             tok.RenderTags()
         }
@@ -597,26 +590,6 @@ class XAML_GUI {
             }
         } catch {
             ; Do nothing
-        }
-        try {
-            if (IsObject(MySoftData) && MySoftData.HasProp("XAMLTheme")) {
-                MySoftData.XAMLTheme := theme
-                global IniFile, IniSection
-                if (IsSet(IniFile) && IsSet(IniSection))
-                    IniWrite(theme, IniFile, IniSection, "XAMLTheme")
-            }
-        }
-    }
-
-    ApplySavedTheme() {
-        try {
-            if (!IsObject(MySoftData) || !MySoftData.HasProp("XAMLTheme"))
-                return
-            saved := MySoftData.XAMLTheme
-            if (saved == "")
-                return
-            this.ThemeChanged(Map("ComboTheme", saved), "", "")
-        } catch {
         }
     }
 

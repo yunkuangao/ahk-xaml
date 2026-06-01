@@ -2195,7 +2195,7 @@ public class AhkWpfEngine {
                                 ImageBehavior.SetAnimatedSource((System.Windows.Controls.Image)ctrl, bmp);
                                 return;
                             } else {
-                                val = new System.Windows.Media.Imaging.BitmapImage(new Uri(parts[2], UriKind.RelativeOrAbsolute));
+                                val = new System.Windows.Media.ImageSourceConverter().ConvertFromString(parts[2]);
                             }
                         }
                         else if (pt == "GridLength") val = new System.Windows.GridLengthConverter().ConvertFromString(parts[2]);
